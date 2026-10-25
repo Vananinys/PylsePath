@@ -1,0 +1,6 @@
+# Copy to android/key.properties and fill with values for your private release key.
+# Keep both this file and the keystore out of version control.
+storeFile=%USERPROFILE%/keys/pulsepath-upload.jks
+storePassword=148845
+keyAlias=pulsepath
+keyPassword=148845

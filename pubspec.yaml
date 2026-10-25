@@ -1,0 +1,55 @@
+name: pulsepath
+description: "PulsePath — мобильный навигатор с картой CartoDB Positron."
+publish_to: 'none'
+version: 1.12.2+55
+
+environment:
+  sdk: '>=3.13.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  # Карта и геолокация
+  flutter_map: ^7.0.0
+  flutter_map_tile_caching: ^9.0.1
+  latlong2: ^0.9.1
+  geolocator: ^11.0.0
+  flutter_compass: ^0.8.0
+  # Локальное хранилище для сохранения маршрутов
+  shared_preferences: ^2.3.2
+  # Сеть
+  http: ^1.2.2
+  crypto: ^3.0.7
+  # Фото профиля: выбор из галереи + постоянный каталог для копии файла
+  image_picker: ^1.1.2
+  path_provider: ^2.1.6
+  # Версия приложения из метаданных сборки (чтобы не дублировать её в UI)
+  package_info_plus: ^8.0.0
+  url_launcher: ^6.3.2
+  # Авторизация и синхронизация данных (таблицы profiles/rides)
+  supabase_flutter: 2.18.0
+  # Кэширование изображений (avatar_url и др.) и состояние приложения
+  cached_network_image: ^3.4.1
+  provider: ^6.1.2
+  xml: ^7.1.0
+  share_plus: ^12.0.2
+  permission_handler: 12.0.1
+  record: ^7.1.1
+  audioplayers: ^6.8.1
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
+  flutter_local_notifications: ^22.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/maptiler-logo.png
+    - assets/branding/pulsepath_icon.png

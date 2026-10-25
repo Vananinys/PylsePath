@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "39660087313",
+    "project_id": "pulsepath-d29ea",
+    "storage_bucket": "pulsepath-d29ea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:39660087313:android:d9589a832bea37869ee9b0",
+        "android_client_info": {
+          "package_name": "com.example.pulsepath"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-4Vu5vr9LnecltXW376fLzhkYnUhDj2A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:39660087313:android:23de219991c46ffa9ee9b0",
+        "android_client_info": {
+          "package_name": "com.pulsepath.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-4Vu5vr9LnecltXW376fLzhkYnUhDj2A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

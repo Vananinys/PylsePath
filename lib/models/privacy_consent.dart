@@ -1,0 +1,155 @@
+enum RegistrationAgeGroup {
+  under14('under_14', 'Младше 14 лет'),
+  teen('14_17', 'От 14 до 17 лет'),
+  adult('18_plus', '18 лет и старше');
+
+  const RegistrationAgeGroup(this.id, this.label);
+  final String id;
+  final String label;
+  bool get canSelfRegister => this != under14;
+
+  static RegistrationAgeGroup? fromId(Object? id) {
+    for (final value in values) {
+      if (value.id == id) return value;
+    }
+    return null;
+  }
+}
+
+/// Public information supplied by the operator. No telemetry SDK is enabled.
+abstract final class PrivacyDocuments {
+  static const operatorName = 'Сараев Сергей';
+  static const contactEmail = 'ss9058766@gmail.com';
+  static const policyVersion = '2026-10-25.2';
+  static const termsVersion = '2026-10-25.2';
+
+  static const policy =
+      '''Оператор: $operatorName
+Контакт по вопросам данных: $contactEmail
+Версия информации: $policyVersion
+
+Какие данные нужны приложению
+Для облачного аккаунта используется e-mail. Профиль может содержать имя, фотографию, город и указанные вами параметры для расчётов: вес, рост, возраст и пол. При записи занятия сохраняются GPS-трек, время, показатели активности и личные отметки. При включении шагомера сохраняются шаги и цели.
+
+Для чего они используются
+Для входа, записи и восстановления занятий, синхронизации между устройствами, расчётов и выбранных вами функций. Спортивный возраст в профиле и возрастная группа при регистрации — разные сведения. Возрастная группа не заменяет проверку возраста.
+
+Где находятся данные
+История и часть настроек хранятся на телефоне. Аккаунт, профиль, заезды, гараж и резервная копия прогресса обрабатываются в Supabase. Текущий облачный проект размещён в Ирландии. Перенос в российский контур ещё не выполнен. Этот текст и ваше согласие сами по себе не решают вопрос локализации данных.
+
+Внешние сервисы
+Поставщики карт получают запросы тайлов и IP соединения. Nominatim получает поисковые запросы и область поиска; OSRM — точки маршрута; Overpass — область запроса объектов; Open-Meteo — координаты запроса погоды. Выбранный слой может использовать OpenStreetMap, OpenTopoMap, CyclOSM или MapTiler. Firebase Cloud Messaging обрабатывает технический токен и данные уведомлений, GitHub и его CDN — запросы загрузки APK. Эти сервисы могут обрабатывать данные за пределами России.
+
+Видимость другим людям
+Настройки профиля определяют видимость отдельных полей. Трансляция позиции друзьям включается отдельно. Сообщения и вложения доступны получателям. Публикация в сообществе и участие в публичной тепловой карте — отдельные действия. Перед публикацией проверьте, какую географию и сведения вы раскрываете.
+
+Сроки и обращения
+Сведения аккаунта и сохранённая история нужны, пока используется облачный аккаунт. Для доступа, исправления, удаления данных или отзыва согласия напишите оператору с адреса аккаунта. Запрос рассматривается с учётом применимых законных оснований и сроков; открытие почтовой программы само по себе не отправляет запрос и не удаляет данные. Часть технических журналов и резервных копий может обрабатываться провайдерами; окончательный регламент хранения и автоматическое удаление аккаунта ещё подготавливаются.
+
+Статистика и диагностика
+Продуктовая аналитика и автоматическая отправка отчётов о сбоях в этой версии не подключены. Согласие на аккаунт не является согласием на будущую аналитику. При её появлении потребуется отдельный выбор.
+
+Подтверждение на этом телефоне
+Возрастная группа, версия текста и время подтверждения сохраняются локально. Они не отправляются в Supabase и не переносятся на другое устройство. Это локальная запись выбора, а не серверный журнал согласий.
+
+Закрытый тест
+Приложение находится в тестировании и предназначено для пользователей с 14 лет. Это описание фактической обработки, а не заявление о завершении всех организационных мер. Возрастная группа выбирается самим пользователем; это не проверка документов или полномочий. При необходимости участия представителя в конкретном действии применяются требования закона. Регистрация младше 14 лет недоступна.''';
+
+  static const processingConsent =
+      '''Согласие на обработку данных для аккаунта и синхронизации
+Версия: $policyVersion
+
+Я даю оператору $operatorName согласие на обработку предоставленных мной данных для создания и использования аккаунта PulsePath, записи и синхронизации занятий и выбранных мной облачных функций.
+
+Состав данных: e-mail, введённые сведения профиля, фотографии и параметры для расчётов, сохранённые занятия с GPS-треками и показателями, личные отметки, техника, шаги, цели и достижения — в объёме используемых функций. При использовании общения и уведомлений обрабатываются сообщения, вложения и технические данные доставки.
+
+Действия: сбор, запись, хранение, использование, обновление и передача для работы выбранных функций, удаление по применимым правилам. Обработка осуществляется на устройстве и с помощью Supabase и внешних сервисов, перечисленных в информации о данных. Мне раскрыто текущее зарубежное размещение.
+
+Согласие действует до его отзыва или прекращения соответствующей цели, если сохранение не требуется на другом законном основании. Отзыв и вопросы о данных: $contactEmail. Необязательная аналитика и публичное распространение сведений этим согласием не разрешаются.
+
+Это отдельное подтверждение. Оно не заменяет требования законодательства к размещению и защите данных и не является согласием законного представителя несовершеннолетнего.''';
+
+  static const terms =
+      '''Правила закрытого теста PulsePath
+Версия: $termsVersion
+
+PulsePath предназначен для пользователей с 14 лет. Пользуйтесь функциями в пределах прав, предоставленных вам законом. Если для конкретного действия требуется участие законного представителя, самостоятельная регистрация его не заменяет. Данные и документы для проверки возраста приложение не запрашивает.
+
+Приложение тестируется: показатели GPS, калорий и мощности могут быть оценочными. Во время движения соблюдайте правила и следите за дорогой; настройки приложения меняйте после остановки. Карта и подсказки не гарантируют безопасность маршрута.
+
+Публикуйте только сведения и материалы, которые вправе передавать другим. Не раскрывайте чужую геопозицию и персональные данные без оснований. Настройки видимости и отправка сообщений — ваши отдельные действия.
+
+Обращения о работе приложения и данных: $contactEmail. Принятие этих правил не включает аналитику и не отменяет ваши права в отношении данных.''';
+}
+
+class PrivacyConsentReceipt {
+  const PrivacyConsentReceipt({
+    required this.ageGroup,
+    required this.acceptedAt,
+    required this.source,
+    this.policyVersion = PrivacyDocuments.policyVersion,
+    this.termsVersion = PrivacyDocuments.termsVersion,
+    this.termsAcceptance = 'submit_button',
+  });
+
+  final RegistrationAgeGroup ageGroup;
+  final DateTime acceptedAt;
+  final String source;
+  final String policyVersion;
+  final String termsVersion;
+  final String termsAcceptance;
+
+  bool get isCurrent =>
+      ageGroup.canSelfRegister &&
+      (termsAcceptance == 'submit_button' ||
+          termsAcceptance == 'separate_checkbox') &&
+      policyVersion == PrivacyDocuments.policyVersion &&
+      termsVersion == PrivacyDocuments.termsVersion;
+
+  Map<String, Object> toJson() => {
+    'age_group': ageGroup.id,
+    'processing_consent': true,
+    'terms_accepted': true,
+    'terms_acceptance': termsAcceptance,
+    'accepted_at': acceptedAt.toUtc().toIso8601String(),
+    'policy_version': policyVersion,
+    'terms_version': termsVersion,
+    'source': source,
+  };
+
+  static PrivacyConsentReceipt fromJson(Map<String, dynamic> json) {
+    final group = RegistrationAgeGroup.fromId(json['age_group']);
+    final date = DateTime.tryParse(json['accepted_at']?.toString() ?? '');
+    final policy = json['policy_version'];
+    final terms = json['terms_version'];
+    final source = json['source'];
+    final method =
+        json['terms_acceptance'] ??
+        (terms == '2026-10-25.1' ? 'separate_checkbox' : null);
+    if (group == null ||
+        !group.canSelfRegister ||
+        (group == RegistrationAgeGroup.teen && policy == '2026-10-25.1') ||
+        date == null ||
+        json['processing_consent'] != true ||
+        json['terms_accepted'] != true ||
+        policy is! String ||
+        policy.isEmpty ||
+        policy.length > 40 ||
+        terms is! String ||
+        terms.isEmpty ||
+        terms.length > 40 ||
+        source is! String ||
+        (method != 'submit_button' && method != 'separate_checkbox') ||
+        (source != 'registration' && source != 'settings')) {
+      throw const FormatException('Invalid local consent receipt');
+    }
+    return PrivacyConsentReceipt(
+      ageGroup: group,
+      acceptedAt: date,
+      source: source,
+      policyVersion: policy,
+      termsVersion: terms,
+      termsAcceptance: method as String,
+    );
+  }
+}

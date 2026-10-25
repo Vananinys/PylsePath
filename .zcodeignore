@@ -1,0 +1,11 @@
+.dart_tool/
+build/
+.git/
+.idea/
+.widget_preview/
+__pycache__/
+*.log
+android/.gradle/
+android/local.properties
+supabase/.temp/
+supabase/tests/node_modules/
