@@ -1,3 +1,5 @@
+import 'activity_trail_layer.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
@@ -236,15 +238,9 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.pulsepath.app',
                       ),
-                    PolylineLayer(
-                      polylines: [
-                        for (final segment in route.segments)
-                          Polyline(
-                            points: segment,
-                            color: Colors.deepOrange,
-                            strokeWidth: 4,
-                          ),
-                      ],
+                    ActivityTrailLayer(
+                      segments: route.segments,
+                      activity: route.activity,
                     ),
                     const RichAttributionWidget(
                       attributions: [

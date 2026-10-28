@@ -1,3 +1,5 @@
+import 'data/trail_appearance.dart';
+import 'widgets/activity_trail_layer.dart';
 import 'services/usage_statistics.dart';
 import 'widgets/home_steps_pill.dart';
 import 'widgets/map_home_actions.dart';
@@ -179,6 +181,11 @@ void main() async {
     /* Optional local counters never block startup. */
   }
   await NavigationPreferences.instance.load();
+  try {
+    await TrailAppearance.instance.load();
+  } catch (_) {
+    /* Optional appearance never prevents startup. */
+  }
   final repository = SavedRoutesRepository();
   runApp(PulsePathApp(settings: settings, repository: repository));
 }
@@ -1140,15 +1147,12 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 // Путь рисуем над тайлами, но до слоёв маркеров: маршрут не
                 // должен перекрывать аватары друзей и значок пользователя.
                 if (_navigationController.routePoints.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      for (final segment in _navigationController.routeSegments)
-                        Polyline(
-                          points: segment,
-                          strokeWidth: NavigationPreferences.instance.lineWidth,
-                          color: NavigationPreferences.instance.routeColor,
-                        ),
-                    ],
+                  ActivityTrailLayer(
+                    segments: _navigationController.routeSegments,
+                    activity: _navigationController.workoutActivity,
+                    transport: _navigationController.gearVehicle?.transportType,
+                    baseColor: NavigationPreferences.instance.routeColor,
+                    baseWidth: NavigationPreferences.instance.lineWidth,
                   ),
                 MarkerLayer(
                   markers: [
@@ -1255,16 +1259,12 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                       setState(() => _selectedMapFriend = friend),
                 ),
                 if (_navigationController.recordedPath.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      for (final segment
-                          in _navigationController.recordedSegments)
-                        Polyline(
-                          points: segment,
-                          strokeWidth: 4.0,
-                          color: Colors.greenAccent.withValues(alpha: 0.8),
-                        ),
-                    ],
+                  ActivityTrailLayer(
+                    segments: _navigationController.recordedSegments,
+                    activity: _navigationController.workoutActivity,
+                    transport: _navigationController.gearVehicle?.transportType,
+                    recorded: true,
+                    baseColor: Colors.greenAccent.withValues(alpha: .8),
                   ),
                 // Летящие стикеры: анимация прилёта к маркеру друга
                 // (только при включённом игровом модуле).

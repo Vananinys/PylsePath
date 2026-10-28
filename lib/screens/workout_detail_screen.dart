@@ -1,3 +1,4 @@
+import '../widgets/activity_trail_layer.dart';
 import '../widgets/workout_analytics.dart';
 import '../widgets/workout_comparison.dart';
 import '../models/workout_details.dart';
@@ -258,18 +259,13 @@ class WorkoutDetailScreen extends StatelessWidget {
                 ),
                 userAgentPackageName: 'com.pulsepath.app',
               ),
-            PolylineLayer(
-              polylines: [
-                for (final segment in WorkoutDetails.splitTrack(
-                  points,
-                  workout.route.workoutDetails.segmentStarts,
-                ))
-                  Polyline(
-                    points: segment,
-                    color: Colors.deepOrange.withValues(alpha: 0.8),
-                    strokeWidth: 4,
-                  ),
-              ],
+            ActivityTrailLayer(
+              segments: WorkoutDetails.splitTrack(
+                points,
+                workout.route.workoutDetails.segmentStarts,
+              ),
+              activity: workout.route.activityType,
+              transport: workout.route.transportType,
             ),
             MarkerLayer(
               markers: [

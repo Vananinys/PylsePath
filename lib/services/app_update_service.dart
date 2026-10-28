@@ -143,18 +143,37 @@ class AppUpdateService {
   }
 
   static const _channelKey = 'app_update_channel_v1';
+  static bool _channelNeedsReload = false;
   static Future<UpdateChannel> selectedChannel() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_channelKey) == 'beta'
+    if (_channelNeedsReload) {
+      try {
+        await prefs.reload();
+        _channelNeedsReload = false;
+      } catch (_) {
+        return UpdateChannel.stable;
+      }
+    }
+    return prefs.get(_channelKey) == 'beta'
         ? UpdateChannel.beta
         : UpdateChannel.stable;
   }
 
   static Future<void> selectChannel(UpdateChannel channel) async {
     final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setString(_channelKey, channel.name)) {
-      await prefs.reload();
-      throw StateError('Не удалось сохранить канал обновлений');
+    try {
+      if (!await prefs.setString(_channelKey, channel.name)) {
+        throw StateError('Не удалось сохранить канал обновлений');
+      }
+    } catch (_) {
+      _channelNeedsReload = true;
+      try {
+        await prefs.reload();
+        _channelNeedsReload = false;
+      } catch (_) {
+        /* Fail closed until a platform read succeeds. */
+      }
+      rethrow;
     }
   }
 

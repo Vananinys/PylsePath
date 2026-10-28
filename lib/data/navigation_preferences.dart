@@ -19,10 +19,18 @@ class NavigationPreferences extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    colorIndex = (prefs.getInt('nav_color') ?? 0).clamp(0, palette.length - 1);
-    lineWidth = (prefs.getDouble('nav_line_width') ?? 5.5).clamp(3, 10);
-    followZoom = (prefs.getDouble('nav_follow_zoom') ?? 17).clamp(14, 19);
-    cachedMapOnly = prefs.getBool('nav_cached_map_only') ?? false;
+    final color = prefs.get('nav_color');
+    final width = prefs.get('nav_line_width');
+    final zoom = prefs.get('nav_follow_zoom');
+    final cache = prefs.get('nav_cached_map_only');
+    colorIndex = color is int ? color.clamp(0, palette.length - 1) : 0;
+    lineWidth = width is num && width.isFinite
+        ? width.toDouble().clamp(3, 10)
+        : 5.5;
+    followZoom = zoom is num && zoom.isFinite
+        ? zoom.toDouble().clamp(14, 19)
+        : 17;
+    cachedMapOnly = cache is bool ? cache : false;
   }
 
   Future<void> update({

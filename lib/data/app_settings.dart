@@ -39,16 +39,26 @@ class AppSettings {
   Future<void> load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _backgroundTracking = prefs.getBool(_backgroundKey) ?? true;
-      _autoPauseEnabled = prefs.getBool(_autoPauseKey) ?? true;
-      _shareLivePosition = prefs.getBool(_shareLivePositionKey) ?? false;
-      _gearLabEnabled = prefs.getBool('gear_advisor_experimental') ?? false;
-      final waterMinutes = prefs.getInt('workout_water_reminder_minutes') ?? 0;
+      _backgroundTracking = prefs.get(_backgroundKey) is bool
+          ? prefs.get(_backgroundKey) as bool
+          : true;
+      _autoPauseEnabled = prefs.get(_autoPauseKey) is bool
+          ? prefs.get(_autoPauseKey) as bool
+          : true;
+      _shareLivePosition = prefs.get(_shareLivePositionKey) is bool
+          ? prefs.get(_shareLivePositionKey) as bool
+          : false;
+      _gearLabEnabled = prefs.get('gear_advisor_experimental') is bool
+          ? prefs.get('gear_advisor_experimental') as bool
+          : false;
+      final waterMinutes = prefs.get('workout_water_reminder_minutes') is int
+          ? prefs.get('workout_water_reminder_minutes') as int
+          : 0;
       _waterReminderMinutes =
           WorkoutReminderClock.intervals.contains(waterMinutes)
           ? waterMinutes
           : 0;
-      final modeName = prefs.getString(_sportModeKey);
+      final modeName = prefs.get(_sportModeKey);
       _sportMode =
           SportMode.values.where((mode) => mode.name == modeName).firstOrNull ??
           SportMode.vehicle;

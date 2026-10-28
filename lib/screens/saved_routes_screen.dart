@@ -1,3 +1,5 @@
+import '../widgets/activity_trail_layer.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
@@ -468,18 +470,13 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                                 ),
                                 userAgentPackageName: 'com.pulsepath.app',
                               ),
-                            PolylineLayer(
-                              polylines: [
-                                for (final segment in WorkoutDetails.splitTrack(
-                                  route.routePoints,
-                                  route.workoutDetails.segmentStarts,
-                                ))
-                                  Polyline(
-                                    points: segment,
-                                    color: Colors.deepOrange,
-                                    strokeWidth: 4,
-                                  ),
-                              ],
+                            ActivityTrailLayer(
+                              segments: WorkoutDetails.splitTrack(
+                                route.routePoints,
+                                route.workoutDetails.segmentStarts,
+                              ),
+                              activity: route.activityType,
+                              transport: route.transportType,
                             ),
                             const Align(
                               alignment: Alignment.bottomRight,

@@ -199,7 +199,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _chatService.connected.removeListener(_connectionChanged);
     _draftTimer?.cancel();
     _searchTimer?.cancel();
-    unawaited(_store.saveDraft(_inputController.text));
+    unawaited(_store.saveDraft(_inputController.text).catchError(_cacheError));
     _searchController.dispose();
     _recorder.dispose();
     _recordTicker?.cancel();
@@ -236,7 +236,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               )
               .toList(),
         );
-        unawaited(_persistMessages());
+        unawaited(_persistMessages().catchError(_cacheError));
         unawaited(_chatService.refreshUnread());
         final owner = _chatService.userId;
         if (owner != null) {
@@ -257,22 +257,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _draftChanged() {
     _draftTimer?.cancel();
     _draftTimer = Timer(const Duration(milliseconds: 250), () {
-      unawaited(_store.saveDraft(_inputController.text));
+      unawaited(
+        _store.saveDraft(_inputController.text).catchError(_cacheError),
+      );
     });
   }
 
+  String? _localDataNotice;
+  void _cacheError(Object error) {
+    if (mounted)
+      setState(
+        () => _localDataNotice = 'Не удалось сохранить локальные сообщения. Проверьте свободное место и откройте диалог заново.',
+      );
+  }
+
   Future<void> _restoreLocal() async {
-    final cached = await _store.readMessages();
-    final draft = await _store.readDraft();
-    if (!mounted) return;
-    setState(() {
-      if (cached.isNotEmpty) {
-        _messages = _merge(cached, _messages);
-        _isLoading = false;
-      }
-      if (_inputController.text.isEmpty) _inputController.text = draft;
-    });
-    await _loadMessagesWithReactions();
+    try {
+      final cached = await _store.readMessages();
+      final draft = await _store.readDraft();
+      if (!mounted) return;
+      setState(() {
+        if (cached.isNotEmpty) {
+          _messages = _merge(cached, _messages);
+          _isLoading = false;
+        }
+        if (_inputController.text.isEmpty) _inputController.text = draft;
+      });
+      if (mounted) setState(() => _localDataNotice = _store.recoveryNotice);
+    } catch (error) {
+      if (mounted)
+        setState(
+          () => _localDataNotice = 'Локальная очередь не читается. Исходник не перезаписан; проверьте свободное место.',
+        );
+    }
+    if (mounted) await _loadMessagesWithReactions();
   }
 
   List<ChatMessage> _merge(
@@ -304,7 +322,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _searchMessages.removeWhere((m) => m.id == id);
       _replyTargets.remove(id);
     });
-    unawaited(_persistMessages());
+    unawaited(_persistMessages().catchError(_cacheError));
   }
 
   void _connectionChanged() {
@@ -370,7 +388,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
         _isLoading = false;
       });
-      unawaited(_persistMessages());
+      unawaited(_persistMessages().catchError(_cacheError));
       final targets = await _chatService.fetchReplyTargets(page);
       if (!mounted) return;
       setState(() => _replyTargets.addAll(targets));
@@ -470,7 +488,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           !message.isRead) {
         unawaited(_markVisibleRead());
       }
-      unawaited(_persistMessages());
+      unawaited(_persistMessages().catchError(_cacheError));
       if (!wasPresent && _query.isEmpty) {
         if (!_showScrollToBottom || message.senderId == me) {
           _scrollToBottom();
@@ -1114,7 +1132,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           _searchMessages = _merge(_searchMessages, [edited]);
         });
       }
-      unawaited(_persistMessages());
+      unawaited(_persistMessages().catchError(_cacheError));
     } catch (error) {
       _showError(
         error is ChatServiceException
@@ -1263,6 +1281,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ),
                   ),
           ),
+          if (_localDataNotice != null)
+            MaterialBanner(
+              content: Text(_localDataNotice!),
+              actions: [
+                TextButton(
+                  onPressed: () => setState(() => _localDataNotice = null),
+                  child: const Text('Понятно'),
+                ),
+              ],
+            ),
+
           if (_loadError != null)
             MaterialBanner(
               content: Text(_loadError!),
@@ -1969,7 +1998,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           const SnackBar(content: Text('Не удалось удалить сообщение')),
         );
       } else if (ok) {
-        unawaited(_persistMessages());
+        unawaited(_persistMessages().catchError(_cacheError));
         unawaited(_chatService.refreshUnread());
       }
     }
@@ -2162,7 +2191,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             setState(
                               () => _messages = _merge(_messages, [message]),
                             );
-                            unawaited(_persistMessages());
+                            unawaited(
+                              _persistMessages().catchError(_cacheError),
+                            );
                             _scrollToBottom();
                           }
                         });

@@ -1,3 +1,5 @@
+import 'local_data_integrity.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -28,17 +30,44 @@ class SavedRoutesRepository {
     return result;
   }
 
+  void _requireOwner() {
+    if (UserScope.currentUserId() != _owner)
+      throw StateError('Аккаунт изменился');
+  }
+
   Future<void> _read() async {
+    _requireOwner();
     final prefs = await SharedPreferences.getInstance();
+    _requireOwner();
     final text = prefs.getString(_key);
-    _savedRoutes = text == null
-        ? []
-        : (jsonDecode(text) as List)
-              .map(
-                (e) => SavedRoute.fromJson(Map<String, dynamic>.from(e as Map)),
-              )
-              .toList();
-    await _write(); // persist stable IDs assigned to old records
+    if (text == null) {
+      _savedRoutes = [];
+      return;
+    }
+    late List rows;
+    late List<SavedRoute> parsed;
+    try {
+      rows = jsonDecode(text) as List;
+      parsed = rows
+          .map((e) => SavedRoute.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      await LocalDataIntegrity.preserve(prefs, _key, text);
+      throw const FormatException(
+        'Маршруты не читаются. Оригинал сохранён, перезапись заблокирована.',
+      );
+    }
+    var changed = false, needsIds = false;
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i] as Map;
+      changed |= LocalDataIntegrity.routeChanged(row, parsed[i].toJson());
+      needsIds |= row['localId'] is! String && row['remoteId'] is! String;
+    }
+    if (changed) await LocalDataIntegrity.preserve(prefs, _key, text);
+    _requireOwner();
+    _savedRoutes = parsed;
+    // Opening a current library must not rewrite it. Only migrate missing IDs.
+    if (needsIds) await _write();
   }
 
   Future<void> _write() async {
@@ -46,6 +75,7 @@ class SavedRoutesRepository {
       throw StateError('Аккаунт изменился');
     }
     final prefs = await SharedPreferences.getInstance();
+    _requireOwner();
     if (!await prefs.setString(
       _key,
       jsonEncode(_savedRoutes.map((r) => r.toJson()).toList()),
@@ -55,7 +85,10 @@ class SavedRoutesRepository {
   }
 
   Future<void> load() => _serial(_read);
-  Future<void> save() => _serial(_write);
+  Future<void> save() => _serial(() async {
+    await _read();
+    await _write();
+  });
   Future<void> addRoute(SavedRoute route) => _serial(() async {
     await _read();
     _savedRoutes.add(route);
@@ -74,6 +107,7 @@ class SavedRoutesRepository {
     await _write();
   });
   Future<void> clear() => _serial(() async {
+    await _read();
     _savedRoutes = [];
     await _write();
   });

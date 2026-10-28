@@ -1,3 +1,5 @@
+import 'local_data_integrity.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -7,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/saved_route.dart';
-import '../models/workout_details.dart';
 import '../services/rides_service.dart';
 import '../services/garage_service.dart';
 import '../services/achievements_service.dart';
@@ -87,11 +88,21 @@ class WorkoutHistoryRepository {
     return raw == normalized;
   }
 
-  static bool _telemetryChanged(Map row) {
+  static bool _telemetryChanged(Map row, [Map? normalized]) {
+    final model =
+        normalized ??
+        SavedRoute.fromJson(Map<String, dynamic>.from(row)).toJson();
     final raw = row['workoutDetails'];
-    return raw != null &&
-        !_retainsOriginal(raw, WorkoutDetails.fromJson(raw).toJson());
+    return LocalDataIntegrity.routeChanged(row, model) ||
+        (raw != null && !_retainsOriginal(raw, model['workoutDetails']));
   }
+
+  static bool _unknownEnvelope(Map raw) => LocalDataIntegrity.unknownKeys(raw, {
+    'version',
+    'workouts',
+    'deletedIds',
+    'pendingDeletes',
+  });
 
   Future<void> _read() async {
     _requireOwner();
@@ -119,9 +130,10 @@ class WorkoutHistoryRepository {
         final envelope = Map<String, dynamic>.from(jsonDecode(recovery) as Map);
         if (envelope['version'] != 2)
           throw const FormatException('Unknown recovery version');
-        if ((envelope['workouts'] as List).any(
-          (row) => _telemetryChanged(row as Map),
-        )) {
+        if (_unknownEnvelope(envelope) ||
+            (envelope['workouts'] as List).any(
+              (row) => _telemetryChanged(row as Map),
+            )) {
           await _preserveDamaged(prefs, recovery, key: _recoveryKey);
         }
         final routes = (envelope['workouts'] as List)
@@ -193,6 +205,7 @@ class WorkoutHistoryRepository {
         if (envelope['version'] != 2) {
           throw const FormatException('Неизвестная версия истории');
         }
+        needsTelemetryBackup = _unknownEnvelope(envelope);
         rows = envelope['workouts'] as List;
         deletedIds.addAll(
           (envelope['deletedIds'] as List? ?? const []).cast<String>(),
@@ -208,7 +221,8 @@ class WorkoutHistoryRepository {
           needsPersist = true;
         }
         parsed.add(SavedRoute.fromJson(map));
-        if (_telemetryChanged(map)) needsTelemetryBackup = true;
+        if (_telemetryChanged(map, parsed.last.toJson()))
+          needsTelemetryBackup = true;
       }
     } catch (error) {
       // Never replace unreadable history with an empty or partial list.

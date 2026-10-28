@@ -1,3 +1,5 @@
+import 'trail_appearance_screen.dart';
+
 import 'package:flutter/material.dart';
 
 import '../data/navigation_preferences.dart';
@@ -14,8 +16,25 @@ class NavigationPreferencesScreen extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.route),
+                title: const Text('След на карте'),
+                subtitle: const Text(
+                  'Шаги, протектор, колеи · цвет, размер и плотность',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const TrailAppearanceScreen(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
-              'Цвет маршрута',
+              'Цвет обычной линии (когда след отключён)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -74,7 +93,7 @@ class NavigationPreferencesScreen extends StatelessWidget {
             const SizedBox(height: 24),
             OutlinedButton(
               onPressed: () => prefs.update(color: 0, width: 5.5, zoom: 17),
-              child: const Text('Вернуть стандартный вид'),
+              child: const Text('Сбросить линию и масштаб'),
             ),
           ],
         ),
