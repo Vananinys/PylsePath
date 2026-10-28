@@ -3,6 +3,26 @@ part of '../../main.dart';
 /// Компас и режимы камеры: следование, поворот карты, горячие каналы
 /// позиции/азимута контроллера.
 mixin _CameraCompassMixin on _MapScreenStateBase {
+  /// Put the current position in the visible map, above the workout panel.
+  void _keepPositionAbovePanel() {
+    if (!_isMapReady || !_navigationController.isFollowingUser) return;
+    final tracking =
+        _navigationController.isWorkoutActive ||
+        _navigationController.isWorkoutPaused;
+    if (!tracking) return;
+    final top = _navigationController.isNavigating ? 240.0 : 130.0;
+    final bottom = _workoutHudHeight;
+    final height = MediaQuery.sizeOf(context).height;
+    final offset = ((top - bottom) / 2)
+        .clamp(-height * .3, height * .3)
+        .toDouble();
+    _mapController.move(
+      _displayPosition.value,
+      _mapController.camera.zoom,
+      offset: Offset(0, offset),
+    );
+  }
+
   /// Запускает подписку на компас ПОСЛЕ проверки/запроса разрешения на
   /// геолокацию — на Android датчик ориентации молчит без него, даже если
   /// сам компас физически исправен.
@@ -147,6 +167,7 @@ mixin _CameraCompassMixin on _MapScreenStateBase {
     } else {
       _mapController.move(_displayPosition.value, _mapController.camera.zoom);
     }
+    _keepPositionAbovePanel();
   }
 
   /// Горячий канал азимута: поворот камеры в режиме «по направлению».
@@ -160,6 +181,7 @@ mixin _CameraCompassMixin on _MapScreenStateBase {
       _mapController.camera.zoom,
       -_currentHeading,
     );
+    _keepPositionAbovePanel();
   }
 
   /// Смена состояний контроллера (старт/пауза/финиш/маршрут/друзья) —
@@ -189,6 +211,7 @@ mixin _CameraCompassMixin on _MapScreenStateBase {
         _mapController.move(_displayPosition.value, _mapController.camera.zoom);
       }
     }
+    _keepPositionAbovePanel();
     if (mounted) {
       setState(() {
         final id = _selectedMapFriend?.id;

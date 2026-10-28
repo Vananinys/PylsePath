@@ -1255,6 +1255,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                     valueListenable: _navigationController.positionNotifier,
                     builder: (context, position, _) => FriendTrailsLayer(
                       key: ValueKey('idle-trail-${UserScope.currentUserId()}'),
+                      idle: true,
                       friends:
                           _navigationController.gpsSignal.value.updatedAt ==
                               null
@@ -1395,7 +1396,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               ],
             ),
 
-            if (!_isPreRideOpen)
+            if (!_isPreRideOpen || isTracking)
               IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: SearchPanel(
@@ -1430,7 +1431,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
               ),
-            if (_isPreRideOpen && !_isScreenLocked)
+            if (_isPreRideOpen && !isTracking && !_isScreenLocked)
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 12,
                 left: 16,
@@ -1441,7 +1442,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 ),
               ),
             if (showNavigationCard &&
-                !_isPreRideOpen &&
+                (!_isPreRideOpen || isTracking) &&
                 _searchResults.isEmpty &&
                 MediaQuery.viewInsetsOf(context).bottom == 0)
               Positioned(
@@ -1464,7 +1465,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   ),
                 ),
               ),
-            if (!_isPreRideOpen &&
+            if ((!_isPreRideOpen || isTracking) &&
                 _searchResults.isEmpty &&
                 MediaQuery.viewInsetsOf(context).bottom == 0 &&
                 !_searchFocusNode.hasFocus)
@@ -1477,6 +1478,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 child: Row(
                   children: [
                     Flexible(
+                      flex: 0,
                       child: GpsSignalIndicator(
                         signal: _navigationController.gpsSignal,
                         compact: true,
@@ -1486,6 +1488,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                     ),
                     const SizedBox(width: 8),
                     Flexible(
+                      flex: 3,
                       child: MapWeatherPill(
                         weather: _preRideWeather,
                         isLoading: _weatherLoading,
@@ -1500,7 +1503,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
 
             Positioned(
               right: 12,
-              bottom: MediaQuery.paddingOf(context).bottom + 104,
+              bottom: bottomPanelHeight + 8,
               child: IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: MapCredits(layer: _mapLayerIndex),

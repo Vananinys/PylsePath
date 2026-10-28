@@ -62,7 +62,9 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
       _selectedId = item.id;
       _point = item.pointIndex.clamp(0, widget.points.length - 1);
     });
-    if (_mapReady) _map.move(widget.points[_point], _map.camera.zoom);
+    // Selection highlights the thumbnail; it must not hide the rest of the track.
+    if (_mapReady && widget.points.length == 1)
+      _map.move(widget.points[_point], _map.camera.zoom);
   }
 
   void _group(List<RideMedia> items) {
@@ -466,8 +468,9 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
                               ))
                                 Marker(
                                   point: points[group.first.pointIndex],
-                                  width: 32,
-                                  height: 32,
+                                  width: 24,
+                                  height: 24,
+                                  rotate: true,
                                   child: TrackMediaThumbnail(
                                     local: group.first,
                                     count: group.length,

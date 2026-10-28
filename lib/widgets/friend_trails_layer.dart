@@ -11,8 +11,13 @@ import 'activity_trail_layer.dart';
 
 /// Short, fading tails under friend avatars. Does not intercept map gestures.
 class FriendTrailsLayer extends StatefulWidget {
-  const FriendTrailsLayer({super.key, required this.friends});
+  const FriendTrailsLayer({
+    super.key,
+    required this.friends,
+    this.idle = false,
+  });
   final List<FriendProfile> friends;
+  final bool idle;
 
   @override
   State<FriendTrailsLayer> createState() => _FriendTrailsLayerState();
@@ -94,6 +99,9 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
             ],
             activity: activity ?? ActivityType.hiking,
             recorded: true,
+            live: true,
+            idle: widget.idle,
+            phaseOffset: points.first.pathOffset,
             baseColor: color,
           ),
         ),

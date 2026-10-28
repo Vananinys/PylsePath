@@ -47,6 +47,9 @@ class TrailAppearance extends ChangeNotifier {
     Colors.cyan,
   ];
   TrailStyle style = TrailStyle.automatic;
+  TrailStyle friendStyle = TrailStyle.automatic,
+      idleStyle = TrailStyle.footprints;
+  bool onFriends = true, onIdle = true;
   int colorIndex = 0;
   double size = 11, spacing = 28, opacity = .85;
   bool guide = true, onRoutes = true, onRecording = true;
@@ -54,8 +57,13 @@ class TrailAppearance extends ChangeNotifier {
   bool _unknownVersion = false;
   bool _loaded = false;
   Color get color => colors[colorIndex];
-  TrailStyle effective(ActivityType activity, {String? transport}) {
-    if (style != TrailStyle.automatic) return style;
+  TrailStyle effective(
+    ActivityType activity, {
+    String? transport,
+    TrailStyle? pattern,
+  }) {
+    final selected = pattern ?? style;
+    if (selected != TrailStyle.automatic) return selected;
     if (activity.isFoot) {
       if (activity.isRunning) return TrailStyle.running;
       if (activity == ActivityType.nordicWalking) return TrailStyle.nordic;
@@ -76,6 +84,10 @@ class TrailAppearance extends ChangeNotifier {
   Map<String, Object> toJson() => {
     'version': 1,
     'style': style.name,
+    'friend_style': friendStyle.name,
+    'idle_style': idleStyle.name,
+    'friends': onFriends,
+    'idle': onIdle,
     'color': colorIndex,
     'size': size,
     'spacing': spacing,
@@ -105,6 +117,18 @@ class TrailAppearance extends ChangeNotifier {
       colorIndex = data['color'] is int
           ? (data['color'] as int).clamp(0, colors.length - 1)
           : 0;
+      friendStyle =
+          TrailStyle.values
+              .where((s) => s.name == data['friend_style'])
+              .firstOrNull ??
+          TrailStyle.automatic;
+      idleStyle =
+          TrailStyle.values
+              .where((s) => s.name == data['idle_style'])
+              .firstOrNull ??
+          TrailStyle.footprints;
+      onFriends = data['friends'] is bool ? data['friends'] as bool : true;
+      onIdle = data['idle'] is bool ? data['idle'] as bool : true;
       size = _number(data['size'], 11, 6, 20);
       spacing = _number(data['spacing'], 28, 16, 64);
       opacity = _number(data['opacity'], .85, .25, 1);
@@ -128,6 +152,10 @@ class TrailAppearance extends ChangeNotifier {
     bool? showGuide,
     bool? routes,
     bool? recording,
+    TrailStyle? friendsPattern,
+    TrailStyle? idlePattern,
+    bool? friends,
+    bool? idle,
     bool reset = false,
   }) {
     final result = _tail.then((_) async {
@@ -141,6 +169,10 @@ class TrailAppearance extends ChangeNotifier {
         ...before,
         if (reset) ...{
           'style': 'automatic',
+          'friend_style': 'automatic',
+          'idle_style': 'footprints',
+          'friends': true,
+          'idle': true,
           'color': 0,
           'size': 11.0,
           'spacing': 28.0,
@@ -157,6 +189,10 @@ class TrailAppearance extends ChangeNotifier {
         if (showGuide != null) 'guide': showGuide,
         if (routes != null) 'routes': routes,
         if (recording != null) 'recording': recording,
+        if (friendsPattern != null) 'friend_style': friendsPattern.name,
+        if (idlePattern != null) 'idle_style': idlePattern.name,
+        if (friends != null) 'friends': friends,
+        if (idle != null) 'idle': idle,
       };
       final prefs = await SharedPreferences.getInstance();
       try {
@@ -182,6 +218,14 @@ class TrailAppearance extends ChangeNotifier {
       guide = next['guide'] as bool;
       onRoutes = next['routes'] as bool;
       onRecording = next['recording'] as bool;
+      friendStyle = TrailStyle.values.firstWhere(
+        (s) => s.name == next['friend_style'],
+      );
+      idleStyle = TrailStyle.values.firstWhere(
+        (s) => s.name == next['idle_style'],
+      );
+      onFriends = next['friends'] as bool;
+      onIdle = next['idle'] as bool;
       notifyListeners();
     });
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});

@@ -257,8 +257,9 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
                         ))
                           Marker(
                             point: route.points[group.first.pointIndex],
-                            width: 60,
-                            height: 60,
+                            width: 24,
+                            height: 24,
+                            rotate: true,
                             child: TrackMediaThumbnail(
                               shared: group.first,
                               count: group.length,

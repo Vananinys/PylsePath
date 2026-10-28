@@ -20,11 +20,12 @@ List<TrailStamp> sampleTrail(
   double spacing,
   Rect viewport, {
   int limit = 600,
+  double phaseOffset = 0,
 }) {
   if (!spacing.isFinite || spacing < 1 || limit <= 0) return const [];
   final result = <TrailStamp>[];
   for (final segment in segments) {
-    var walked = 0.0;
+    var walked = identical(segment, segments.first) ? phaseOffset : 0.0;
     for (var i = 1; i < segment.length; i++) {
       final a = segment[i - 1], b = segment[i], d = b - a;
       if (!a.dx.isFinite ||
@@ -81,6 +82,9 @@ class ActivityTrailLayer extends StatefulWidget {
     this.recorded = false,
     this.baseColor = Colors.deepOrange,
     this.baseWidth = 4,
+    this.live = false,
+    this.idle = false,
+    this.phaseOffset = 0,
   });
   final List<List<LatLng>> segments;
   final ActivityType activity;
@@ -88,6 +92,8 @@ class ActivityTrailLayer extends StatefulWidget {
   final bool recorded;
   final Color baseColor;
   final double baseWidth;
+  final bool live, idle;
+  final double phaseOffset;
   @override
   State<ActivityTrailLayer> createState() => _ActivityTrailLayerState();
 }
@@ -101,10 +107,17 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
     listenable: TrailAppearance.instance,
     builder: (context, _) {
       final prefs = TrailAppearance.instance, camera = MapCamera.of(context);
-      final enabled = widget.recorded ? prefs.onRecording : prefs.onRoutes;
+      final enabled = widget.live
+          ? (widget.idle ? prefs.onIdle : prefs.onFriends)
+          : widget.recorded
+          ? prefs.onRecording
+          : prefs.onRoutes;
       final style = prefs.effective(
         widget.activity,
         transport: widget.transport,
+        pattern: widget.live
+            ? (widget.idle ? prefs.idleStyle : prefs.friendStyle)
+            : null,
       );
       final decorated =
           enabled && style != TrailStyle.line && camera.zoom >= 12;
@@ -150,11 +163,15 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                   painter: TrailPainter(
                     _world,
                     style,
-                    prefs.color.withValues(alpha: prefs.opacity),
+                    (widget.live && !widget.idle
+                            ? widget.baseColor
+                            : prefs.color)
+                        .withValues(alpha: prefs.opacity),
                     prefs.size,
                     prefs.spacing,
                     origin: origin,
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
+                    phaseOffset: widget.phaseOffset,
                   ),
                 ),
               ),
@@ -174,10 +191,12 @@ class TrailPainter extends CustomPainter {
     this.spacing, {
     this.origin = Offset.zero,
     this.scale = 1,
+    this.phaseOffset = 0,
   });
   final List<List<Offset>> segments;
   final Offset origin;
   final double scale;
+  final double phaseOffset;
   final TrailStyle style;
   final Color color;
   final double markerSize, spacing;
@@ -207,6 +226,7 @@ class TrailPainter extends CustomPainter {
         size.width / scale,
         size.height / scale,
       ).inflate(markerSize * 2 / scale),
+      phaseOffset: phaseOffset,
     );
     canvas.save();
     canvas.translate(-origin.dx, -origin.dy);
@@ -311,6 +331,7 @@ class TrailPainter extends CustomPainter {
       old.segments != segments ||
       old.origin != origin ||
       old.scale != scale ||
+      old.phaseOffset != phaseOffset ||
       old.style != style ||
       old.color != color ||
       old.markerSize != markerSize ||

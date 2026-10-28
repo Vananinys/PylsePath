@@ -1,11 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:latlong2/latlong.dart';
 
 import 'friend_profile.dart';
 
 class FriendTrailPoint {
-  const FriendTrailPoint(this.position, this.at);
+  const FriendTrailPoint(this.position, this.at, [this.pathOffset = 0]);
   final LatLng position;
   final DateTime at;
+
+  /// Distance along the original path in zoom-16 Mercator pixels.
+  final double pathOffset;
 }
 
 class _FriendTrail {
@@ -64,7 +69,24 @@ class FriendTrailBuffer {
           trail.points.clear();
           trail.points.add(FriendTrailPoint(point, at));
         } else if (meters >= 4 && !friend.livePaused) {
-          trail.points.add(FriendTrailPoint(point, at));
+          final a = previous.position, b = point;
+          double y(double latitude) {
+            final sine = math.sin(
+              latitude.clamp(-85.05112878, 85.05112878) * math.pi / 180,
+            );
+            return (.5 - math.log((1 + sine) / (1 - sine)) / (4 * math.pi)) *
+                16777216;
+          }
+
+          final dx = (b.longitude - a.longitude) / 360 * 16777216;
+          final dy = y(b.latitude) - y(a.latitude);
+          trail.points.add(
+            FriendTrailPoint(
+              point,
+              at,
+              previous.pathOffset + math.sqrt(dx * dx + dy * dy),
+            ),
+          );
         }
       }
       trail.updatedAt = at;
