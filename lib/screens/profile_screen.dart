@@ -29,7 +29,12 @@ import 'workout_history_screen.dart';
 import 'training_center_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.provider});
+  const ProfileScreen({
+    super.key,
+    required this.provider,
+    this.customizeOnOpen = false,
+  });
+  final bool customizeOnOpen;
 
   /// Общий кэш профиля из State Management. Обязателен: экран без общего
   /// провайдера создавал бы собственный второй кэш в обход main.dart.
@@ -110,7 +115,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _profile = _profileProvider.profile;
       _loading = false;
     }
-    _loadData(showSpinner: _loading);
+    _loadData(showSpinner: _loading).then((_) async {
+      if (widget.customizeOnOpen && mounted && _loadError == null) {
+        await _customizeProfile();
+        if (mounted) Navigator.pop(context);
+      }
+    });
   }
 
   void _appearanceChanged() {
@@ -161,7 +171,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _loadError = 'Не удалось загрузить профиль и историю. Данные не удалены.';
+        _loadError =
+            'Не удалось загрузить профиль и историю. Данные не удалены.';
       });
       debugPrint('[Profile] local load failed: $error');
     }

@@ -26,6 +26,7 @@ import '../widgets/app_update_dialog.dart';
 import 'progress_backup_screen.dart';
 import '../widgets/settings_hub.dart';
 import 'privacy_screen.dart';
+import 'customization_screen.dart';
 
 /// Экран настроек приложения: параметры заезда по умолчанию (автопауза,
 /// электропривод), интерфейс (пресет и модули), информация о синхронизации
@@ -459,7 +460,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return SettingsHub(
       summaries: {
-        'Внешний вид': 'Ваш набор разделов и возможности приложения',
+        'Внешний вид': 'Кастомизация: профиль, шлейфы, карта и набор разделов',
         'Шагомер и активность': 'Шаги, дневная цель и огонёк активности',
         'Уведомления': 'Звук, вибрация и экран блокировки',
         'Тренировки':
@@ -470,7 +471,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       children: [
         _sectionHeader('Внешний вид'),
-        _buildInterfaceSection(context),
+        ListTile(
+          leading: const Icon(Icons.palette_outlined),
+          title: const Text('Кастомизация'),
+          subtitle: const Text(
+            'Профиль, шлейфы, оформление карты и модули приложения',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CustomizationScreen(
+                provider: widget.provider,
+                interfaceSettings: _buildInterfaceSection(context),
+              ),
+            ),
+          ),
+        ),
         const Divider(),
         _sectionHeader('Шагомер и активность'),
         const HomeStepsSetting(),
