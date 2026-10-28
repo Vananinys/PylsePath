@@ -942,6 +942,9 @@ class MapNavigationController extends ChangeNotifier {
   DateTime? _lastSpeedSampleAt;
 
   // --- Сообщество: друзья на карте ---
+  /// Prevent a previous account's live trail from being drawn during auth changes.
+  bool get canDisplayFriendTrails => _ownerId != null && _hasCurrentOwner;
+
   /// Друзья (публичные профили + живая позиция, если друг сейчас в заезде).
   List<FriendProfile> get friends => List.unmodifiable(_friends.values);
 
