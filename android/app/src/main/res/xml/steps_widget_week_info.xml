@@ -1,0 +1,5 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+ android:minWidth="250dp" android:minHeight="200dp" android:minResizeWidth="250dp" android:minResizeHeight="200dp"
+ android:targetCellWidth="4" android:targetCellHeight="3" android:updatePeriodMillis="1800000"
+ android:initialLayout="@layout/steps_widget_week" android:previewLayout="@layout/steps_widget_week"
+ android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" />

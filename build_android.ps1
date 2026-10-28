@@ -37,8 +37,7 @@ if (-not (Test-Path $BuildRoot)) { Fail "build root missing: $BuildRoot" }
 if (-not (Test-Path $Flutter))   { Fail "flutter not found: $Flutter" }
 
 # --- 1) Sync sources into the ASCII build copy -------------------------------
-# /MIR mirrors the trees; excluded dirs (build outputs, gradle caches) are
-# preserved on the destination and never deleted.
+# /E copies sources without deleting destination files.
 Step 'Syncing sources into the ASCII build copy'
 $mirrors = @(
   @{ Src = "$Project\lib";    Dst = "$BuildRoot\lib";    ExcludeDirs = @() },
@@ -48,7 +47,7 @@ $mirrors = @(
   @{ Src = "$Project\android"; Dst = "$BuildRoot\android"; ExcludeDirs = @('build', '.gradle', '.cxx') }
 )
 foreach ($m in $mirrors) {
-  $rcArgs = @($m.Src, $m.Dst, '/MIR', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+  $rcArgs = @($m.Src, $m.Dst, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
   foreach ($x in $m.ExcludeDirs) { $rcArgs += @('/XD', $x) }
   & robocopy @rcArgs | Out-Null
   if ($LASTEXITCODE -ge 8) { Fail "robocopy failed for $($m.Src) (code $LASTEXITCODE)" }
@@ -89,6 +88,36 @@ if ($Offline) {
 Step 'Resolving Dart packages'
 $pubArgs = @('pub', 'get')
 if ($Offline) { $pubArgs += '--offline' }
+# JDK 25 uses a Unix-domain socket for NIO pipes on Windows. Keep both
+# temporary paths ASCII so Gradle can establish its local daemon connection.
+$taskJavaOptions = $env:JAVA_TOOL_OPTIONS
+$taskTemp = $env:TEMP
+$taskTmp = $env:TMP
+$taskAndroidHome = $env:ANDROID_HOME
+$taskAndroidSdkRoot = $env:ANDROID_SDK_ROOT
+$taskJavaTemp = Join-Path $BuildRoot 'jtmp'
+New-Item -ItemType Directory -Path $taskJavaTemp -Force | Out-Null
+$env:JAVA_TOOL_OPTIONS = "$taskJavaOptions -Djava.io.tmpdir=$taskJavaTemp -Djdk.net.unixdomain.tmpdir=$taskJavaTemp"
+$env:TEMP = $taskJavaTemp
+$env:TMP = $taskJavaTemp
+# Java .properties readers cannot reliably decode a Cyrillic SDK path.
+$taskSdkAlias = Join-Path (Split-Path -Parent $BuildRoot) 'pulsepath-sdk'
+if (-not (Test-Path -LiteralPath $taskSdkAlias)) {
+  New-Item -ItemType Junction -Path $taskSdkAlias -Target (Join-Path $env:LOCALAPPDATA 'Android\Sdk') | Out-Null
+}
+$env:ANDROID_HOME = $taskSdkAlias
+$env:ANDROID_SDK_ROOT = $taskSdkAlias
+$taskLocalProperties = Join-Path $BuildRoot 'android\local.properties'
+if (Test-Path -LiteralPath $taskLocalProperties) {
+  $taskLocalText = [IO.File]::ReadAllText($taskLocalProperties)
+  $taskSdkProperty = 'sdk.dir=' + $taskSdkAlias.Replace('\', '/')
+  if ($taskLocalText -match '(?m)^sdk.dir=') {
+    $taskLocalText = [regex]::Replace($taskLocalText, '(?m)^sdk.dir=.*$', $taskSdkProperty)
+  } else {
+    $taskLocalText += "`n$taskSdkProperty`n"
+  }
+  [IO.File]::WriteAllText($taskLocalProperties, $taskLocalText)
+}
 Push-Location $BuildRoot
 try {
   & $Flutter @pubArgs
@@ -100,6 +129,11 @@ try {
   if ($LASTEXITCODE -ne 0) { Fail "flutter build apk failed (code $LASTEXITCODE)" }
 } finally {
   Pop-Location
+  $env:JAVA_TOOL_OPTIONS = $taskJavaOptions
+  $env:TEMP = $taskTemp
+  $env:TMP = $taskTmp
+  $env:ANDROID_HOME = $taskAndroidHome
+  $env:ANDROID_SDK_ROOT = $taskAndroidSdkRoot
 }
 
 # --- 6) Copy the APK back into the project ------------------------------------

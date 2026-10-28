@@ -1,0 +1,5 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/steps_widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center" android:padding="6dp" android:background="@drawable/steps_widget_background">
+ <TextView android:id="@+id/steps_day" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:text="ШАГИ" android:textColor="#B6F373" android:textSize="9sp" android:maxLines="1" />
+ <TextView android:id="@+id/steps_value" android:layout_width="match_parent" android:layout_height="30dp" android:gravity="center" android:text="0" android:textColor="#FFFFFF" android:textSize="24sp" android:textStyle="bold" android:maxLines="1" android:autoSizeTextType="uniform" android:autoSizeMinTextSize="12sp" android:autoSizeMaxTextSize="24sp" />
+ <TextView android:id="@+id/steps_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:visibility="gone" />
+</LinearLayout>

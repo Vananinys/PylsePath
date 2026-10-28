@@ -29,6 +29,18 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false">
+        <receiver android:name=".MiniStepsWidgetProvider" android:exported="false" android:label="PulsePath · Шаги мини">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/steps_widget_mini_info" />
+        </receiver>
+        <receiver android:name=".StripStepsWidgetProvider" android:exported="false" android:label="PulsePath · Шаги полоска">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/steps_widget_strip_info" />
+        </receiver>
+        <receiver android:name=".WeekStepsWidgetProvider" android:exported="false" android:label="PulsePath · Активность за неделю">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/steps_widget_week_info" />
+        </receiver>
         <receiver android:name=".StepsWidgetProvider" android:exported="false" android:label="PulsePath · Шаги">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/steps_widget_info" />

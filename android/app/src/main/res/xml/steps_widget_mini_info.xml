@@ -1,0 +1,5 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+ android:minWidth="56dp" android:minHeight="56dp" android:minResizeWidth="56dp" android:minResizeHeight="56dp"
+ android:targetCellWidth="1" android:targetCellHeight="1" android:updatePeriodMillis="1800000"
+ android:initialLayout="@layout/steps_widget_mini" android:previewLayout="@layout/steps_widget_mini"
+ android:resizeMode="none" android:widgetCategory="home_screen" />
