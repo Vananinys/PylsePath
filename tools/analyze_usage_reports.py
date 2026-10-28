@@ -5,6 +5,7 @@ import csv
 import datetime
 import hashlib
 import json
+import re
 from pathlib import Path
 
 EVENTS = {'appOpened','savedRoutesOpened','chatsOpened','communityOpened','trainingOpened',
@@ -21,7 +22,7 @@ def validate(data):
         if set(row) != {'day','version','event','count'} or row['event'] not in EVENTS or type(row['count']) is not int or not 0<row['count']<=1000000:
             raise ValueError('Invalid counter')
         datetime.date.fromisoformat(row['day'])
-        if not isinstance(row['version'],str) or len(row['version'])>50:
+        if not isinstance(row['version'],str) or not re.fullmatch(r'(?:unknown|[0-9][0-9A-Za-z.+_-]{0,49})',row['version']):
             raise ValueError('Invalid version')
     return data['counters']
 
