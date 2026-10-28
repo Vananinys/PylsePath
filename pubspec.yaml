@@ -1,7 +1,7 @@
 name: pulsepath
 description: "PulsePath — мобильный навигатор с картой CartoDB Positron."
 publish_to: 'none'
-version: 1.12.21-beta.1+74
+version: 1.12.21+75
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -55,3 +55,4 @@ flutter:
   assets:
     - assets/maptiler-logo.png
     - assets/branding/pulsepath_icon.png
+
