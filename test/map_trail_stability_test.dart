@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsepath/data/trail_appearance.dart';
@@ -10,6 +11,42 @@ import 'package:pulsepath/widgets/activity_trail_layer.dart';
 import 'package:pulsepath/widgets/map_ui_overlays.dart';
 
 void main() {
+  testWidgets('Disabled live tail draws neither stamps nor fallback line', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await TrailAppearance.instance.update(friends: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FlutterMap(
+            options: const MapOptions(
+              initialCenter: LatLng(0, 0),
+              initialZoom: 16,
+            ),
+            children: const [
+              ActivityTrailLayer(
+                segments: [
+                  [LatLng(0, 0), LatLng(0, .001)],
+                ],
+                activity: ActivityType.hiking,
+                live: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(
+      find.descendant(
+        of: find.byType(ActivityTrailLayer),
+        matching: find.byType(PolylineLayer),
+      ),
+      findsNothing,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await TrailAppearance.instance.update(friends: true);
+  });
   test('Removing the tail preserves world positions and left/right phase', () {
     final before = sampleTrail(
       [

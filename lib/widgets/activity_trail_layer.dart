@@ -119,6 +119,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
             ? (widget.idle ? prefs.idleStyle : prefs.friendStyle)
             : null,
       );
+      if (widget.live && !enabled) return const SizedBox.shrink();
       final decorated =
           enabled && style != TrailStyle.line && camera.zoom >= 12;
       if (decorated && (_source != widget.segments || _zoom != 16)) {
