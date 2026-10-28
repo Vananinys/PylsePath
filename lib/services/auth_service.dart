@@ -1,3 +1,5 @@
+import 'recording_daily_activity_service.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -231,6 +233,7 @@ class AuthService {
     final client = _client;
     if (client == null) return;
     try {
+      await DailyActivityService.instance.bindToUser(null);
       await BackgroundLocationService.instance.setEnabled(false);
       await PushService.instance.unregisterCurrentDevice();
       await client.auth.signOut().timeout(const Duration(seconds: 15));

@@ -13,6 +13,10 @@ import '../widgets/community_feed.dart';
 import '../data/navigation_preferences.dart';
 import '../services/offline_maps_service.dart';
 import '../widgets/ride_pulse_view.dart';
+import '../widgets/ride_share_preview.dart';
+import 'route_builder_screen.dart';
+import 'ride_media_screen.dart';
+import '../widgets/local_track_media_layer.dart';
 
 class WorkoutDetailScreen extends StatelessWidget {
   final WorkoutRecord workout;
@@ -41,6 +45,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             onPressed: () => showRouteShareSheet(
               context,
               SharedRoute.fromSavedRoute(workout.route),
+              source: workout.route,
             ),
           ),
           // Экспорт трека в GPX: файл можно отправить в Strava/Komoot
@@ -90,6 +95,44 @@ class WorkoutDetailScreen extends StatelessWidget {
               ),
             // Сетка метрик
             _buildMetricsGrid(context),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: FilledButton.icon(
+                icon: const Icon(Icons.add_photo_alternate),
+                label: const Text('Фото и видео на треке'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RideMediaScreen(
+                      rideId: workout.route.localId,
+                      points: workout.route.routePoints,
+                      segmentStarts: workout.route.workoutDetails.segmentStarts,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.edit_road),
+                label: const Text('Создать маршрут из этого трека'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RouteBuilderScreen(source: workout.route),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.image_outlined),
+                label: const Text('Поделиться карточкой заезда'),
+                onPressed: () => _shareCard(context),
+              ),
+            ),
             // Дополнительная информация
             WorkoutAnalytics(route: workout.route),
             WorkoutComparison(route: workout.route),
@@ -112,6 +155,20 @@ class WorkoutDetailScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _shareCard(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => RideSharePreview(
+      activityType: workout.route.activityType.label,
+      distanceMeters: workout.route.distanceKm * 1000,
+      durationSeconds: workout.route.durationMin * 60,
+      // Legacy zero means unknown, not a measured flat ride.
+      elevationGainMeters:
+          workout.elevationGain.isFinite && workout.elevationGain > 0
+          ? workout.elevationGain
+          : null,
+    ),
+  );
+
   Future<void> _openMap(BuildContext context) => showDialog<void>(
     context: context,
     builder: (dialogContext) => Dialog(
@@ -132,7 +189,7 @@ class WorkoutDetailScreen extends StatelessWidget {
                 ),
               ],
             ),
-            Expanded(child: _buildMapPreview()),
+            Expanded(child: _buildMapPreview(context)),
           ],
         ),
       ),
@@ -151,7 +208,7 @@ class WorkoutDetailScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildMapPreview() {
+  Widget _buildMapPreview(BuildContext context) {
     final points = workout.route.routePoints;
     if (points.isEmpty) {
       return Container(
@@ -235,6 +292,24 @@ class WorkoutDetailScreen extends StatelessWidget {
                     child: const Icon(Icons.flag, color: Colors.red, size: 20),
                   ),
               ],
+            ),
+            LocalTrackMediaLayer(
+              rideId: workout.route.localId,
+              points: points,
+              onOpen: (item) async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RideMediaScreen(
+                      rideId: workout.route.localId,
+                      points: points,
+                      segmentStarts: workout.route.workoutDetails.segmentStarts,
+                      initialMediaId: item.id,
+                      initialIndex: item.pointIndex,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),

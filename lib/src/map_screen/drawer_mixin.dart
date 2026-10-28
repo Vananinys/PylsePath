@@ -185,7 +185,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
       ),
       'group_rides': ListTile(
         leading: const Icon(Icons.groups_2, color: Colors.deepOrange),
-        title: const Text('Совместная заездка'),
+        title: const Text('Совместная поездка'),
         subtitle: const Text('Катайте вместе с друзьями'),
         onTap: () async {
           Navigator.pop(context);
@@ -197,10 +197,13 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
             ),
           );
           if (!mounted) return;
-          if (result == 'start' &&
+          if ((result == 'start' || result == 'prepare_group') &&
               !_navigationController.isWorkoutActive &&
               !_navigationController.isWorkoutPaused) {
-            await _startRide();
+            setState(() {
+              _preRideGroupRoomId = GroupRideService().activeRoomId;
+              _isPreRideOpen = true;
+            });
           }
           if (result is LatLng && _isMapReady) {
             _setCameraLockMode(CameraLockMode.free);
@@ -266,6 +269,18 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                     if (mounted) {
                       await _navigationController.refreshPrimaryVehicle();
                     }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.place_outlined,
+                    color: Colors.deepOrange,
+                  ),
+                  title: const Text('Мои места'),
+                  subtitle: const Text('Личные точки на этом устройстве'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openMyPlaces();
                   },
                 ),
                 // Модульные пункты — только включённые, в порядке реестра.

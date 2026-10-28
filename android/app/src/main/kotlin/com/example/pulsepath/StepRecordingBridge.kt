@@ -43,11 +43,23 @@ class StepRecordingBridge(private val activity: Activity) {
                 result.success(null)
                 return@setMethodCallHandler
             }
+            // Persist the auth boundary before waiting behind any Google query.
+            // Requests already in flight are capped at their original query time.
+            if (call.method == "bindOwner") {
+                try {
+                    StepRecordingStore.markOwnerBoundary(context, call.argument<String>("owner"),
+                        call.argument<Number>("at")?.toLong() ?: System.currentTimeMillis())
+                } catch (error: Exception) {
+                    result.error("RECORDING_FAILED", "Cannot persist step owner boundary", null)
+                    return@setMethodCallHandler
+                }
+            }
             executor.execute {
                 try {
                     val value: Any? = synchronized(StepRecordingStore.lock) {
                         when (call.method) {
                             "status" -> StepRecordingStore.status(context)
+                            "bindOwner" -> StepRecordingStore.bindOwner(context)
                             "initialize", "refresh", "setEnabled", "workoutSteps" -> {
                                 val owner = call.argument<String>("owner")
                                     ?: throw IllegalArgumentException("Missing activity owner")
@@ -66,7 +78,7 @@ class StepRecordingBridge(private val activity: Activity) {
                         }
                     }
                     main.post {
-                        if (call.method in setOf("status", "initialize", "refresh", "setEnabled", "workoutSteps")) {
+                        if (call.method in setOf("status", "bindOwner", "initialize", "refresh", "setEnabled", "workoutSteps")) {
                             result.success(value)
                         } else result.notImplemented()
                     }
@@ -99,7 +111,39 @@ internal class StepRecordingStore(private val context: Context, private val owne
     private val client get() = FitnessLocal.getLocalRecordingClient(context)
     private var state = JSONObject(prefs.getString(key, null) ?: "{}")
 
+    private fun requireOwner() {
+        check(StepOwnerPolicy.mayUpdate(owner, prefs.getString("currentOwner", null))) { "Step recording account changed" }
+    }
+
+    private fun finishSuspended() {
+        val end = state.optLong("suspendedAt")
+        if (end <= 0) return
+        readSession(end)
+        state.put("completed", JSONObject(totals()))
+        state.put("session", JSONObject())
+        state.put("suspendedAt", 0L)
+        save()
+    }
+
+    private fun suspendAt(at: Long) {
+        val earliest = listOf(state.optLong("suspendedAt"), at).filter { it > 0 }.minOrNull() ?: at
+        state.put("suspendedAt", earliest)
+        state.put("enabled", false)
+        save()
+        try { finishSuspended() } catch (_: Exception) {
+            // Keep all previously archived totals if the final Google query fails.
+            // Never extend this account's interval into another user's session.
+            state.put("completed", JSONObject(totals()))
+            state.put("session", JSONObject())
+            state.put("suspendedAt", 0L)
+            state.put("boundaryArchiveIncomplete", true)
+            save()
+        }
+    }
+
     fun initialize(seed: Map<String, Number>, legacyEnabled: Boolean): Map<String, Any> {
+        requireOwner()
+        finishSuspended()
         if (!prefs.contains(key)) {
             state.put("completed", JSONObject(seed))
             state.put("session", JSONObject())
@@ -114,16 +158,20 @@ internal class StepRecordingStore(private val context: Context, private val owne
     }
 
     fun setEnabled(enabled: Boolean): Map<String, Any> {
+        requireOwner()
         if (enabled) {
+            finishSuspended()
             requireAvailable()
             if (!hasPermission(context)) throw SecurityException("Activity recognition permission required")
             // Idempotent: an existing subscription is not reset on app start.
             Tasks.await(client.subscribe(LocalDataType.TYPE_STEP_COUNT_DELTA), 30, TimeUnit.SECONDS)
+            requireOwner()
             if (!state.optBoolean("enabled")) {
                 state.put("activeSince", System.currentTimeMillis())
                 state.put("session", JSONObject())
             }
             state.put("enabled", true)
+            check(prefs.edit().putLong("cutoff:$owner", 0L).commit()) { "Cannot start step interval" }
             save()
             prefs.edit().putBoolean("unsubscribePending", false).commit()
             schedule(context)
@@ -149,6 +197,7 @@ internal class StepRecordingStore(private val context: Context, private val owne
     }
 
     fun refresh(): Map<String, Any> {
+        requireOwner()
         if (state.optBoolean("enabled")) {
             requireAvailable()
             if (!hasPermission(context)) throw SecurityException("Activity recognition permission required")
@@ -162,6 +211,7 @@ internal class StepRecordingStore(private val context: Context, private val owne
     }
 
     fun workoutSteps(windows: List<Map<String, Number>>): Map<String, Any> {
+        requireOwner()
         requireAvailable()
         if (!hasPermission(context)) throw SecurityException("Activity recognition permission required")
         require(windows.size <= 256) { "Too many walking intervals" }
@@ -187,8 +237,9 @@ internal class StepRecordingStore(private val context: Context, private val owne
         })
     }
 
-    private fun readSession() {
-        val now = System.currentTimeMillis()
+    private fun readSession(until: Long = System.currentTimeMillis()) {
+        val cutoff = prefs.getLong("cutoff:$owner", 0L)
+        val now = StepOwnerPolicy.queryEnd(until, state.optLong("suspendedAt"), cutoff)
         val since = state.optLong("activeSince", now)
         val lastRead = state.optLong("lastSyncedAt")
         val windows = StepRecordingDays.windows(since, now, ZoneId.systemDefault())
@@ -231,7 +282,9 @@ internal class StepRecordingStore(private val context: Context, private val owne
         "enabled" to state.optBoolean("enabled"),
         "days" to totals(),
         "lastSyncedAt" to state.optLong("lastSyncedAt"),
-    )
+    ).apply {
+        if (state.optBoolean("boundaryArchiveIncomplete")) put("warning", "Последние шаги перед выходом могли не сохраниться. Ранее сохранённая статистика доступна.")
+    }
 
     private fun requireAvailable() {
         if (servicesCode(context) != ConnectionResult.SUCCESS) throw StepRecordingUnavailable()
@@ -239,11 +292,39 @@ internal class StepRecordingStore(private val context: Context, private val owne
 
     private fun save() {
         check(prefs.edit().putString(key, state.toString()).commit()) { "Cannot save step archive" }
+        StepsWidgetProvider.updateAll(context)
     }
 
     companion object {
         val lock = Any()
         private const val WORK_NAME = "pulsepath-step-archive"
+        fun markOwnerBoundary(context: Context, owner: String?, at: Long) {
+            val prefs = context.getSharedPreferences("step_recording_v1", Context.MODE_PRIVATE)
+            val target = owner ?: ""
+            val editor = prefs.edit().putString("currentOwner", target)
+            // Freeze every enabled old account, including legacy installations.
+            enabledOwners(context).filter { it != target }.forEach { old ->
+                val existing = prefs.getLong("cutoff:$old", 0L)
+                editor.putLong("cutoff:$old", if (existing > 0) minOf(existing, at) else at)
+            }
+            check(editor.commit()) { "Cannot bind step owner" }
+            StepsWidgetProvider.updateAll(context)
+        }
+
+        fun bindOwner(context: Context): Map<String, Any> {
+            val prefs = context.getSharedPreferences("step_recording_v1", Context.MODE_PRIVATE)
+            val target = prefs.getString("currentOwner", "") ?: ""
+            val previous = enabledOwners(context)
+            previous.filter { it != target || prefs.getLong("cutoff:$it", 0L) > 0L }.forEach { old ->
+                StepRecordingStore(context, old).suspendAt(prefs.getLong("cutoff:$old", System.currentTimeMillis()))
+            }
+            if (enabledOwners(context).isEmpty()) {
+                if (previous.isNotEmpty()) check(prefs.edit().putBoolean("unsubscribePending", true).commit())
+                cleanupSubscription(context)
+            }
+            return mapOf("bound" to target)
+        }
+
         fun cleanupSubscription(context: Context) {
             val prefs = context.getSharedPreferences("step_recording_v1", Context.MODE_PRIVATE)
             if (enabledOwners(context).isNotEmpty()) return
@@ -274,7 +355,7 @@ internal class StepRecordingStore(private val context: Context, private val owne
 
         fun enabledOwners(context: Context): List<String> = context
             .getSharedPreferences("step_recording_v1", Context.MODE_PRIVATE).all
-            .filter { (key, value) -> key.startsWith("owner:") && value is String && JSONObject(value).optBoolean("enabled") }
+            .filter { (key, value) -> key.startsWith("owner:") && value is String && runCatching { JSONObject(value).optBoolean("enabled") }.getOrDefault(false) }
             .keys.map { it.removePrefix("owner:") }
 
         fun schedule(context: Context) {
@@ -288,7 +369,10 @@ internal class StepRecordingStore(private val context: Context, private val owne
 class StepRecordingWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
     override fun doWork(): Result = synchronized(StepRecordingStore.lock) {
         try {
-            val owners = StepRecordingStore.enabledOwners(applicationContext)
+            StepRecordingStore.bindOwner(applicationContext)
+            val prefs = applicationContext.getSharedPreferences("step_recording_v1", Context.MODE_PRIVATE)
+            val current = prefs.getString("currentOwner", null)
+            val owners = StepOwnerPolicy.activeOwners(current, StepRecordingStore.enabledOwners(applicationContext))
             if (owners.isEmpty()) StepRecordingStore.cleanupSubscription(applicationContext)
             if (!StepRecordingStore.hasPermission(applicationContext)) return@synchronized Result.success()
             var retry = false

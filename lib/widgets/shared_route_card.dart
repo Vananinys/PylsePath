@@ -5,6 +5,10 @@ import '../models/shared_route.dart';
 import '../data/saved_routes_repository.dart';
 import '../data/navigation_preferences.dart';
 import '../services/offline_maps_service.dart';
+import '../models/ride_media.dart';
+import 'shared_ride_media_viewer.dart';
+import 'track_media_thumbnail.dart';
+import '../models/track_media_groups.dart';
 
 class SharedRouteCard extends StatelessWidget {
   const SharedRouteCard({super.key, required this.route, this.tileProvider});
@@ -119,6 +123,8 @@ class SharedRouteCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 const Text('Открыть →', style: TextStyle(fontSize: 12)),
+                if (route.media.isNotEmpty)
+                  Text('Фото и видео на карте · ${route.media.length}'),
               ],
             ),
           ),
@@ -128,9 +134,70 @@ class SharedRouteCard extends StatelessWidget {
   );
 }
 
-class SharedRouteScreen extends StatelessWidget {
+class SharedRouteScreen extends StatefulWidget {
   const SharedRouteScreen({super.key, required this.route});
   final SharedRoute route;
+  @override
+  State<SharedRouteScreen> createState() => _SharedRouteScreenState();
+}
+
+class _SharedRouteScreenState extends State<SharedRouteScreen> {
+  SharedRoute get route => widget.route;
+  final _map = MapController();
+  bool _ready = false;
+  double _zoom = 15;
+  String? _selectedId;
+  void _select(SharedRideMedia item) {
+    setState(() => _selectedId = item.id);
+    if (_ready && item.pointIndex < route.points.length) {
+      _map.move(route.points[item.pointIndex], _zoom < 16 ? 16 : _zoom);
+    }
+  }
+
+  void _group(List<SharedRideMedia> items) {
+    if (items.length == 1) {
+      _select(items.first);
+      return;
+    }
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text('${items.length} материалов в этом месте'),
+            ),
+            TrackMediaStrip(
+              shared: items,
+              onSelect: (id) {
+                Navigator.pop(sheet);
+                _select(items.firstWhere((m) => m.id == id));
+              },
+              onOpen: (id) {
+                Navigator.pop(sheet);
+                final item = items.firstWhere((m) => m.id == id);
+                _select(item);
+                _open(item);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _map.dispose();
+    super.dispose();
+  }
+
+  void _open(SharedRideMedia media) => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => SharedRideMediaViewer(media: media)),
+  );
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -144,7 +211,14 @@ class SharedRouteScreen extends StatelessWidget {
                   child: Text('Статистика заезда · трек не прикреплён'),
                 )
               : FlutterMap(
+                  mapController: _map,
                   options: MapOptions(
+                    onMapReady: () => _ready = true,
+                    onPositionChanged: (camera, _) {
+                      if ((camera.zoom - _zoom).abs() > .25 && mounted) {
+                        setState(() => _zoom = camera.zoom);
+                      }
+                    },
                     initialCameraFit: CameraFit.bounds(
                       bounds: LatLngBounds.fromPoints(route.points),
                       padding: const EdgeInsets.all(40),
@@ -177,9 +251,49 @@ class SharedRouteScreen extends StatelessWidget {
                         TextSourceAttribution('© OpenStreetMap contributors'),
                       ],
                     ),
+                    MarkerLayer(
+                      markers: [
+                        for (final group in groupTrackMedia(
+                          route.media,
+                          route.points,
+                          (item) => item.pointIndex,
+                          _zoom,
+                        ))
+                          Marker(
+                            point: route.points[group.first.pointIndex],
+                            width: 60,
+                            height: 60,
+                            child: TrackMediaThumbnail(
+                              shared: group.first,
+                              count: group.length,
+                              selected: group.any((m) => m.id == _selectedId),
+                              onTap: () => _group(group),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
         ),
+        if (route.media.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+            child: Text(
+              '${route.media.length} материалов · миниатюра показывает место',
+            ),
+          ),
+          TrackMediaStrip(
+            shared: route.media,
+            selectedId: _selectedId,
+            onSelect: (id) =>
+                _select(route.media.firstWhere((m) => m.id == id)),
+            onOpen: (id) {
+              final item = route.media.firstWhere((m) => m.id == id);
+              _select(item);
+              _open(item);
+            },
+          ),
+        ],
         SafeArea(
           top: false,
           child: Padding(

@@ -35,7 +35,9 @@ Future<void> pulsePathBackgroundMessage(RemoteMessage message) async {
             row.receiverId == message.data['receiverId'] &&
             row.senderId == message.data['senderId']) {
           if (row.isRead) return;
-          final body = row.isPhoto
+          final body = row.isVideo
+              ? '🎬 Видео'
+              : row.isPhoto
               ? '📷 Фото'
               : row.isVoice
               ? '🎤 Голосовое сообщение'

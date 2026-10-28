@@ -1,13 +1,19 @@
+import 'chat_attachment_cleanup.dart';
+import '../utils/chat_media_files.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 
 import '../models/shared_route.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chat_message.dart';
+import '../models/video_metadata.dart';
 import '../utils/file_reader.dart';
+import '../utils/ride_id.dart';
 
 /// Ошибка чата с готовым для UI текстом.
 class ChatServiceException implements Exception {
@@ -33,6 +39,70 @@ class ChatService {
   String? _channelUserId;
   int _unreadRequest = 0;
   final Set<String> _delivered = {};
+  late final ChatAttachmentCleanup _attachmentCleanup = ChatAttachmentCleanup(
+    currentOwner: () => userId,
+    messageExists: (owner, id) async =>
+        (await _client!
+                .from('chat_messages')
+                .select('id')
+                .eq('id', id)
+                .eq('sender_id', owner)
+                .limit(1)
+                .timeout(const Duration(seconds: 15)))
+            .isNotEmpty,
+    removeRemote: (paths) async {
+      await _client!.storage
+          .from('chat_media')
+          .remove(paths)
+          .timeout(const Duration(seconds: 15));
+    },
+    removeLocal: (owner, id, paths) => removeRetainedChatMedia(
+      owner,
+      id,
+      paths,
+      isCurrent: () => userId == owner,
+    ),
+  );
+
+  Future<void> retryAttachmentCleanup() async {
+    final owner = userId;
+    if (owner == null) return;
+    try {
+      await _attachmentCleanup.flush(owner);
+    } catch (_) {
+      /* Preserve queue for retry. */
+    }
+  }
+
+  Future<void> queueDiscardedAttachment(ChatMessage message) async {
+    final owner = userId;
+    if (owner == null || message.senderId != owner) return;
+    final remote = <String>[];
+    final local = <String>[];
+    final sources = {
+      'photo': message.photoReference ?? message.photoUrl,
+      'voice': message.audioReference ?? message.audioUrl,
+      'video': message.videoReference ?? message.videoUrl,
+      'poster': message.videoPosterReference ?? message.videoPosterUrl,
+    };
+    for (final entry in sources.entries) {
+      final source = entry.value;
+      if (source == null) continue;
+      if (source.startsWith('chat:')) {
+        remote.add(source.substring(5));
+      } else if (!source.startsWith('http') && !source.startsWith('blob:')) {
+        local.add(source);
+        final extension = source.split('.').last.toLowerCase();
+        if (RegExp(r'^[a-z0-9]+$').hasMatch(extension)) {
+          remote.add('$owner/chat_${entry.key}_${message.id}.$extension');
+        }
+      }
+    }
+    // Sent messages may still have their original retained copy on this device.
+    // Only exact owner/message filenames are accepted by the platform helper.
+    await _attachmentCleanup.enqueue(owner, message.id, remote, local);
+  }
+
   void resetSession() {
     _unreadRequest++;
     final channel = _channel;
@@ -116,6 +186,9 @@ class ChatService {
     String? text,
     String? sticker,
     String? photoPath,
+    String? videoPath,
+    String? videoPosterPath,
+    VideoMetadata? videoMetadata,
     String? audioPath,
     int? audioSeconds,
     String? replyToId,
@@ -137,12 +210,14 @@ class ChatService {
     if (cleanText.isEmpty &&
         cleanSticker.isEmpty &&
         photoPath == null &&
+        videoPath == null &&
         audioPath == null &&
         routeAttachment == null) {
       throw const ChatServiceException('Пустое сообщение');
     }
 
     try {
+      if (videoPosterPath != null) messageId ??= newRideId();
       if (retry && messageId != null) {
         final existing = await fetchMessage(messageId);
         if (existing != null &&
@@ -151,21 +226,48 @@ class ChatService {
           return existing;
         }
       }
-      // Вложения (фото/голосовые) складываем в бакет `community`.
+      // All attachments remain in the private chat_media bucket.
       String? photoUrl;
       if (photoPath != null) {
         photoUrl = await _uploadAttachment(
           photoPath,
           'photo',
+          expectedOwner: id,
           messageId: messageId,
         );
       }
       String? audioUrl;
+      String? videoUrl;
+      String? videoPosterUrl;
+      if (videoPath != null) {
+        videoUrl = await _uploadAttachment(
+          videoPath,
+          'video',
+          expectedOwner: id,
+          messageId: messageId,
+        );
+      }
       if (audioPath != null) {
         audioUrl = await _uploadAttachment(
           audioPath,
           'voice',
+          expectedOwner: id,
           messageId: messageId,
+        );
+      }
+
+      if (videoPath != null && videoPosterPath != null) {
+        videoPosterUrl = await _uploadAttachment(
+          videoPosterPath,
+          'poster',
+          expectedOwner: id,
+          messageId: messageId,
+        );
+      }
+
+      if (client.auth.currentUser?.id != id) {
+        throw const ChatServiceException(
+          'Аккаунт изменился. Откройте чат заново.',
         );
       }
 
@@ -175,11 +277,17 @@ class ChatService {
             if (messageId != null) 'id': messageId,
             'sender_id': id,
             'receiver_id': receiverId,
-            'body': cleanText.isEmpty ? routeAttachment?.label : cleanText,
+            'body': cleanText.isEmpty
+                ? (videoUrl != null ? 'Видео' : routeAttachment?.label)
+                : cleanText,
             'sticker': cleanSticker.isEmpty ? null : cleanSticker,
             if (replyToId != null && replyToId.isNotEmpty)
               'reply_to_id': replyToId,
             if (photoUrl != null) 'photo_url': photoUrl,
+            if (videoUrl != null) 'video_url': videoUrl,
+            if (videoPosterUrl != null) 'video_poster_url': videoPosterUrl,
+            if (videoUrl != null && videoMetadata != null)
+              'video_metadata': videoMetadata.toJson(),
             if (audioUrl != null) 'audio_url': audioUrl,
             if (audioSeconds != null) 'audio_seconds': audioSeconds,
             if (routeAttachment != null)
@@ -202,6 +310,8 @@ class ChatService {
       throw const ChatServiceException(
         'Не удалось отправить сообщение. Проверьте интернет.',
       );
+    } on ChatServiceException {
+      rethrow;
     } on FileReadException catch (error) {
       debugPrint('[ChatService] attachment read: $error');
       throw const ChatServiceException('Не удалось прочитать файл вложения.');
@@ -496,6 +606,15 @@ class ChatService {
     final id = client?.auth.currentUser?.id;
     if (client == null || id == null) return false;
     try {
+      final existing = await client
+          .from('chat_messages')
+          .select()
+          .eq('id', messageId)
+          .eq('sender_id', id)
+          .maybeSingle();
+      if (existing == null || userId != id) return false;
+      await queueDiscardedAttachment(ChatMessage.fromRow(existing));
+      if (userId != id) return false;
       final rows = await client
           .from('chat_messages')
           .delete()
@@ -503,6 +622,7 @@ class ChatService {
           .eq('sender_id', id)
           .select('id')
           .timeout(const Duration(seconds: 15));
+      if (rows.isNotEmpty) unawaited(retryAttachmentCleanup());
       return rows.isNotEmpty;
     } catch (error) {
       debugPrint('[ChatService] delete failed: $error');
@@ -638,26 +758,78 @@ class ChatService {
   Future<String> _uploadAttachment(
     String localFilePath,
     String prefix, {
+    required String expectedOwner,
     String? messageId,
   }) async {
     final client = _client!;
-    final id = client.auth.currentUser!.id;
+    final id = expectedOwner;
+    if (client.auth.currentUser?.id != id) {
+      throw const ChatServiceException(
+        'Аккаунт изменился. Откройте чат заново.',
+      );
+    }
+    // Refuse oversized files before allocating their contents in memory.
+    final int length;
+    try {
+      length = await XFile(localFilePath).length();
+    } catch (_) {
+      throw const ChatServiceException(
+        'Вложение больше недоступно на устройстве. Выберите файл снова.',
+      );
+    }
+    if (prefix == 'poster' && (length <= 0 || length > 512 * 1024)) {
+      throw const ChatServiceException('Превью должно быть не больше 512 КБ');
+    }
+    if (length <= 0 || length > (prefix == 'video' ? 50 : 20) * 1024 * 1024) {
+      throw ChatServiceException(
+        prefix == 'video'
+            ? 'Видео должно быть не больше 50 МБ и не пустым'
+            : 'Вложение должно быть не больше 20 МБ и не пустым',
+      );
+    }
     final bytes = await readBytesFromPath(localFilePath);
-    if (bytes.length > 20 * 1024 * 1024) {
-      throw const ChatServiceException('Вложение должно быть меньше 20 МБ');
+    if (prefix == 'poster' && bytes.length > 512 * 1024) {
+      throw const ChatServiceException('Превью должно быть не больше 512 КБ');
+    }
+    if (client.auth.currentUser?.id != id) {
+      throw const ChatServiceException(
+        'Аккаунт изменился. Откройте чат заново.',
+      );
+    }
+    if (bytes.isEmpty ||
+        bytes.length > (prefix == 'video' ? 50 : 20) * 1024 * 1024) {
+      throw ChatServiceException(
+        prefix == 'video'
+            ? 'Видео должно быть не больше 50 МБ и не пустым'
+            : 'Вложение должно быть не больше 20 МБ и не пустым',
+      );
     }
     final dot = localFilePath.lastIndexOf('.');
     final rawExtension = dot >= 0
         ? localFilePath.substring(dot).toLowerCase()
         : '';
-    final extension = prefix == 'voice'
+    if (prefix == 'video' &&
+        !['.mp4', '.mov', '.m4v', '.webm'].contains(rawExtension)) {
+      throw const ChatServiceException(
+        'Поддерживаются видео MP4, MOV, M4V и WebM',
+      );
+    }
+    final extension = prefix == 'video'
+        ? rawExtension
+        : prefix == 'voice'
         ? '.m4a'
         : ['.jpg', '.jpeg', '.png', '.webp'].contains(rawExtension)
         ? rawExtension
         : '.jpg';
     final objectPath =
         '$id/chat_${prefix}_${messageId ?? DateTime.now().microsecondsSinceEpoch}$extension';
-    final mime = prefix == 'voice'
+    final mime = prefix == 'video'
+        ? (extension == '.mov'
+              ? 'video/quicktime'
+              : extension == '.webm'
+              ? 'video/webm'
+              : 'video/mp4')
+        : prefix == 'voice'
         ? 'audio/mp4'
         : extension == '.png'
         ? 'image/png'
@@ -676,7 +848,7 @@ class ChatService {
               contentType: mime,
             ),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(Duration(seconds: prefix == 'video' ? 180 : 60));
     } on StorageException catch (error) {
       // A retry reuses the same object rather than uploading orphaned copies.
       if (error.statusCode != '409') rethrow;
@@ -688,7 +860,14 @@ class ChatService {
     final resolved = Map<String, dynamic>.from(row);
     resolved['photo_reference'] = row['photo_url'];
     resolved['audio_reference'] = row['audio_url'];
-    for (final field in ['photo_url', 'audio_url']) {
+    resolved['video_reference'] = row['video_url'];
+    resolved['video_poster_reference'] = row['video_poster_url'];
+    for (final field in [
+      'photo_url',
+      'audio_url',
+      'video_url',
+      'video_poster_url',
+    ]) {
       final reference = row[field] as String?;
       if (reference != null && reference.startsWith('chat:')) {
         resolved[field] =
@@ -720,7 +899,12 @@ class ChatService {
     final client = _client;
     final paths = <String>{};
     for (final row in rows) {
-      for (final field in ['photo_url', 'audio_url']) {
+      for (final field in [
+        'photo_url',
+        'audio_url',
+        'video_url',
+        'video_poster_url',
+      ]) {
         final reference = row[field] as String?;
         if (reference != null && reference.startsWith('chat:')) {
           paths.add(reference.substring(5));
@@ -741,9 +925,7 @@ class ChatService {
                 .createSignedUrlsResult(chunk, 3600)
                 .timeout(const Duration(seconds: 15));
             for (final result in results) {
-              final url = result is SignedUrlSuccess
-                  ? result.signedUrl
-                  : null;
+              final url = result is SignedUrlSuccess ? result.signedUrl : null;
               if (url != null && result.path.isNotEmpty) {
                 signed[result.path] = url;
               }
@@ -758,13 +940,17 @@ class ChatService {
       final resolved = Map<String, dynamic>.from(row);
       resolved['photo_reference'] = row['photo_url'];
       resolved['audio_reference'] = row['audio_url'];
-      for (final field in ['photo_url', 'audio_url']) {
+      resolved['video_reference'] = row['video_url'];
+      resolved['video_poster_reference'] = row['video_poster_url'];
+      for (final field in [
+        'photo_url',
+        'audio_url',
+        'video_url',
+        'video_poster_url',
+      ]) {
         final reference = row[field] as String?;
         if (reference != null && reference.startsWith('chat:')) {
-          resolved[field] =
-              signed[reference.substring(5)] ??
-              await _signedUrlOrNull(reference.substring(5)) ??
-              reference;
+          resolved[field] = signed[reference.substring(5)] ?? reference;
         }
       }
       return ChatMessage.fromRow(resolved);

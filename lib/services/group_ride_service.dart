@@ -1,14 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding, AppLifecycleState;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/shared_route.dart';
+import '../models/group_coordination.dart';
+import '../utils/ride_id.dart';
 
 class GroupRideException implements Exception {
-  const GroupRideException(this.message, {this.replaceRequired = false});
+  const GroupRideException(
+    this.message, {
+    this.replaceRequired = false,
+    this.intentRejected = false,
+  });
   final String message;
   final bool replaceRequired;
+  final bool intentRejected;
   @override
   String toString() => message;
 }
@@ -63,9 +72,16 @@ class GroupMember {
 /// Failed reads retain the last snapshot. Mutations are atomic on the server.
 class GroupRideService extends ChangeNotifier {
   factory GroupRideService() => _instance;
-  GroupRideService._();
+  GroupRideService._() : _testClient = null, _realtimeEnabled = true;
+  @visibleForTesting
+  GroupRideService.forTesting({SupabaseClient? client})
+    : _testClient = client,
+      _realtimeEnabled = false;
+  final SupabaseClient? _testClient;
+  final bool _realtimeEnabled;
   static final _instance = GroupRideService._();
-  static SupabaseClient? get _client {
+  SupabaseClient? get _client {
+    if (_testClient != null) return _testClient;
     try {
       return Supabase.instance.client;
     } catch (_) {
@@ -82,6 +98,13 @@ class GroupRideService extends ChangeNotifier {
   bool isHost = false, refreshing = false, realtimeConnected = false;
   List<GroupMember> members = [];
   SharedRoute? route;
+  String? hostId;
+  GroupCoordination coordination = const GroupCoordination();
+  Duration _serverOffset = Duration.zero;
+  Timer? _coordinationPoll;
+  Object? _coordinationToken;
+  bool get coordinating => _coordinationToken != null;
+  final Map<String, GroupPendingIntent> _pendingIntents = {};
   String? error, notice;
   DateTime? lastSyncedAt;
   RealtimeChannel? _channel;
@@ -101,6 +124,12 @@ class GroupRideService extends ChangeNotifier {
     members = [];
     isHost = false;
     route = null;
+    hostId = null;
+    coordination = const GroupCoordination();
+    _coordinationPoll?.cancel();
+    _coordinationPoll = null;
+    _coordinationToken = null;
+    _pendingIntents.clear();
     error = null;
     notice = null;
     refreshing = false;
@@ -114,6 +143,7 @@ class GroupRideService extends ChangeNotifier {
   Future<void> restoreSession() => refreshMembers();
   Future<void> refreshMembers() {
     bindToUser(userId);
+    if (coordinating) return Future.value();
     return _refreshFuture ??= _refresh();
   }
 
@@ -124,7 +154,7 @@ class GroupRideService extends ChangeNotifier {
     notifyListeners();
     try {
       final raw = await _client!
-          .rpc('group_room_snapshot')
+          .rpc('group_room_snapshot_v2')
           .timeout(const Duration(seconds: 15));
       if (owner != userId || generation != _generation) return;
       await _apply(raw);
@@ -152,6 +182,10 @@ class GroupRideService extends ChangeNotifier {
       activeCode = null;
       members = [];
       route = null;
+      hostId = null;
+      coordination = const GroupCoordination();
+      _coordinationPoll?.cancel();
+      _coordinationPoll = null;
       isHost = false;
       if (old != null) notice = 'Комната закрыта или вы вышли на другом устройстве. Личная тренировка продолжается.';
       await unsubscribe();
@@ -161,11 +195,21 @@ class GroupRideService extends ChangeNotifier {
       activeCode = row['code'].toString();
       title = row['title']?.toString() ?? 'Совместная тренировка';
       isHost = row['host_id'] == userId;
+      hostId = row['host_id']?.toString();
       route = SharedRoute.tryParse(row['route_attachment']);
       final serverNow = DateTime.tryParse(row['server_now']?.toString() ?? '');
       final clockOffset = serverNow == null
           ? Duration.zero
           : DateTime.now().difference(serverNow);
+      _serverOffset = clockOffset;
+      if (row.containsKey('coordination')) {
+        coordination = GroupCoordination.fromRow(
+          row['coordination'],
+          clockOffset: clockOffset,
+        );
+      } else if (old != activeRoomId) {
+        coordination = const GroupCoordination();
+      }
       members = (row['members'] as List? ?? []).whereType<Map>().map((m) {
         final member = Map<String, dynamic>.from(m);
         final at = DateTime.tryParse(member['updated_at']?.toString() ?? '');
@@ -177,6 +221,15 @@ class GroupRideService extends ChangeNotifier {
       notice = null;
       if (old != activeRoomId || _channel == null) {
         await subscribe(activeRoomId!, _scheduleRefresh);
+      }
+      if (_realtimeEnabled) {
+        _coordinationPoll ??= Timer.periodic(const Duration(seconds: 5), (_) {
+          if (activeRoomId != null &&
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.resumed) {
+            unawaited(refreshMembers());
+          }
+        });
       }
     }
     notifyListeners();
@@ -209,6 +262,32 @@ class GroupRideService extends ChangeNotifier {
       rethrow;
     } catch (cause) {
       final text = cause is PostgrestException ? cause.message : '';
+      if (text.contains('SIGNAL_EXPIRED')) {
+        throw const GroupRideException(
+          'Срок команды истёк. Обновите комнату и отправьте новую.',
+          intentRejected: true,
+        );
+      }
+      if (text.contains('COORDINATION_RATE_LIMIT')) {
+        throw const GroupRideException(
+          'Подождите три секунды перед следующей командой.',
+          intentRejected: true,
+        );
+      }
+      if (text.contains('MEMBER_UNAVAILABLE') ||
+          text.contains('ROOM_CHANGED') ||
+          text.contains('REQUEST_CONFLICT')) {
+        throw const GroupRideException(
+          'Состав или управление комнаты изменились. Обновите её.',
+          intentRejected: true,
+        );
+      }
+      if (text.contains('INVALID_COORDINATION')) {
+        throw const GroupRideException(
+          'Проверьте место, время и параметры команды.',
+          intentRejected: true,
+        );
+      }
       if (text.contains('REPLACE_REQUIRED')) {
         throw const GroupRideException(
           'Вы уже в другой комнате. При переходе ваша комната организатора закроется для всех.',
@@ -226,6 +305,7 @@ class GroupRideService extends ChangeNotifier {
       if (text.contains('HOST_REQUIRED')) {
         throw const GroupRideException(
           'Это действие доступно организатору текущего заезда.',
+          intentRejected: true,
         );
       }
       if (text.contains('INVITATION_UNAVAILABLE')) {
@@ -292,6 +372,94 @@ class GroupRideService extends ChangeNotifier {
 
   Future<void> setRoute(SharedRoute? route) =>
       _action({'p_action': 'route', 'p_route': route?.toJson()});
+
+  Future<void> _coordinate(String action, Map<String, dynamic> payload) async {
+    bindToUser(userId);
+    if (coordinating) {
+      throw const GroupRideException(
+        'Дождитесь подтверждения предыдущего действия.',
+      );
+    }
+    final room = activeRoomId, owner = userId;
+    if (room == null || owner == null) {
+      throw const GroupRideException('Откройте текущую комнату заново.');
+    }
+    final token = Object();
+    _coordinationToken = token;
+    _generation++;
+    _refreshFuture = null;
+    refreshing = false;
+    final generation = _generation;
+    final key = '$room|$action|${jsonEncode(payload)}';
+    final now = DateTime.now();
+    _pendingIntents.removeWhere((_, value) => !value.reusableAt(now));
+    var intent = _pendingIntents[key];
+    if (intent == null || !intent.reusableAt(now)) {
+      intent = GroupPendingIntent(
+        id: newRideId(),
+        createdAt: now,
+        payload: {
+          ...payload,
+          if (action == 'signal')
+            'valid_until': now
+                .toUtc()
+                .subtract(_serverOffset)
+                .add(const Duration(seconds: 30))
+                .toIso8601String(),
+        },
+      );
+      _pendingIntents[key] = intent;
+    }
+    notifyListeners();
+    try {
+      final result = await _call('group_coordination_action', {
+        'p_room': room,
+        'p_action': action,
+        'p_request': intent.id,
+        'p_payload': intent.payload,
+      });
+      if (owner != userId ||
+          room != activeRoomId ||
+          generation != _generation) {
+        throw const GroupRideException('Аккаунт или комната изменились.');
+      }
+      _generation++;
+      _refreshFuture = null;
+      _pendingIntents.clear();
+      await _apply(result);
+      error = null;
+      lastSyncedAt = DateTime.now();
+    } on GroupRideException catch (cause) {
+      if (cause.intentRejected) _pendingIntents.remove(key);
+      rethrow;
+    } finally {
+      if (identical(_coordinationToken, token)) {
+        _coordinationToken = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> setReadiness(GroupReadiness state) =>
+      _coordinate('readiness', {'state': state.name});
+  Future<void> setMeeting(GroupMeetPlan plan) =>
+      _coordinate('settings', plan.toPayload());
+  Future<void> sendSignal(
+    GroupSignalKind kind, {
+    double? latitude,
+    double? longitude,
+    String note = '',
+  }) => _coordinate('signal', {
+    'kind': kind.name,
+    'latitude': latitude,
+    'longitude': longitude,
+    if (note.isNotEmpty) 'note': note.trim(),
+  });
+  Future<void> respondToSignal(String id, String response) =>
+      _coordinate('ack', {'signal_id': id, 'response': response});
+  Future<void> clearSignal() => _coordinate('clear_signal', {});
+  Future<void> transferHost(String target) =>
+      _coordinate('transfer', {'target': target, 'expected_host': hostId});
   Future<Map<String, dynamic>> sendInvitation(
     String receiver,
     String messageId,
@@ -356,6 +524,7 @@ class GroupRideService extends ChangeNotifier {
   }
 
   Future<void> subscribe(String roomId, void Function() onChanged) async {
+    if (!_realtimeEnabled) return;
     await unsubscribe();
     final owner = userId;
     if (_client == null || activeRoomId != roomId) return;

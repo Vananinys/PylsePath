@@ -76,24 +76,29 @@ void main() {
   );
 
   testWidgets(
-    'повреждённая история не блокирует профиль, оригинал сохраняется рядом',
+    'повреждённая история показывает ошибку и позволяет повторить загрузку',
     (tester) async {
       SharedPreferences.setMockInitialValues({
         'workout_history_guest': '{broken',
       });
       await _pumpProfile(tester);
-      // Битое хранилище больше не ломает экран: история стартует пустой,
-      // новые заезды можно сохранять.
       expect(
         find.text('Не удалось загрузить профиль и историю. Данные не удалены.'),
-        findsNothing,
+        findsOneWidget,
       );
-      expect(find.text('Всего заездов'), findsOneWidget);
       final prefs = await SharedPreferences.getInstance();
-      // Оригинал нетронут в основном ключе и сохранён копией рядом —
-      // данные можно восстановить вручную.
       expect(prefs.getString('workout_history_guest'), '{broken');
-      expect(prefs.getString('workout_history_guest_damaged'), '{broken');
+      expect(
+        prefs.getKeys().where(
+          (key) => key.startsWith('workout_history_guest_damaged_'),
+        ),
+        hasLength(1),
+      );
+      // Simulate restoring valid data without deleting the damaged original.
+      await prefs.setString('workout_history_guest', '[]');
+      await tester.tap(find.text('Повторить'));
+      await tester.pumpAndSettle();
+      expect(find.text('Всего заездов'), findsOneWidget);
     },
   );
 

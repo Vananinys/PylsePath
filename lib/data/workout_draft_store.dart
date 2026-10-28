@@ -2,6 +2,8 @@ import '../models/workout_details.dart';
 
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +24,7 @@ class WorkoutDraft {
     required this.path,
     this.vehicleId,
     this.isEbike = false,
+    this.groupRoomId,
   });
 
   final WorkoutDetails details;
@@ -35,6 +38,7 @@ class WorkoutDraft {
   final List<LatLng> path;
   final String? vehicleId;
   final bool isEbike;
+  final String? groupRoomId;
 
   Map<String, dynamic> toJson() => {
     'details': details.toJson(),
@@ -48,6 +52,7 @@ class WorkoutDraft {
     'activity': activity.name,
     'vehicleId': vehicleId,
     'isEbike': isEbike,
+    'groupRoomId': groupRoomId,
     'path': path.map((point) => [point.latitude, point.longitude]).toList(),
   };
 
@@ -107,23 +112,70 @@ class WorkoutDraft {
       path: List.unmodifiable(points),
       vehicleId: json['vehicleId'] as String?,
       isEbike: json['isEbike'] == true,
+      groupRoomId:
+          json['groupRoomId'] is String &&
+              RegExp(r'^[a-zA-Z0-9-]{1,80}$').hasMatch(json['groupRoomId'])
+          ? json['groupRoomId'] as String
+          : null,
     );
   }
 }
 
+class _DraftOperations {
+  Future<void> tail = Future.value();
+  int generation = 0;
+}
+
 class WorkoutDraftStore {
-  WorkoutDraftStore(this.ownerId);
+  WorkoutDraftStore(this.ownerId) : _generation = ++_nextGeneration;
   final String? ownerId;
-  Future<void> _tail = Future.value();
+  String? _verifiedText;
+  static final Map<String?, _DraftOperations> _operations = {};
+  _DraftOperations get _operationsForOwner =>
+      _operations.putIfAbsent(_key, _DraftOperations.new);
+  // Construction order matters: a disposed controller must not acquire a
+  // newer lease merely because its first checkpoint reaches us late.
+  static int _nextGeneration = 0;
+  final int _generation;
+
+  bool _claimWriter(_DraftOperations operations) {
+    if (_generation < operations.generation) return false;
+    operations.generation = _generation;
+    return true;
+  }
 
   String? get _key =>
       ownerId == null ? null : UserScope.keyFor('workout_draft', ownerId);
 
   Future<T> _serial<T>(Future<T> Function() operation) {
-    final result = _tail.then((_) => operation());
-    _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    final operations = _operationsForOwner;
+    final result = operations.tail.then((_) => operation());
+    operations.tail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
     return result;
   }
+
+  Future<void> _preserveDamaged(
+    SharedPreferences prefs,
+    String key,
+    String text,
+  ) async {
+    final backup = '${key}_damaged_${sha256.convert(utf8.encode(text))}';
+    // setString updates the preferences cache before platform confirmation.
+    // Always confirm this backup on disk before replacing damaged bytes.
+    if (!await prefs.setString(backup, text)) {
+      throw StateError(
+        'Не удалось сохранить резервную копию черновика. Исходник не изменён.',
+      );
+    }
+  }
+
+  WorkoutDraft _decode(String text) => WorkoutDraft.fromJson(
+    Map<String, dynamic>.from(jsonDecode(text) as Map),
+    ownerId!,
+  );
 
   Future<WorkoutDraft?> load() => _serial(() async {
     final key = _key;
@@ -131,27 +183,56 @@ class WorkoutDraftStore {
     final prefs = await SharedPreferences.getInstance();
     final text = prefs.getString(key);
     if (text == null) return null;
-    return WorkoutDraft.fromJson(
-      Map<String, dynamic>.from(jsonDecode(text) as Map),
-      ownerId!,
-    );
-  });
-
-  Future<void> save(WorkoutDraft draft) => _serial(() async {
-    final key = _key;
-    if (key == null || draft.ownerId != ownerId) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setString(key, jsonEncode(draft.toJson()))) {
-      throw StateError('Не удалось сохранить черновик поездки');
+    try {
+      final draft = _decode(text);
+      _verifiedText = text;
+      return draft;
+    } catch (_) {
+      await _preserveDamaged(prefs, key, text);
+      throw const FormatException(
+        'Черновик повреждён. Резервная копия сохранена; можно начать новую поездку.',
+      );
     }
   });
 
-  Future<void> delete() => _serial(() async {
-    final key = _key;
-    if (key == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.remove(key)) {
-      throw StateError('Не удалось удалить черновик поездки');
-    }
-  });
+  Future<void> save(WorkoutDraft draft) {
+    if (_key == null || draft.ownerId != ownerId) return Future.value();
+    final operations = _operationsForOwner;
+    if (!_claimWriter(operations)) return Future.value();
+    final generation = _generation;
+    return _serial(() async {
+      if (generation != operations.generation) return;
+      final key = _key;
+      if (key == null || draft.ownerId != ownerId) return;
+      final prefs = await SharedPreferences.getInstance();
+      final previous = prefs.getString(key);
+      if (previous != null && previous != _verifiedText) {
+        try {
+          _decode(previous);
+        } catch (_) {
+          await _preserveDamaged(prefs, key, previous);
+        }
+      }
+      final encoded = jsonEncode(draft.toJson());
+      if (!await prefs.setString(key, encoded)) {
+        throw StateError('Не удалось сохранить черновик поездки');
+      }
+      _verifiedText = encoded;
+    });
+  }
+
+  Future<void> delete() {
+    final operations = _operationsForOwner;
+    if (!_claimWriter(operations)) return Future.value();
+    final generation = _generation;
+    return _serial(() async {
+      if (generation != operations.generation) return;
+      final key = _key;
+      if (key == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (!await prefs.remove(key)) {
+        throw StateError('Не удалось удалить черновик поездки');
+      }
+    });
+  }
 }

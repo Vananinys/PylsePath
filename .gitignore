@@ -83,3 +83,16 @@ supabase/tests/node_modules/
 
 # Python
 __pycache__/
+# Git excludes for local releases, diagnostics and credentials.
+/audit/
+/release/
+/backup/
+*.apk
+*.aab
+*.bundle
+*.zip
+**/credentials*.json
+**/*private-key*
+**/*.p12
+**/*.pfx
+**/node_modules/

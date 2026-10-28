@@ -40,7 +40,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Доступ к галерее нужен, чтобы установить своё фото профиля в PulsePath.</string>
+	<string>Галерея нужна для фото профиля и отправки фото и видео в чате.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна, чтобы сделать и отправить фотографию в чате.</string>
 	<key>NSMotionUsageDescription</key>

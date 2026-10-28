@@ -30,6 +30,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        RideMediaExport(this).attach(flutterEngine.dartExecutor.binaryMessenger)
+        VideoPreviewBridge(this).attach(flutterEngine.dartExecutor.binaryMessenger)
         networkStatus?.close()
         networkStatus = NetworkStatusBridge(this).also { it.attach(flutterEngine.dartExecutor.binaryMessenger) }
         BackgroundLocationBridge(this).attach(flutterEngine.dartExecutor.binaryMessenger)

@@ -1,3 +1,4 @@
+import 'package:geolocator/geolocator.dart' show Position;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,6 +46,12 @@ SavedRoute ride(
   activityType: ActivityType.cycling,
   navigationSteps: steps,
 );
+
+void deliver(MapNavigationController controller, Position position) =>
+    controller.applyGpsSampleForTesting(
+      position,
+      observedAt: position.timestamp,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -100,9 +107,7 @@ void main() {
       c.startWorkout();
       final at = DateTime.now();
       for (var i = 0; i < 4; i++) {
-        c.applyGpsSampleForTesting(
-          fix(55 + i * .0001, at.add(Duration(seconds: i * 4))),
-        );
+        deliver(c, fix(55 + i * .0001, at.add(Duration(seconds: i * 4))));
       }
       final recorded = List<LatLng>.of(c.recordedPath);
       expect(recorded.length, greaterThanOrEqualTo(2));
@@ -120,12 +125,11 @@ void main() {
     c.startWorkout();
     final at = DateTime.now();
     for (var i = 0; i < 3; i++) {
-      c.applyGpsSampleForTesting(
-        fix(55 + i * .0001, at.add(Duration(seconds: i * 4))),
-      );
+      deliver(c, fix(55 + i * .0001, at.add(Duration(seconds: i * 4))));
     }
     for (var i = 0; i < 3; i++) {
-      c.applyGpsSampleForTesting(
+      deliver(
+        c,
         fix(55.003 + i * .0001, at.add(Duration(seconds: 60 + i * 4))),
       );
     }
@@ -141,9 +145,7 @@ void main() {
     c.startWorkout();
     final at = DateTime.now();
     for (var i = 0; i < 3; i++) {
-      c.applyGpsSampleForTesting(
-        fix(55 + i * .0001, at.add(Duration(seconds: i * 4))),
-      );
+      deliver(c, fix(55 + i * .0001, at.add(Duration(seconds: i * 4))));
     }
     c.returnAlongTrack();
     final oldPath = List<LatLng>.of(c.routePoints),
@@ -162,16 +164,14 @@ void main() {
     c.loadSavedRoute(ride('a', DateTime(2026)));
     c.setNavigating(true);
     final at = DateTime.now();
-    c.applyGpsSampleForTesting(fix(55.02, at));
+    deliver(c, fix(55.02, at));
     expect(c.isOffRoute, isFalse);
-    c.applyGpsSampleForTesting(
-      fix(55.02, at.add(const Duration(seconds: 1)), accuracy: 100),
-    );
+    deliver(c, fix(55.02, at.add(const Duration(seconds: 1)), accuracy: 100));
     expect(c.isOffRoute, isFalse);
-    c.applyGpsSampleForTesting(fix(55.02, at.add(const Duration(seconds: 2))));
-    c.applyGpsSampleForTesting(fix(55.02, at.add(const Duration(seconds: 3))));
+    deliver(c, fix(55.02, at.add(const Duration(seconds: 2))));
+    deliver(c, fix(55.02, at.add(const Duration(seconds: 3))));
     expect(c.isOffRoute, isTrue);
-    c.applyGpsSampleForTesting(fix(55.005, at.add(const Duration(seconds: 4))));
+    deliver(c, fix(55.005, at.add(const Duration(seconds: 4))));
     expect(c.isOffRoute, isFalse);
     c.dispose();
   });

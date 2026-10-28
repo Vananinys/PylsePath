@@ -13,7 +13,7 @@ import '../data/progress_backup_repository.dart';
 /// Native background collection; Dart only reads totals when someone views them.
 class StepRecordingPlatform {
   static const channel = MethodChannel('pulsepath/step_recording');
-  bool get supported => Platform.isAndroid;
+  bool get supported => !kIsWeb && Platform.isAndroid;
   Future<Map<dynamic, dynamic>> invoke(
     String method, [
     Map<String, dynamic>? arguments,
@@ -90,12 +90,42 @@ class DailyActivityService extends ChangeNotifier {
     return next;
   }
 
+  String? _boundOwner;
+  bool _hasOwnerBinding = false;
+  Future<void> _ownerBinding = Future.value();
+
+  /// Auth boundary is separate from screen disposal: closing the app keeps the
+  /// same owner's opt-in, while logout stops assigning device steps to them.
+  Future<void> bindToUser(String? owner) {
+    if (_hasOwnerBinding && _boundOwner == owner) return _ownerBinding;
+    _hasOwnerBinding = true;
+    _boundOwner = owner;
+    _generation++;
+    _timer?.cancel();
+    enabled = false;
+    ready = false;
+    notifyListeners();
+    final boundary = _now().millisecondsSinceEpoch;
+    _ownerBinding = _platform.supported
+        ? _platform
+              .invoke('bindOwner', {'owner': owner, 'at': boundary})
+              .then<void>((_) {})
+        : Future.value();
+    _ownerBinding = _ownerBinding.catchError((Object error) {
+      if (_boundOwner == owner) _hasOwnerBinding = false;
+      throw error;
+    });
+    return _ownerBinding;
+  }
+
   Future<void> initialize() {
+    final binding = bindToUser(_ownerResolver());
     final generation = ++_generation;
     final owner = _ownerResolver();
     _timer?.cancel();
     return _enqueue(() async {
-      if (generation != _generation) return;
+      await binding;
+      if (generation != _generation || _ownerResolver() != owner) return;
       _owner = owner;
       _backup = _backupEnabled ? ProgressBackupRepository() : null;
       _settingsUpdatedAt = 0;

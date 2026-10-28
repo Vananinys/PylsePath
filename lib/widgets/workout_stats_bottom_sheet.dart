@@ -8,6 +8,13 @@ import '../screens/ride_dashboard_screen.dart';
 import 'ride_navigation_controls.dart';
 import 'interval_training.dart';
 import 'workout_steps_panel.dart';
+import '../screens/ride_media_screen.dart';
+import '../screens/group_ride_screen.dart';
+import '../screens/group_meeting_editor.dart';
+import '../services/group_ride_service.dart';
+import 'group_coordination_panel.dart';
+
+import 'package:latlong2/latlong.dart' show LatLng;
 
 class WorkoutStatsBottomSheet extends StatelessWidget {
   const WorkoutStatsBottomSheet({
@@ -33,6 +40,24 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
   final bool isLocked;
   final Widget? gearAdvisor;
   final bool expanded;
+
+  Future<void> _openGroup(BuildContext context) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupRideScreen(navigationController: controller),
+      ),
+    );
+    if (result is LatLng && context.mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              GroupPointPreview(point: result, label: 'Участник группы'),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +180,11 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
                     ),
                   ),
                 if (gearAdvisor != null) gearAdvisor!,
+                if (c.isGpsStreamRecovering)
+                  Text(
+                    c.gpsRecoveryStatus,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 if (c.checkpointError != null)
                   Text(
                     c.checkpointError!,
@@ -194,6 +224,30 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
                   ],
                 ),
                 if (isLocked) const Text('Экран заблокирован'),
+                GroupRideQuickActions(
+                  service: GroupRideService(),
+                  workoutRoomId: c.workoutGroupRoomId,
+                  disabled: disabled,
+                  onOpen: () => _openGroup(context),
+                ),
+                TextButton.icon(
+                  onPressed: disabled || c.workoutSessionId == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideMediaScreen(
+                              rideId: c.workoutSessionId!,
+                              points: List.of(c.recordedPath),
+                              segmentStarts: c.recordedSegmentStarts,
+                              initialIndex: c.recordedPath.length - 1,
+                              live: true,
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const Text('Фото / видео на треке'),
+                ),
               ],
             ),
           ),
@@ -265,12 +319,36 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
                     ),
                   ),
                 ),
+                TextButton.icon(
+                  onPressed: disabled || c.workoutSessionId == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => RideMediaScreen(
+                              rideId: c.workoutSessionId!,
+                              points: List.of(c.recordedPath),
+                              segmentStarts: c.recordedSegmentStarts,
+                              initialIndex: c.recordedPath.length - 1,
+                              live: true,
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.add_photo_alternate),
+                  label: const Text('Фото / видео на треке'),
+                ),
                 if (c.intervalPlan != null)
                   IntervalProgressCard(
                     plan: c.intervalPlan!,
                     activeSeconds: duration.inSeconds,
                     paused: isPaused,
                   ),
+                GroupRideQuickActions(
+                  service: GroupRideService(),
+                  workoutRoomId: c.workoutGroupRoomId,
+                  disabled: disabled,
+                  onOpen: () => _openGroup(context),
+                ),
                 if (c.autoLapMeters > 0)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -336,12 +414,15 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
                 if (gearAdvisor != null) gearAdvisor!,
                 ValueListenableBuilder<GpsSignal>(
                   valueListenable: c.gpsSignal,
-                  builder: (context, gps, _) => gps.quality == GpsQuality.good
+                  builder: (context, gps, _) =>
+                      gps.quality == GpsQuality.good && !c.isGpsStreamRecovering
                       ? const SizedBox.shrink()
                       : Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                            gps.quality == GpsQuality.weak
+                            c.isGpsStreamRecovering
+                                ? c.gpsRecoveryStatus
+                                : gps.quality == GpsQuality.weak
                                 ? 'Неточный GPS: часть точек не попадёт в трек'
                                 : 'Нет свежего GPS: время идёт, координаты не выдумываются',
                             style: TextStyle(color: colors.error, fontSize: 12),

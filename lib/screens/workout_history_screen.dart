@@ -89,9 +89,23 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _routes.isEmpty
-          ? _buildEmptyState()
+          ? Column(
+              children: [
+                if (_repository.recoveryNotice != null)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_repository.recoveryNotice!),
+                  ),
+                Expanded(child: _buildEmptyState()),
+              ],
+            )
           : Column(
               children: [
+                if (_repository.recoveryNotice != null)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_repository.recoveryNotice!),
+                  ),
                 _buildSummaryHeader(),
                 if (_hasUnsynced)
                   const Padding(

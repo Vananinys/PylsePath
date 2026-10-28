@@ -54,7 +54,12 @@ class ChatLocalStore {
     _tail = _tail.catchError((Object _) {}).then((_) async {
       if (_currentOwner() != owner) return;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, encoded);
+      if (_currentOwner() != owner) return;
+      if (!await prefs.setString(_key, encoded)) {
+        throw StateError(
+          'Не удалось сохранить очередь сообщений на устройстве',
+        );
+      }
     });
     return _tail;
   }

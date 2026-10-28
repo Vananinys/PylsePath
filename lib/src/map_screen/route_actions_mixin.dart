@@ -2,6 +2,62 @@ part of '../../main.dart';
 
 /// Поиск, маршруты, сохранение/шаринг, форматтеры для шторки маршрута.
 mixin _RouteActionsMixin on _MapScreenStateBase {
+  Future<LatLng> _locateForPlace() async {
+    bool usable(GpsSignal signal) =>
+        signal.updatedAt != null &&
+        signal.quality != GpsQuality.lost &&
+        signal.accuracy != null &&
+        signal.accuracy!.isFinite &&
+        signal.accuracy! >= 0 &&
+        signal.accuracy! <= 100;
+    var signal = _navigationController.gpsSignal.value.checkedAt(
+      DateTime.now(),
+    );
+    if (!usable(signal)) {
+      await _navigationController.initLocationTracking();
+      signal = _navigationController.gpsSignal.value.checkedAt(DateTime.now());
+    }
+    if (!mounted || !usable(signal)) {
+      throw StateError('Дождитесь актуального GPS-положения');
+    }
+    return _navigationController.currentLocation;
+  }
+
+  @override
+  Future<void> _openMyPlaces() async {
+    final repository = SavedPlacesRepository();
+    final selected = await Navigator.push<SavedPlace>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            SavedPlacesScreen(repository: repository, locate: _locateForPlace),
+      ),
+    );
+    if (selected == null || !mounted || !repository.isCurrent) return;
+    _selectSearchResult({
+      'lat': selected.latitude.toString(),
+      'lon': selected.longitude.toString(),
+      'display_name': selected.name,
+    });
+  }
+
+  @override
+  Future<void> _savePersonalPlace(LatLng point) async {
+    final repository = SavedPlacesRepository();
+    final place = await showSavedPlaceEditor(context, point: point);
+    if (place == null || !mounted) return;
+    try {
+      await repository.save(place);
+      if (mounted) {
+        _showSnackBar('Место сохранено в «Мои места» на этом устройстве');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('Не удалось сохранить место. Данные не изменены.');
+      }
+    }
+  }
+
   @override
   Future<void> _changeRouteWaypoints(List<LatLng> via) async {
     try {

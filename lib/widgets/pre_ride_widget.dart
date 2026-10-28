@@ -38,6 +38,9 @@ class PreRideWidget extends StatelessWidget {
   final Widget? readiness;
   final String? settingsSummary;
   final VoidCallback? onPlanRoute;
+  final Widget? groupChoice;
+  final String startLabel;
+  final bool startEnabled;
 
   const PreRideWidget({
     super.key,
@@ -55,6 +58,9 @@ class PreRideWidget extends StatelessWidget {
     this.readiness,
     this.settingsSummary,
     this.onPlanRoute,
+    this.groupChoice,
+    this.startLabel = 'НАЧАТЬ',
+    this.startEnabled = true,
   });
 
   @override
@@ -91,6 +97,10 @@ class PreRideWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (groupChoice != null) ...[
+                      groupChoice!,
+                      const SizedBox(height: 12),
+                    ],
                     if (routeLabel != null) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -322,7 +332,7 @@ class PreRideWidget extends StatelessWidget {
   /// Крупная кнопка старта с фирменным градиентом.
   Widget _buildStartButton() {
     return Opacity(
-      opacity: isLocked ? 0.45 : 1.0,
+      opacity: isLocked || !startEnabled ? 0.45 : 1.0,
       child: Material(
         borderRadius: BorderRadius.circular(18),
         clipBehavior: Clip.antiAlias,
@@ -345,27 +355,32 @@ class PreRideWidget extends StatelessWidget {
             ],
           ),
           child: InkWell(
-            onTap: isLocked ? null : onStartRide,
+            onTap: isLocked || !startEnabled ? null : onStartRide,
             child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'НАЧАТЬ',
-                    style: const TextStyle(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.play_arrow_rounded,
                       color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2.0,
+                      size: 30,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      startLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                ),
               ),
             ),
           ),

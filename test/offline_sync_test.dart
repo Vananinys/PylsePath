@@ -276,4 +276,25 @@ void main() {
       expect(repo.hasPendingSync, isFalse);
     },
   );
+  test(
+    'A stale history repository cannot clear or save after logout',
+    () async {
+      final repository = WorkoutHistoryRepository();
+      await repository.addWorkout(ride('owner-kept'));
+      final prefs = await SharedPreferences.getInstance();
+      final original = prefs.getString('workout_history_$uid');
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+      await expectLater(repository.clear(), throwsStateError);
+      await expectLater(repository.save(), throwsStateError);
+      await expectLater(
+        repository.addWorkout(ride('stale-write')),
+        throwsStateError,
+      );
+      expect(prefs.getString('workout_history_$uid'), original);
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: 'test@example.invalid',
+        password: 'test',
+      );
+    },
+  );
 }

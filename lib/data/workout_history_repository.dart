@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/saved_route.dart';
+import '../models/workout_details.dart';
 import '../services/rides_service.dart';
 import '../services/garage_service.dart';
 import '../services/achievements_service.dart';
@@ -43,6 +46,10 @@ class WorkoutHistoryRepository {
   final Set<String> _deletedIds = {};
   final Set<String> _pendingDeletes = {};
   Future<void> _tail = Future.value();
+  bool _historyReadFailed = false;
+  bool _usingRecoveryStore = false;
+  String? recoveryNotice;
+  String get _recoveryKey => '${_key}_recovery_v1';
   Future<T> _serial<T>(Future<T> Function() operation) {
     final result = _tail.then((_) => operation());
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
@@ -54,19 +61,128 @@ class WorkoutHistoryRepository {
       _workoutHistory.where((r) => !r.cloudSynced).toList();
   bool get hasPendingSync =>
       _pendingDeletes.isNotEmpty || _workoutHistory.any((r) => !r.cloudSynced);
+  void _requireOwner() {
+    if (UserScope.currentUserId() != _owner)
+      throw StateError('Аккаунт истории изменился. Откройте историю заново.');
+  }
+
+  // Detect discarded values, including unknown fields from a newer version.
+  // Added defaults are harmless, but every original value must remain recoverable.
+  static bool _retainsOriginal(Object? raw, Object? normalized) {
+    if (raw is Map) {
+      if (normalized is! Map) return false;
+      return raw.entries.every(
+        (entry) =>
+            normalized.containsKey(entry.key) &&
+            _retainsOriginal(entry.value, normalized[entry.key]),
+      );
+    }
+    if (raw is List) {
+      if (normalized is! List || raw.length != normalized.length) return false;
+      for (var i = 0; i < raw.length; i++) {
+        if (!_retainsOriginal(raw[i], normalized[i])) return false;
+      }
+      return true;
+    }
+    return raw == normalized;
+  }
+
+  static bool _telemetryChanged(Map row) {
+    final raw = row['workoutDetails'];
+    return raw != null &&
+        !_retainsOriginal(raw, WorkoutDetails.fromJson(raw).toJson());
+  }
+
   Future<void> _read() async {
+    _requireOwner();
+    _usingRecoveryStore = false;
+    recoveryNotice = null;
+    var primaryDamaged = false;
+    try {
+      await _readPrimary();
+    } on FormatException {
+      primaryDamaged = true;
+      // The original and its digest backup remain untouched. Only the recovery
+      // archive is writable until an explicit repair is possible.
+      // Retain the last known valid in-memory snapshot, if available.
+    }
     final prefs = await SharedPreferences.getInstance();
+    _requireOwner();
+    final recovery = prefs.getString(_recoveryKey);
+    if (!primaryDamaged && recovery == null) return;
+    _usingRecoveryStore = true;
+    if (primaryDamaged) {
+      recoveryNotice = 'Часть прежней истории не читается. Оригинал сохранён. Новые поездки сохраняются отдельно.';
+    }
+    if (recovery != null) {
+      try {
+        final envelope = Map<String, dynamic>.from(jsonDecode(recovery) as Map);
+        if (envelope['version'] != 2)
+          throw const FormatException('Unknown recovery version');
+        if ((envelope['workouts'] as List).any(
+          (row) => _telemetryChanged(row as Map),
+        )) {
+          await _preserveDamaged(prefs, recovery, key: _recoveryKey);
+        }
+        final routes = (envelope['workouts'] as List)
+            .map(
+              (r) => SavedRoute.fromJson(Map<String, dynamic>.from(r as Map)),
+            )
+            .toList();
+        final deleted = (envelope['deletedIds'] as List? ?? []).cast<String>();
+        final pending = (envelope['pendingDeletes'] as List? ?? [])
+            .cast<String>();
+        final merged = {
+          for (final route in _workoutHistory) route.localId: route,
+          for (final route in routes) route.localId: route,
+        };
+        _deletedIds.addAll(deleted);
+        _pendingDeletes.addAll(pending);
+        _workoutHistory = merged.values
+            .where(
+              (r) =>
+                  !_deletedIds.contains(r.localId) &&
+                  (r.remoteId == null || !_deletedIds.contains(r.remoteId)),
+            )
+            .toList();
+      } catch (_) {
+        _historyReadFailed = true;
+        final backup =
+            '${_recoveryKey}_damaged_${sha256.convert(utf8.encode(recovery))}';
+        if (!await prefs.setString(backup, recovery)) {
+          throw StateError(
+            'Не удалось сохранить резервную копию дополнительной истории.',
+          );
+        }
+        throw const FormatException(
+          'Дополнительная история повреждена. Исходник сохранён; требуется восстановление.',
+        );
+      }
+    }
+    _historyReadFailed = false;
+  }
+
+  Future<void> _readPrimary() async {
+    _historyReadFailed = true;
+    final prefs = await SharedPreferences.getInstance();
+    _requireOwner();
     final text = prefs.getString(_key);
-    _deletedIds.clear();
-    _pendingDeletes.clear();
     if (text == null) {
       _workoutHistory = [];
+      _deletedIds.clear();
+      _pendingDeletes.clear();
+      _historyReadFailed = false;
       return;
     }
     // One JSON envelope keeps history and deletion outbox in one storage write.
     // Legacy versions stored just a list and remain readable.
     List rows;
     var migratedFromLegacy = false;
+    final deletedIds = <String>{};
+    final pendingDeletes = <String>{};
+    final parsed = <SavedRoute>[];
+    var needsPersist = false;
+    var needsTelemetryBackup = false;
     try {
       final decoded = jsonDecode(text);
       if (decoded is List) {
@@ -77,50 +193,38 @@ class WorkoutHistoryRepository {
         if (envelope['version'] != 2) {
           throw const FormatException('Неизвестная версия истории');
         }
-        rows = envelope['workouts'] as List? ?? const [];
-        _deletedIds.addAll(
-          (envelope['deletedIds'] as List? ?? const []).whereType<String>(),
+        rows = envelope['workouts'] as List;
+        deletedIds.addAll(
+          (envelope['deletedIds'] as List? ?? const []).cast<String>(),
         );
-        _pendingDeletes.addAll(
-          (envelope['pendingDeletes'] as List? ?? const []).whereType<String>(),
+        pendingDeletes.addAll(
+          (envelope['pendingDeletes'] as List? ?? const []).cast<String>(),
         );
       }
-    } catch (error) {
-      // Повреждённое хранилище не должно блокировать сохранение новых
-      // заездов: исходный текст сохраняется рядом, история стартует заново.
-      debugPrint('[WorkoutHistory] storage corrupted: $error');
-      await _preserveDamaged(prefs, text);
-      _workoutHistory = [];
-      return;
-    }
-    // Одна битая запись не должна ломать всю историю: такие строки
-    // пропускаются (оригинал сохраняется рядом) и выпадают при следующей
-    // записи конверта.
-    final parsed = <SavedRoute>[];
-    var damagedRows = 0;
-    var needsPersist = migratedFromLegacy;
-    for (final row in rows) {
-      if (row is! Map) {
-        damagedRows++;
-        continue;
-      }
-      try {
-        final map = Map<String, dynamic>.from(row);
-        // Строка без localId/remoteId получает новый UUID при каждом чтении —
-        // персистим сразу, иначе повторная выгрузка задублирует заезд в облаке.
+      needsPersist = migratedFromLegacy;
+      for (final row in rows) {
+        final map = Map<String, dynamic>.from(row as Map);
         if (map['localId'] is! String && map['remoteId'] is! String) {
           needsPersist = true;
         }
         parsed.add(SavedRoute.fromJson(map));
-      } catch (error) {
-        debugPrint('[WorkoutHistory] skip damaged ride row: $error');
-        damagedRows++;
+        if (_telemetryChanged(map)) needsTelemetryBackup = true;
       }
-    }
-    if (damagedRows > 0) {
-      needsPersist = true;
+    } catch (error) {
+      // Never replace unreadable history with an empty or partial list.
+      // Keep the last valid in-memory snapshot and protect every write path.
       await _preserveDamaged(prefs, text);
+      throw const FormatException(
+        'История повреждена. Исходные данные сохранены без изменений; требуется восстановление.',
+      );
     }
+    if (needsTelemetryBackup) await _preserveDamaged(prefs, text);
+    _deletedIds
+      ..clear()
+      ..addAll(deletedIds);
+    _pendingDeletes
+      ..clear()
+      ..addAll(pendingDeletes);
     _workoutHistory = parsed;
     final countBeforeFilter = _workoutHistory.length;
     _workoutHistory.removeWhere(
@@ -129,23 +233,35 @@ class WorkoutHistoryRepository {
           (r.remoteId != null && _deletedIds.contains(r.remoteId)),
     );
     if (_workoutHistory.length != countBeforeFilter) needsPersist = true;
-    // Persist only when reading actually changed something (legacy migration,
-    // generated UUIDs, dropped rows) — not on every read.
+    _historyReadFailed = false;
+    // Only valid complete histories may be migrated and written back.
     if (needsPersist) await _write();
   }
 
-  Future<void> _preserveDamaged(SharedPreferences prefs, String text) async {
-    try {
-      await prefs.setString('$_key' '_damaged', text);
-    } catch (error) {
-      debugPrint('[WorkoutHistory] damaged copy not saved: $error');
+  Future<void> _preserveDamaged(
+    SharedPreferences prefs,
+    String text, {
+    String? key,
+  }) async {
+    final digest = sha256.convert(utf8.encode(text));
+    final backupKey = '${key ?? _key}_damaged_$digest';
+    // Confirm on the platform: an optimistic preferences cache is not a backup.
+    if (!await prefs.setString(backupKey, text)) {
+      throw StateError(
+        'Не удалось сохранить резервную копию. История не изменена.',
+      );
     }
   }
 
   Future<void> _write() async {
+    _requireOwner();
+    if (_historyReadFailed) {
+      throw StateError('Запись заблокирована до восстановления истории.');
+    }
     final prefs = await SharedPreferences.getInstance();
+    _requireOwner();
     final ok = await prefs.setString(
-      _key,
+      _usingRecoveryStore ? _recoveryKey : _key,
       jsonEncode({
         'version': 2,
         'workouts': _workoutHistory.map((r) => r.toJson()).toList(),
@@ -157,13 +273,16 @@ class WorkoutHistoryRepository {
   }
 
   Future<void> load() => _serial(_read);
-  Future<void> save() => _serial(_write);
+  Future<void> save() => _serial(() async {
+    await _read();
+    await _write();
+  });
   Future<void> addWorkout(SavedRoute workout) => _serial(() async {
     await _read();
     if (!_workoutHistory.any((r) => r.localId == workout.localId)) {
       _workoutHistory.add(workout);
       await _write();
-      if (UserScope.currentUserId() == _owner) {
+      if (UserScope.currentUserId() == _owner && recoveryNotice == null) {
         await AchievementsService.captureProgress(_workoutHistory);
       }
     }
@@ -348,7 +467,7 @@ class WorkoutHistoryRepository {
     if (UserScope.currentUserId() != _owner) return;
     // Restoration is additive; an empty/partial response never erases history.
     await mergeRemote(remote);
-    if (UserScope.currentUserId() == _owner) {
+    if (UserScope.currentUserId() == _owner && recoveryNotice == null) {
       await AchievementsService.captureProgress(_workoutHistory);
     }
   }
@@ -375,6 +494,8 @@ class WorkoutHistoryRepository {
     bool completeSnapshot = false,
   }) => _serial(() async {
     await _read();
+    // Damaged tombstones cannot safely authorize a cloud restore.
+    if (recoveryNotice != null) return 0;
     var added = 0;
     var changed = false;
     if (completeSnapshot) {

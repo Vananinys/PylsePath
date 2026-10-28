@@ -29,6 +29,10 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false">
+        <receiver android:name=".StepsWidgetProvider" android:exported="false" android:label="PulsePath · Шаги">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/steps_widget_info" />
+        </receiver>
         <service android:name=".BackgroundLocationService"
             android:exported="false" android:stopWithTask="false"
             android:foregroundServiceType="location" />

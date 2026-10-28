@@ -6,24 +6,36 @@ import '../data/workout_history_repository.dart';
 import '../data/saved_routes_repository.dart';
 import '../services/friend_service.dart';
 import '../services/chat_service.dart';
+import '../models/saved_route.dart';
+import '../services/ride_media_service.dart';
+import 'ride_media_selection.dart';
+import 'track_privacy_picker.dart';
 
-Future<void> showRouteShareSheet(BuildContext context, SharedRoute route) =>
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ShareSheet(route: route),
-    );
+Future<void> showRouteShareSheet(
+  BuildContext context,
+  SharedRoute route, {
+  SavedRoute? source,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  builder: (_) => _ShareSheet(route: route, source: source),
+);
 
 class _ShareSheet extends StatefulWidget {
-  const _ShareSheet({required this.route});
+  const _ShareSheet({required this.route, this.source});
   final SharedRoute route;
+  final SavedRoute? source;
   @override
   State<_ShareSheet> createState() => _ShareSheetState();
 }
 
 class _ShareSheetState extends State<_ShareSheet> {
+  final _owner = ChatService().userId;
   late final _friends = FriendService().fetchFriends();
   String? _sending;
+  bool _includeTrack = true;
+  int _radius = 0;
+  Set<String> _mediaIds = {};
   @override
   Widget build(BuildContext context) => SafeArea(
     child: SizedBox(
@@ -37,6 +49,40 @@ class _ShareSheetState extends State<_ShareSheet> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ),
+          if (widget.source != null)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * .27,
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      TrackPrivacyPicker(
+                        route: widget.source!,
+                        enabled: _includeTrack,
+                        radius: _radius,
+                        onEnabled: (value) {
+                          if (_sending == null) {
+                            setState(() => _includeTrack = value);
+                          }
+                        },
+                        onRadius: (value) {
+                          if (_sending == null) setState(() => _radius = value);
+                        },
+                      ),
+                      RideMediaSelection(
+                        rideId: widget.source!.localId,
+                        enabled: _includeTrack,
+                        busy: _sending != null,
+                        onChanged: (ids) => _mediaIds = ids,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text(
@@ -74,11 +120,27 @@ class _ShareSheetState extends State<_ShareSheet> {
                         onTap: () async {
                           setState(() => _sending = friend.id);
                           try {
+                            final owner = _owner;
+                            if (owner == null || owner != ChatService().userId) {
+                              throw StateError('Аккаунт изменился. Откройте отправку заново.');
+                            }
+                            final snapshot = widget.source == null
+                                ? widget.route
+                                : await RideMediaService.prepareShare(
+                                    widget.source!,
+                                    selectedIds: _includeTrack ? _mediaIds : {},
+                                    includeTrack: _includeTrack,
+                                    hideRadiusMeters: _radius.toDouble(),
+                                    kind: widget.route.kind,
+                                  );
+                            if (!mounted || owner != ChatService().userId) {
+                              return;
+                            }
                             await ChatService().sendMessage(
                               friend.id,
                               text:
                                   '${widget.route.label}: ${widget.route.title}',
-                              routeAttachment: widget.route,
+                              routeAttachment: snapshot,
                             );
                             if (!context.mounted) return;
                             Navigator.pop(context);

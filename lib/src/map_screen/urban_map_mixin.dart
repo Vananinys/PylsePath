@@ -60,6 +60,12 @@ mixin _UrbanMapMixin on _MapScreenStateBase {
               ),
               onTap: () => Navigator.pop(sheetContext, 'route'),
             ),
+            ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: const Text('Сохранить в «Мои места»'),
+              subtitle: const Text('Личная точка, видна только вам'),
+              onTap: () => Navigator.pop(sheetContext, 'personal'),
+            ),
             if (urbanEnabled)
               ListTile(
                 leading: const Icon(Icons.report_problem, color: Colors.amber),
@@ -85,6 +91,8 @@ mixin _UrbanMapMixin on _MapScreenStateBase {
     );
     if (!mounted) return;
     switch (action) {
+      case 'personal':
+        await _savePersonalPlace(point);
       case 'route':
         _setRouteTo(point);
       case 'report':

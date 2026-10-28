@@ -9,17 +9,27 @@ import '../services/group_ride_service.dart';
 import '../widgets/group_invitation_sheet.dart';
 import '../widgets/route_share_sheet.dart';
 import '../widgets/shared_route_card.dart';
+import '../widgets/group_coordination_panel.dart';
+import '../models/group_coordination.dart';
+import '../widgets/group_ride_dashboard.dart';
 
 class GroupRideScreen extends StatefulWidget {
-  const GroupRideScreen({super.key, this.navigationController});
+  const GroupRideScreen({
+    super.key,
+    this.navigationController,
+    this.service,
+    this.legacyLayout = false,
+  });
   final MapNavigationController? navigationController;
+  final GroupRideService? service;
+  final bool legacyLayout;
   @override
   State<GroupRideScreen> createState() => _GroupRideScreenState();
 }
 
 class _GroupRideScreenState extends State<GroupRideScreen>
     with WidgetsBindingObserver {
-  final _service = GroupRideService();
+  late final _service = widget.service ?? GroupRideService();
   bool _busy = false;
   Timer? _timer;
   @override
@@ -121,6 +131,37 @@ class _GroupRideScreenState extends State<GroupRideScreen>
   Future<void> _leave() async {
     final room = _service.activeRoomId;
     if (room == null) return;
+    if (_service.isHost &&
+        _service.members.any((m) => m.userId != _service.userId)) {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Выйти из совместного заезда?'),
+          content: const Text(
+            'Можно передать управление участнику и сохранить комнату. Личная запись продолжится.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'close'),
+              child: const Text('Закрыть для всех'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 'transfer'),
+              child: const Text('Передать и выйти'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || action == null) return;
+      if (action == 'transfer') {
+        await _transferHost(leaveAfter: true);
+        return;
+      }
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -147,8 +188,145 @@ class _GroupRideScreenState extends State<GroupRideScreen>
     }
   }
 
+  Future<void> _transferHost({bool leaveAfter = false}) async {
+    final room = _service.activeRoomId, owner = _service.userId;
+    final members = _service.members.where((m) => m.userId != owner).toList();
+    if (room == null || !_service.isHost || members.isEmpty) {
+      _error(
+        const GroupRideException('Нужен другой участник текущей комнаты.'),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<GroupMember>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheet) => ListView(
+        shrinkWrap: true,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Новый организатор'),
+          ),
+          for (final member in members)
+            ListTile(
+              title: Text(member.username),
+              onTap: () => Navigator.pop(sheet, member),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || selected == null) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Передать управление: ${selected.username}?'),
+        content: Text(
+          'Новый организатор сможет менять маршрут и сбор. Старые непринятые приглашения будут отозваны.'
+          '${leaveAfter ? ' Вы выйдете из комнаты, личная запись продолжится.' : ''}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Передать'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || yes != true) return;
+    await _run((_) async {
+      if (_service.activeRoomId != room ||
+          _service.userId != owner ||
+          !_service.isHost) {
+        throw const GroupRideException(
+          'Комната или организатор изменились. Обновите экран.',
+        );
+      }
+      await _service.transferHost(selected.userId);
+      if (leaveAfter) await _service.leaveRoom(room, isHost: false);
+    });
+  }
+
+  Future<void> _createGroup() async {
+    final input = TextEditingController(text: 'Наша поездка');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Как назовём группу?'),
+        content: TextField(
+          controller: input,
+          maxLength: 80,
+          decoration: const InputDecoration(labelText: 'Название группы'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, input.text.trim()),
+            child: const Text('Создать'),
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    input.dispose();
+    if (!mounted || title == null) return;
+    await _run(
+      (replace) => _service.createRoom(
+        title: title.isEmpty ? 'Наша поездка' : title,
+        replace: replace,
+      ),
+    );
+  }
+
+  Future<void> _chooseRoute() async {
+    final room = _service.activeRoomId, owner = _service.userId;
+    final route = await showLocalRoutePicker(context);
+    if (!mounted || route == null) return;
+    await _run((_) async {
+      if (room != _service.activeRoomId || owner != _service.userId) {
+        throw const GroupRideException(
+          'Группа изменилась. Откройте её заново.',
+        );
+      }
+      await _service.setRoute(route);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!widget.legacyLayout) {
+      return GroupRideDashboard(
+        service: _service,
+        busy: _busy,
+        navigation: widget.navigationController,
+        onCreate: _createGroup,
+        onJoin: _join,
+        onInvite: () => showGroupInvitationSheet(context),
+        onRoute: _chooseRoute,
+        onClearRoute: () => _run((_) => _service.setRoute(null)),
+        onLeave: _leave,
+        onTransfer: () => _transferHost(),
+        onReturn: () {
+          if (widget.navigationController == null) {
+            Navigator.popUntil(context, (route) => route.isFirst);
+            return;
+          }
+          Navigator.pop(
+            context,
+            widget.navigationController!.isWorkoutActive ||
+                    widget.navigationController!.isWorkoutPaused
+                ? 'map'
+                : 'prepare_group',
+          );
+        },
+      );
+    }
     final inRoom = _service.activeRoomId != null;
     return Scaffold(
       appBar: AppBar(
@@ -298,6 +476,12 @@ class _GroupRideScreenState extends State<GroupRideScreen>
                 'Участники (${_service.members.length})',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
+              GroupCoordinationPanel(
+                service: _service,
+                disabled: _busy,
+                center: widget.navigationController?.currentLocation,
+                onTransfer: () => _transferHost(),
+              ),
               for (final member in _service.members) _member(member),
               const SizedBox(height: 12),
               if (widget.navigationController != null)
@@ -360,9 +544,11 @@ class _GroupRideScreenState extends State<GroupRideScreen>
               ? null
               : const Icon(Icons.person, color: Colors.white),
         ),
-        title: Text('${member.username}${me ? ' (вы)' : ''}'),
+        title: Text(
+          '${member.username}${me ? ' (вы)' : ''}${member.userId == _service.hostId ? ' · организатор' : ''}',
+        ),
         subtitle: Text(
-          '$state · ${(member.distanceMeters / 1000).toStringAsFixed(2)} км · ${member.durationSeconds ~/ 60} мин\nДанные: ${member.ageText}${member.isLive ? '' : ' · связь давно не обновлялась'}${member.latitude == null ? '\nПозиция сейчас не передаётся' : ''}',
+          '${(_service.coordination.readiness[member.userId] ?? GroupReadiness.waiting).label} · $state · ${(member.distanceMeters / 1000).toStringAsFixed(2)} км · ${member.durationSeconds ~/ 60} мин\nДанные: ${member.ageText}${member.isLive ? '' : ' · связь давно не обновлялась'}${member.latitude == null ? '\nПозиция сейчас не передаётся' : ''}',
         ),
         isThreeLine: true,
         trailing: member.latitude != null

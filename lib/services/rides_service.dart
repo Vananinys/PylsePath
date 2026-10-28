@@ -291,12 +291,32 @@ class RidesService {
     }
 
     var details = WorkoutDetails.fromJson(row['workout_details']);
-    if (details.segmentStarts.isEmpty && track.segmentStarts.length > 1) {
-      details = WorkoutDetails.fromJson({
-        ...details.toJson(),
-        'segment_starts': track.segmentStarts,
-      });
-    }
+    // Keep every index in the same coordinate space as the filtered GPX.
+    final remapped = <int, int>{
+      for (var i = 0; i < track.sourcePointIndices.length; i++)
+        track.sourcePointIndices[i]: i,
+    };
+    final boundaries = <int>{
+      ...track.segmentStarts,
+      for (final old in details.segmentStarts)
+        if (remapped.containsKey(old)) remapped[old]!,
+    }.toList()..sort();
+    details = WorkoutDetails.fromJson({
+      ...details.toJson(),
+      'segment_starts': boundaries,
+      'ride_moments': [
+        for (final moment in details.rideMoments)
+          if (remapped.containsKey(moment.pointIndex))
+            {...moment.toJson(), 'point_index': remapped[moment.pointIndex]},
+      ],
+      'samples': [
+        for (final sample in details.samples)
+          {
+            ...sample.toJson(),
+            'track_point_index': remapped[sample.trackPointIndex],
+          },
+      ],
+    });
     final title = row['workout_details'] is Map
         ? row['workout_details']['title']
         : null;

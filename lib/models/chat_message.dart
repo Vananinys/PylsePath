@@ -1,4 +1,5 @@
 import 'shared_route.dart';
+import 'video_metadata.dart';
 
 enum MessageDelivery { sending, failed, sent }
 
@@ -12,6 +13,11 @@ class ChatMessage {
   final MessageDelivery delivery;
   final String? photoReference;
   final String? audioReference;
+  final String? videoReference;
+  final String? videoUrl;
+  final String? videoPosterUrl;
+  final String? videoPosterReference;
+  final VideoMetadata? videoMetadata;
   final DateTime? editedAt;
   final String id;
   final String senderId;
@@ -39,6 +45,11 @@ class ChatMessage {
     this.delivery = MessageDelivery.sent,
     this.photoReference,
     this.audioReference,
+    this.videoReference,
+    this.videoUrl,
+    this.videoPosterUrl,
+    this.videoPosterReference,
+    this.videoMetadata,
     this.editedAt,
     required this.id,
     required this.senderId,
@@ -57,6 +68,9 @@ class ChatMessage {
   bool get isStickerOnly =>
       groupInvitation == null &&
       routeAttachment == null &&
+      !isPhoto &&
+      !isVideo &&
+      !isVoice &&
       (body == null || body!.trim().isEmpty) &&
       sticker != null &&
       sticker!.isNotEmpty;
@@ -64,6 +78,7 @@ class ChatMessage {
   bool get isVoice => audioUrl != null && audioUrl!.isNotEmpty;
 
   bool get isPhoto => photoUrl != null && photoUrl!.isNotEmpty;
+  bool get isVideo => videoUrl != null && videoUrl!.isNotEmpty;
 
   bool get isRead => readAt != null;
 
@@ -84,6 +99,11 @@ class ChatMessage {
         delivery: delivery ?? this.delivery,
         photoReference: photoReference,
         audioReference: audioReference,
+        videoReference: videoReference,
+        videoUrl: videoUrl,
+        videoPosterUrl: videoPosterUrl,
+        videoPosterReference: videoPosterReference,
+        videoMetadata: videoMetadata,
         editedAt: editedAt,
         routeAttachment: routeAttachment,
         groupInvitation: groupInvitation,
@@ -100,6 +120,9 @@ class ChatMessage {
     'sticker': sticker,
     'photo_url': photoReference ?? photoUrl,
     'audio_url': audioReference ?? audioUrl,
+    'video_url': videoReference ?? videoUrl,
+    'video_poster_url': videoPosterReference ?? videoPosterUrl,
+    'video_metadata': videoMetadata?.toJson(),
     'audio_seconds': audioSeconds,
     'created_at': createdAt.toUtc().toIso8601String(),
     'read_at': readAt?.toUtc().toIso8601String(),
@@ -122,6 +145,11 @@ class ChatMessage {
           MessageDelivery.sent,
       photoReference: row['photo_reference'] as String?,
       audioReference: row['audio_reference'] as String?,
+      videoReference: row['video_reference'] as String?,
+      videoUrl: row['video_url'] as String?,
+      videoPosterUrl: row['video_poster_url'] as String?,
+      videoPosterReference: row['video_poster_reference'] as String?,
+      videoMetadata: VideoMetadata.tryParse(row['video_metadata']),
       editedAt: DateTime.tryParse(row['edited_at'] as String? ?? ''),
       id: (row['id'] ?? '').toString(),
       senderId: (row['sender_id'] ?? '').toString(),

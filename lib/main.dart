@@ -1,3 +1,4 @@
+import 'widgets/home_steps_pill.dart';
 import 'widgets/map_home_actions.dart';
 import 'widgets/incoming_chat_preview.dart';
 import 'widgets/ride_preparation_panel.dart';
@@ -65,7 +66,11 @@ import 'data/navigation_preferences.dart';
 import 'services/daily_activity_service.dart';
 import 'services/background_location_service.dart';
 import 'screens/daily_activity_screen.dart';
+import 'screens/route_builder_screen.dart';
 import 'data/saved_routes_repository.dart';
+import 'data/saved_places_repository.dart';
+import 'models/saved_place.dart';
+import 'screens/saved_places_screen.dart';
 import 'data/ui_modules.dart';
 import 'services/geocoding_service.dart';
 import 'services/weather_service.dart';
@@ -86,6 +91,7 @@ import 'widgets/route_details_bottom_sheet.dart';
 import 'widgets/map_ui_overlays.dart';
 import 'widgets/workout_stats_bottom_sheet.dart';
 import 'widgets/pre_ride_widget.dart';
+import 'widgets/group_start_choice.dart';
 import 'widgets/vehicle_selector_sheet.dart';
 import 'widgets/rider_marker.dart';
 import 'screens/auth_gate.dart';
@@ -451,6 +457,7 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   /// Открыта ли панель подготовки к заезду (Pre-Ride HUD). Пока закрыта,
   /// внизу карты видна компактная панель с кнопкой «Свободный заезд».
   bool _isPreRideOpen = false;
+  String? _preRideGroupRoomId;
   bool _isChoosingRoute = false;
   final FocusNode _searchFocusNode = FocusNode();
   bool _startingRide = false;
@@ -629,9 +636,12 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   Future<void> _changeRouteWaypoints(List<LatLng> via);
 
   void _openSavedRoutes();
+  Future<void> _openMyPlaces();
+  Future<void> _savePersonalPlace(LatLng point);
   void _openRoundTripPlanner();
   void _setCameraLockMode(CameraLockMode mode);
   Future<void> _startRide();
+  Future<void> _beginPreparedRide() => _startRide();
 }
 
 class _PulsePathMapScreenState extends _MapScreenStateBase
@@ -830,9 +840,20 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
         await _navigationController.discardInterruptedWorkout();
       } else if (choice == 'restore' || choice == 'save') {
         _navigationController.restoreInterruptedWorkout(draft);
+        if (_navigationController.workoutSessionId != draft.localId) {
+          _showSnackBar(
+            'Состояние поездки изменилось. Восстановление не выполнено.',
+          );
+          return;
+        }
         if (choice == 'save') {
-          await _navigationController.finishAndSaveWorkout();
-          if (mounted) _showSnackBar('Прерванная поездка сохранена');
+          final saved = await _navigationController.finishAndSaveWorkout();
+          if (mounted)
+            _showSnackBar(
+              saved != null
+                  ? 'Прерванная поездка сохранена'
+                  : 'Поездка не сохранена. Проверьте состояние записи.',
+            );
         } else {
           _showSnackBar('Поездка восстановлена на паузе');
         }
@@ -1436,19 +1457,14 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                         onTap: _loadPreRideWeather,
                       ),
                     ),
+                    const HomeStepsPill(),
                   ],
                 ),
               ),
 
             Positioned(
               right: 12,
-              top:
-                  MediaQuery.paddingOf(context).top +
-                  (_isPreRideOpen
-                      ? 12
-                      : showNavigationCard
-                      ? 200
-                      : 128),
+              bottom: MediaQuery.paddingOf(context).bottom + 84,
               child: IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: MapCredits(layer: _mapLayerIndex),
@@ -1663,6 +1679,48 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                           },
                           child: PreRideWidget(
                             key: const ValueKey('pre-ride-hud'),
+                            startLabel: _preRideGroupRoomId == null
+                                ? 'НАЧАТЬ'
+                                : 'НАЧАТЬ В ГРУППЕ',
+                            startEnabled:
+                                _preRideGroupRoomId == null ||
+                                _preRideGroupRoomId ==
+                                    GroupRideService().activeRoomId,
+                            groupChoice: GroupStartChoice(
+                              service: GroupRideService(),
+                              selectedRoomId: _preRideGroupRoomId,
+                              disabled: _isScreenLocked || _startingRide,
+                              onChanged: (room) =>
+                                  setState(() => _preRideGroupRoomId = room),
+                              onManage: _openGroupFromPreparation,
+                              sharesLocation:
+                                  _navigationController.shareLivePosition,
+                              onUseRoute: () {
+                                final route = GroupRideService().route;
+                                if (route != null) {
+                                  _navigationController.loadSavedRoute(
+                                    route.toSavedRoute(),
+                                  );
+                                  final mode = switch (route.activity) {
+                                    ActivityType.hiking => SportMode.walking,
+                                    ActivityType.running => SportMode.running,
+                                    ActivityType.briskWalking =>
+                                      SportMode.briskWalking,
+                                    ActivityType.nordicWalking =>
+                                      SportMode.nordicWalking,
+                                    ActivityType.trekking => SportMode.trekking,
+                                    ActivityType.trailRunning =>
+                                      SportMode.trailRunning,
+                                    _ => SportMode.vehicle,
+                                  };
+                                  _navigationController.setSportMode(mode);
+                                  widget.settings.setSportMode(mode);
+                                  _showSnackBar(
+                                    'Маршрут группы выбран. Можно начинать поездку.',
+                                  );
+                                }
+                              },
+                            ),
                             settingsSummary:
                                 '${_navigationController.workoutGoal?.label ?? 'Без цели'} · ${_navigationController.intervalPlan == null ? 'без интервалов' : 'интервалы включены'} · ${_navigationController.shareLivePosition ? 'позиция видна друзьям' : 'позиция скрыта'}',
                             onPlanRoute: _openRoutePlanner,
@@ -1692,7 +1750,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                               _navigationController.setSportMode(value);
                               widget.settings.setSportMode(value);
                             },
-                            onStartRide: _startRide,
+                            onStartRide: _beginPreparedRide,
                             onCollapse: () =>
                                 setState(() => _isPreRideOpen = false),
                             isLocked: _isScreenLocked,

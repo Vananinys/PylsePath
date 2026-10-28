@@ -1,3 +1,5 @@
+import 'package:pulsepath/models/video_metadata.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -100,6 +102,9 @@ class FakeChat extends ChatService {
     String? text,
     String? sticker,
     String? photoPath,
+    String? videoPath,
+    String? videoPosterPath,
+    VideoMetadata? videoMetadata,
     String? audioPath,
     int? audioSeconds,
     String? replyToId,

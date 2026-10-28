@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding, AppLifecycleState;
 import 'package:geolocator/geolocator.dart' hide ActivityType;
 
 import '../services/notification_permission_service.dart';
@@ -25,6 +26,7 @@ import '../data/user_scope.dart';
 import '../data/workout_draft_store.dart';
 import '../models/activity_type.dart';
 import '../models/gps_signal.dart';
+import '../services/gps_freshness_probe.dart';
 import '../models/route_step.dart';
 import '../models/surface_info.dart';
 import '../models/saved_route.dart';
@@ -176,14 +178,19 @@ class MapNavigationController extends ChangeNotifier {
 
   MapNavigationController({
     Stopwatch? activeClock,
+    DateTime Function()? gpsNow,
     RoutingService? routingService,
     WorkoutStepTracker? stepTracker,
-  }) : _activeClock = activeClock ?? Stopwatch(),
+    GroupRideService? groupRideService,
+  }) : _gpsNow = gpsNow ?? DateTime.now,
+       _activeClock = activeClock ?? Stopwatch(),
        _stepTracker = stepTracker ?? WorkoutStepTracker(),
-       _routingService = routingService ?? RoutingService() {
+       _routingService = routingService ?? RoutingService(),
+       _groupRideService = groupRideService ?? GroupRideService() {
     gpsSignal.addListener(_onTelemetryQualityChanged);
     _stepTracker.addListener(_onWorkoutStepsChanged);
   }
+  final DateTime Function() _gpsNow;
   final WorkoutStepTracker _stepTracker;
   WorkoutStepTracker get stepTracker => _stepTracker;
   void _onWorkoutStepsChanged() {
@@ -223,7 +230,15 @@ class MapNavigationController extends ChangeNotifier {
 
   Timer? _friendStatusTimer;
   Timer? _groupProgressTimer;
-  final _groupRideService = GroupRideService();
+  final GroupRideService _groupRideService;
+  String? _workoutGroupRoomId;
+  String? get workoutGroupRoomId => _workoutGroupRoomId;
+  bool get isGroupWorkout => _hasSession && _workoutGroupRoomId != null;
+  bool get groupWorkoutConnected =>
+      isGroupWorkout &&
+      _workoutGroupRoomId == _groupRideService.activeRoomId &&
+      _groupRideService.userId == _ownerId &&
+      _hasCurrentOwner;
   bool _publishingGroup = false;
   String? _lastGroupRoom;
   int _lastGroupRevision = -1;
@@ -233,6 +248,9 @@ class MapNavigationController extends ChangeNotifier {
   DateTime? _lastGroupPoll;
   DateTime? _lastGroupPublish;
 
+  @visibleForTesting
+  Future<void> publishGroupProgressForTesting() => _publishGroupProgress();
+
   Future<void> _publishGroupProgress() async {
     final room = _groupRideService.activeRoomId;
     if (room == null || _publishingGroup || _disposed || !_hasCurrentOwner) {
@@ -240,7 +258,8 @@ class MapNavigationController extends ChangeNotifier {
     }
     _publishingGroup = true;
     try {
-      final interval = _hasSession ? 5 : (_sharingForeground ? 15 : 60);
+      final grouped = _hasSession && _workoutGroupRoomId == room;
+      final interval = grouped ? 5 : (_sharingForeground ? 15 : 60);
       if (_lastGroupRoom == room &&
           _lastGroupPublish != null &&
           DateTime.now().difference(_lastGroupPublish!).inSeconds < interval) {
@@ -263,12 +282,13 @@ class MapNavigationController extends ChangeNotifier {
           _groupHadWorkout = restored.workoutState == 'finished';
         }
       }
-      if (_hasSession) {
+      if (grouped) {
         _groupHadWorkout = true;
         _groupLastDistance = _totalDistanceMeters;
         _groupLastSeconds = _activeDuration.inSeconds;
       }
       final share =
+          grouped &&
           gpsSignal.value.quality == GpsQuality.good &&
           _shareLivePosition &&
           (_sharingForeground || (_hasSession && _backgroundTrackingEnabled));
@@ -278,7 +298,7 @@ class MapNavigationController extends ChangeNotifier {
         durationSeconds: _groupLastSeconds,
         latitude: share ? _currentLocation.latitude : null,
         longitude: share ? _currentLocation.longitude : null,
-        workoutState: _hasSession
+        workoutState: grouped
             ? (_isWorkoutPaused ? 'paused' : 'active')
             : _groupHadWorkout
             ? 'finished'
@@ -312,13 +332,132 @@ class MapNavigationController extends ChangeNotifier {
   final ValueNotifier<int> workoutTick = ValueNotifier<int>(0);
   final ValueNotifier<GpsSignal> gpsSignal = ValueNotifier(const GpsSignal());
   Timer? _gpsWatchdog;
+  late final _gpsFreshnessProbe = GpsFreshnessProbe(
+    read: () => Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 10),
+    ),
+    current: () => gpsSignal.value,
+    accept: _acceptFreshnessProbe,
+  );
 
-  void _updateGpsSignal(Position position) {
+  Timer? _gpsRecoveryTimer;
+  int _gpsStreamEpoch = 0, _gpsRecoveryAttempts = 0;
+  bool _streamFailed = false, _waitingForRecoveredStream = false;
+  bool get isGpsStreamRecovering =>
+      _hasSession &&
+      (_streamFailed ||
+          _waitingForRecoveredStream ||
+          _gpsRecoveryTimer != null);
+  String get gpsRecoveryStatus =>
+      _gpsRecoveryAttempts >= 5 &&
+          _gpsRecoveryTimer == null &&
+          _locationInitialization == null
+      ? 'GPS не восстановлен. Повторите поиск геопозиции на карте.'
+      : 'Восстанавливаем запись GPS…';
+  DateTime? _lastStreamFixAt, _streamStartedAt;
+  Position? _lastStreamPosition, _stationaryProbe;
+
+  bool _validPosition(Position p, {DateTime? observedAt}) {
+    final now = observedAt ?? _gpsNow();
+    return p.latitude.isFinite &&
+        p.longitude.isFinite &&
+        p.latitude.abs() <= 90 &&
+        p.longitude.abs() <= 180 &&
+        !p.timestamp.isAfter(now.add(const Duration(seconds: 5))) &&
+        now.difference(p.timestamp) <= const Duration(seconds: 30);
+  }
+
+  void _scheduleGpsRecovery() {
+    if (_disposed ||
+        !_hasCurrentOwner ||
+        (!_hasSession && !_isNavigating) ||
+        _gpsRecoveryTimer != null ||
+        _gpsRecoveryAttempts >= 5)
+      return;
+    const delays = [1, 5, 15, 30, 60];
+    final session = _sessionLocalId;
+    _gpsRecoveryTimer = Timer(
+      Duration(seconds: delays[_gpsRecoveryAttempts]),
+      () async {
+        _gpsRecoveryTimer = null;
+        if (_disposed ||
+            !_hasCurrentOwner ||
+            session != _sessionLocalId ||
+            (!_hasSession && !_isNavigating))
+          return;
+        _gpsRecoveryAttempts++;
+        _waitingForRecoveredStream = true;
+        _breakTrackSegment = true;
+        try {
+          await initLocationTracking(requestPermission: false);
+        } catch (_) {
+          /* Retry is bounded. */
+        }
+        if (_streamFailed || !_locationReady) _scheduleGpsRecovery();
+      },
+    );
+  }
+
+  @visibleForTesting
+  void acceptFreshnessProbeForTesting(Position p) => _acceptFreshnessProbe(p);
+
+  void _acceptFreshnessProbe(Position p) {
+    if (_disposed || !_hasCurrentOwner || !_validPosition(p)) return;
+    _updateGpsSignal(p);
+    final accurate = p.accuracy.isFinite && p.accuracy >= 0 && p.accuracy <= 20;
+    final last = _lastStreamPosition;
+    final anchorTime = _lastStreamFixAt ?? _streamStartedAt;
+    if (accurate &&
+        last != null &&
+        anchorTime != null &&
+        _gpsNow().difference(anchorTime) > const Duration(seconds: 45) &&
+        _streamStartedAt != null &&
+        _gpsNow().difference(_streamStartedAt!) > const Duration(seconds: 45) &&
+        GeoUtils.distanceBetween(
+              LatLng(last.latitude, last.longitude),
+              LatLng(p.latitude, p.longitude),
+            ) >
+            math.max(30, last.accuracy + p.accuracy)) {
+      _scheduleGpsRecovery();
+    }
+    // Two fresh independent low-speed fixes establish a stop; silence alone does not.
+    final previous = _stationaryProbe;
+    final slow =
+        accurate &&
+        p.speed.isFinite &&
+        p.speed >= 0 &&
+        p.speed * 3.6 < _autoPauseBelowKmh &&
+        p.speedAccuracy.isFinite &&
+        p.speedAccuracy > 0 &&
+        (p.speed + p.speedAccuracy) * 3.6 < _autoPauseBelowKmh;
+    if (!slow) {
+      _stationaryProbe = null;
+      return;
+    }
+    _stationaryProbe = p;
+    if (_autoPauseEnabled &&
+        _isWorkoutActive &&
+        !_isWorkoutPaused &&
+        previous != null &&
+        p.timestamp.difference(previous.timestamp) >= _autoPauseDelay &&
+        p.timestamp.difference(previous.timestamp) <=
+            const Duration(seconds: 45) &&
+        GeoUtils.distanceBetween(
+              LatLng(previous.latitude, previous.longitude),
+              LatLng(p.latitude, p.longitude),
+            ) <=
+            math.max(3, math.min(5, previous.accuracy + p.accuracy))) {
+      _autoPause();
+    }
+  }
+
+  void _updateGpsSignal(Position position, {DateTime? observedAt}) {
     if (_disposed) return;
     gpsSignal.value = GpsSignal(
       accuracy: position.accuracy,
       updatedAt: position.timestamp,
-    ).checkedAt(DateTime.now());
+    ).checkedAt(observedAt ?? _gpsNow());
   }
 
   LatLng _currentLocation = const LatLng(52.5200, 13.4050);
@@ -1099,6 +1238,7 @@ class MapNavigationController extends ChangeNotifier {
     powerModel: _sessionPowerModel,
   );
   List<LatLng> get recordedPath => _recordedPath;
+  List<int> get recordedSegmentStarts => List.unmodifiable(_trackSegmentStarts);
   DateTime? get workoutStartTime => _workoutStartTime;
   double get totalDistanceMeters => _totalDistanceMeters;
   double get workoutSpeedKmh => _workoutSpeedKmh;
@@ -1216,6 +1356,7 @@ class MapNavigationController extends ChangeNotifier {
     path: List<LatLng>.of(_recordedPath),
     vehicleId: _sessionVehicle?.id,
     isEbike: _sessionEbike,
+    groupRoomId: _workoutGroupRoomId,
   );
 
   void _queueDraft({bool force = false}) {
@@ -1268,6 +1409,7 @@ class MapNavigationController extends ChangeNotifier {
         draft.ownerId != _ownerId) {
       return;
     }
+    _workoutGroupRoomId = draft.groupRoomId;
     _trackSegmentStarts
       ..clear()
       ..addAll(draft.details.segmentStarts);
@@ -1396,10 +1538,17 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startWorkout() {
+  void startWorkout({String? groupRoomId}) {
     if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
       return;
     }
+    if (groupRoomId != null &&
+        (groupRoomId != _groupRideService.activeRoomId ||
+            _ownerId == null ||
+            _groupRideService.userId != _ownerId)) {
+      throw StateError('Группа изменилась. Выберите её перед стартом заново.');
+    }
+    _workoutGroupRoomId = groupRoomId;
     _workoutLaps.clear();
     _distanceLaps = DistanceLaps(_autoLapMeters);
     _lastIntervalStart = _intervalPlan?.phaseAt(0)?.start;
@@ -1436,6 +1585,8 @@ class MapNavigationController extends ChangeNotifier {
     _elapsedBeforeCurrentSegment = Duration.zero;
     _waterReminder.configure(_waterReminderMinutes, Duration.zero);
     _sessionLocalId = newRideId();
+    _stationaryProbe = null;
+    _waitingForRecoveredStream = false;
     _workoutStartTime = DateTime.now();
     _sessionStartedAt = _workoutStartTime;
     _activeClock
@@ -1645,6 +1796,7 @@ class MapNavigationController extends ChangeNotifier {
   }
 
   void resumeWorkout() {
+    _stationaryProbe = null;
     if (!_isWorkoutPaused || _isSavingWorkout || _disposed) return;
     _stepTracker.resume();
     _brakeLoad?.breakSegment();
@@ -1791,13 +1943,18 @@ class MapNavigationController extends ChangeNotifier {
   void _resetWorkoutState() {
     _stepTracker.stop();
     _brakeLoad = null;
-    if (_hasSession && _groupRideService.activeRoomId != null) {
+    if (_hasSession &&
+        _workoutGroupRoomId != null &&
+        _workoutGroupRoomId == _groupRideService.activeRoomId) {
       _lastGroupRoom = _groupRideService.activeRoomId;
+      _lastGroupRevision = _groupRideService.membershipRevision;
       _groupHadWorkout = true;
       _groupLastDistance = _totalDistanceMeters;
       _groupLastSeconds = _activeDuration.inSeconds;
+      _lastGroupPublish = null;
     }
     _isWorkoutActive = false;
+    _workoutGroupRoomId = null;
     _isWorkoutPaused = false;
     _isAutoPaused = false;
     _activeClock
@@ -2001,9 +2158,11 @@ class MapNavigationController extends ChangeNotifier {
     }
   }
 
-  Future<void> initLocationTracking({bool requestPermission = true}) =>
-      _locationInitialization ??= _initLocationOnce(requestPermission)
-          .whenComplete(() => _locationInitialization = null);
+  Future<void> initLocationTracking({bool requestPermission = true}) {
+    if (requestPermission) _gpsRecoveryAttempts = 0;
+    return _locationInitialization ??= _initLocationOnce(requestPermission)
+        .whenComplete(() => _locationInitialization = null);
+  }
 
   /// Resume is silent: permission prompts remain attached to an explicit action.
   Future<void> resumeLocationTracking() async {
@@ -2041,6 +2200,18 @@ class MapNavigationController extends ChangeNotifier {
       if (_disposed) return;
       final checked = gpsSignal.value.checkedAt(DateTime.now());
       if (checked.stale != gpsSignal.value.stale) gpsSignal.value = checked;
+      unawaited(
+        _gpsFreshnessProbe.check(
+          DateTime.now(),
+          enabled:
+              _locationReady &&
+              _locationInitialization == null &&
+              _hasCurrentOwner &&
+              (WidgetsBinding.instance.lifecycleState == null ||
+                  WidgetsBinding.instance.lifecycleState ==
+                      AppLifecycleState.resumed),
+        ),
+      );
     });
     try {
       await _initializeLocationTracking(requestPermission: requestPermission);
@@ -2106,7 +2277,8 @@ class MapNavigationController extends ChangeNotifier {
       );
       return;
     }
-    if (_disposed) return;
+    if (_disposed || !_hasCurrentOwner || !_validPosition(initialPosition))
+      return;
     final latestFixAt = gpsSignal.value.updatedAt;
     if (latestFixAt != null &&
         initialPosition.timestamp.isBefore(latestFixAt)) {
@@ -2189,17 +2361,45 @@ class MapNavigationController extends ChangeNotifier {
       }
     }
 
+    final epoch = ++_gpsStreamEpoch;
+    _streamStartedAt = _gpsNow();
+    _streamFailed = false;
+    _gpsRecoveryTimer?.cancel();
+    _gpsRecoveryTimer = null;
     return Geolocator.getPositionStream(
       locationSettings: locationSettings,
     ).listen(
-      _onPositionUpdate,
+      (position) {
+        if (epoch != _gpsStreamEpoch ||
+            _disposed ||
+            !_hasCurrentOwner ||
+            !_validPosition(position))
+          return;
+        _lastStreamPosition = position;
+        _lastStreamFixAt = _gpsNow();
+        _gpsRecoveryAttempts = 0;
+        _waitingForRecoveredStream = false;
+        _streamFailed = false;
+        _locationReady = true;
+        _gpsRecoveryTimer?.cancel();
+        _gpsRecoveryTimer = null;
+        _onPositionUpdate(position);
+      },
       onError: (Object error) {
+        if (_disposed || epoch != _gpsStreamEpoch) return;
+        _streamFailed = true;
+        _breakTrackSegment = true;
         _locationReady = false;
+        _scheduleGpsRecovery();
         debugPrint('[GPS] stream failed: $error');
         if (!_disposed) gpsSignal.value = const GpsSignal(unavailable: true);
       },
       onDone: () {
+        if (_disposed || epoch != _gpsStreamEpoch) return;
+        _streamFailed = true;
+        _breakTrackSegment = true;
         _locationReady = false;
+        _scheduleGpsRecovery();
         if (!_disposed) gpsSignal.value = const GpsSignal(unavailable: true);
       },
     );
@@ -2207,8 +2407,8 @@ class MapNavigationController extends ChangeNotifier {
 
   /// Обработчик GPS-точки (бывшее тело листенера).
   @visibleForTesting
-  void applyGpsSampleForTesting(Position position) =>
-      _onPositionUpdate(position);
+  void applyGpsSampleForTesting(Position position, {DateTime? observedAt}) =>
+      _onPositionUpdate(position, observedAt: observedAt);
 
   @visibleForTesting
   void setRouteForTesting({
@@ -2222,18 +2422,31 @@ class MapNavigationController extends ChangeNotifier {
     _navigationProgressMeters = 0;
   }
 
-  void _onPositionUpdate(Position position) {
+  void _onPositionUpdate(Position position, {DateTime? observedAt}) {
     if (_disposed ||
         !_hasCurrentOwner ||
+        !_validPosition(position, observedAt: observedAt) ||
         !position.latitude.isFinite ||
         !position.longitude.isFinite ||
         position.latitude.abs() > 90 ||
         position.longitude.abs() > 180) {
       return;
     }
+    if (position.speed.isFinite && position.speed * 3.6 > _autoResumeAboveKmh) {
+      _stationaryProbe = null;
+    }
     final newLatLng = LatLng(position.latitude, position.longitude);
+    final stationary = _stationaryProbe;
+    if (stationary != null &&
+        GeoUtils.distanceBetween(
+              LatLng(stationary.latitude, stationary.longitude),
+              newLatLng,
+            ) >
+            5) {
+      _stationaryProbe = null;
+    }
     _hasGpsFix = true;
-    _updateGpsSignal(position);
+    _updateGpsSignal(position, observedAt: observedAt);
     final double newHeading =
         position.heading.isFinite &&
             position.heading >= 0 &&
@@ -2921,6 +3134,9 @@ class MapNavigationController extends ChangeNotifier {
     _livePublishTimer?.cancel();
     positionNotifier.dispose();
     _gpsWatchdog?.cancel();
+    _gpsRecoveryTimer?.cancel();
+    _gpsStreamEpoch++;
+    _gpsFreshnessProbe.dispose();
     _friendStatusTimer?.cancel();
     _groupProgressTimer?.cancel();
     _groupRideService.removeListener(notifyListeners);

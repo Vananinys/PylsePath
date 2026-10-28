@@ -1,3 +1,5 @@
+import '../services/recording_daily_activity_service.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -49,6 +51,11 @@ class _AuthGateState extends State<AuthGate> {
     // (например, в тестах) — в обоих случаях показываем экран входа.
     _signedIn = _auth.isSignedIn;
     _userId = _auth.userId;
+    unawaited(
+      DailyActivityService.instance
+          .bindToUser(_userId)
+          .catchError((Object _) {}),
+    );
     unawaited(BackgroundLocationService.instance.bindToUser(_userId));
     AchievementsService.bindToUser(_userId);
     GroupRideService().bindToUser(_userId);
@@ -62,6 +69,11 @@ class _AuthGateState extends State<AuthGate> {
       );
       final uid = state.session?.user.id;
       if (uid != _userId) {
+        unawaited(
+          DailyActivityService.instance
+              .bindToUser(uid)
+              .catchError((Object _) {}),
+        );
         unawaited(BackgroundLocationService.instance.bindToUser(uid));
       }
       final recovering =

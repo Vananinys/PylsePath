@@ -4,6 +4,13 @@ import '../data/chat_local_store.dart';
 import '../data/user_scope.dart';
 import '../utils/ride_id.dart';
 import '../widgets/chat_photo.dart';
+import '../models/chat_media_draft.dart';
+import '../widgets/chat_media_composer.dart';
+import '../widgets/chat_video_player.dart';
+import '../widgets/video_poster.dart';
+import '../services/video_preview_service.dart';
+import '../models/video_metadata.dart';
+import '../utils/chat_media_files.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -50,6 +57,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   );
   final TextEditingController _inputController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  bool _mediaBusy = false;
+  String? _mediaProgress;
+  bool _cancelMediaPreparation = false;
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _recording = false;
@@ -152,6 +162,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     unawaited(_restoreLocal());
     unawaited(_loadBlockState());
     _subscribeRealtime();
+    unawaited(_chatService.retryAttachmentCleanup());
   }
 
   /// reverse: true — offset 0 это НИЗ переписки (новые сообщения).
@@ -298,6 +309,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _connectionChanged() {
     if (mounted && _foreground && _chatService.connected.value) {
+      unawaited(_chatService.retryAttachmentCleanup());
       unawaited(_loadMessagesWithReactions());
       unawaited(_loadBlockState());
     }
@@ -306,10 +318,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    if (!_foreground) _lastTypedAt = null;
+    if (!_foreground) {
+      _lastTypedAt = null;
+      unawaited(_audioPlayer.pause());
+    }
     _updateChatActivity();
     if (!_foreground && _recording) unawaited(_cancelVoiceRecording());
     if (_foreground) {
+      unawaited(_chatService.retryAttachmentCleanup());
       unawaited(_loadMessagesWithReactions());
       unawaited(_loadBlockState());
     }
@@ -554,20 +570,235 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _sendPhoto({ImageSource source = ImageSource.gallery}) async {
-    try {
-      final picked = await _picker.pickImage(
-        source: source,
-        maxWidth: 1280,
-        maxHeight: 1280,
-        imageQuality: 85,
+    await _prepareMedia(() => _pickPhotos(source));
+  }
+
+  Future<List<ChatMediaDraft>> _pickPhotos(ImageSource source) async {
+    final files = source == ImageSource.gallery
+        ? await _picker.pickMultiImage(
+            maxWidth: 2048,
+            maxHeight: 2048,
+            imageQuality: 85,
+            limit: ChatMediaDraft.maxItems,
+            requestFullMetadata: false,
+          )
+        : [
+            await _picker.pickImage(
+              source: source,
+              maxWidth: 2048,
+              maxHeight: 2048,
+              imageQuality: 85,
+              requestFullMetadata: false,
+            ),
+          ].whereType<XFile>().toList();
+    final items = <ChatMediaDraft>[];
+    for (final file in files) {
+      items.add(
+        ChatMediaDraft(file: file, isVideo: false, size: await file.length()),
       );
-      if (picked == null) return;
-      await _sendMessage(photoPath: picked.path);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
+    }
+    return items;
+  }
+
+  Future<List<ChatMediaDraft>> _pickVideo() async {
+    final file = await _picker.pickVideo(source: ImageSource.gallery);
+    return file == null
+        ? []
+        : [
+            ChatMediaDraft(
+              file: file,
+              isVideo: true,
+              size: await file.length(),
+            ),
+          ];
+  }
+
+  Future<void> _prepareMedia(
+    Future<List<ChatMediaDraft>> Function() pick,
+  ) async {
+    if (_mediaBusy || _blockedByMe || _blockedByThem) return;
+    final owner = _chatService.userId;
+    if (owner == null) {
+      _showError('Войдите в аккаунт');
+      return;
+    }
+    setState(() => _mediaBusy = true);
+    try {
+      final initial = await pick();
+      if (!mounted || _chatService.userId != owner || initial.isEmpty) return;
+      final validation = ChatMediaDraft.validateBatch(initial);
+      if (validation != null) {
+        _showError(validation);
+        return;
+      }
+      final selected = await Navigator.push<List<ChatMediaDraft>>(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Не удалось выбрать фото')));
+        MaterialPageRoute(
+          builder: (_) => ChatMediaComposer(
+            items: initial,
+            onAddPhotos: () => _pickPhotos(ImageSource.gallery),
+            onAddVideo: _pickVideo,
+          ),
+        ),
+      );
+      if (!mounted || _chatService.userId != owner || selected == null) return;
+      final error = ChatMediaDraft.validateBatch(selected);
+      if (error != null) {
+        _showError(error);
+        return;
+      }
+      if (_blockedByMe || _blockedByThem) {
+        _showError('Отправка сообщений заблокирована');
+        return;
+      }
+      final pending = <ChatMessage>[];
+      final now = DateTime.now().toUtc();
+      _cancelMediaPreparation = false;
+      var rejected = 0;
+      for (final item in selected) {
+        if (_cancelMediaPreparation ||
+            !mounted ||
+            _chatService.userId != owner) {
+          break;
+        }
+        setState(
+          () => _mediaProgress =
+              'Сохраняем ${pending.length + rejected + 1} из ${selected.length}',
+        );
+        try {
+          final id = newRideId();
+          final path = await retainChatMedia(
+            item.file,
+            owner,
+            id,
+            item.extension,
+            editedBytes: item.editedBytes,
+          );
+          if (!mounted || _chatService.userId != owner) return;
+          final queued = ChatMessage(
+            id: id,
+            senderId: owner,
+            receiverId: widget.friend.id,
+            photoUrl: item.isVideo ? null : path,
+            videoUrl: item.isVideo ? path : null,
+            body: item.isVideo ? 'Видео' : null,
+            createdAt: now.add(Duration(microseconds: pending.length)),
+            replyToId: pending.isEmpty ? _replyingTo?.id : null,
+            delivery: MessageDelivery.failed,
+          );
+          setState(() => _messages.add(queued));
+          // No upload until the complete preparation stage has ended.
+          await _persistMessages();
+          VideoPreview? preview;
+          String? posterPath;
+          if (item.isVideo) {
+            preview = await VideoPreviewService.inspect(path);
+            if (preview.poster != null) {
+              try {
+                posterPath = await retainChatMedia(
+                  item.file,
+                  owner,
+                  'poster-$id',
+                  '.jpg',
+                  editedBytes: preview.poster,
+                );
+              } catch (_) {
+                /* The video remains sendable without a poster. */
+              }
+            }
+          }
+          if (!mounted || _chatService.userId != owner) return;
+          pending.add(
+            ChatMessage(
+              id: id,
+              senderId: owner,
+              receiverId: widget.friend.id,
+              photoUrl: item.isVideo ? null : path,
+              videoUrl: item.isVideo ? path : null,
+              videoPosterUrl: posterPath,
+              videoMetadata: preview?.metadata,
+              body: item.isVideo ? 'Видео' : null,
+              createdAt: now.add(Duration(microseconds: pending.length)),
+              replyToId: pending.isEmpty ? _replyingTo?.id : null,
+              delivery: MessageDelivery.sending,
+            ),
+          );
+          final prepared = pending.last;
+          setState(
+            () => _messages = _merge(_messages, [
+              prepared.withDelivery(MessageDelivery.failed),
+            ]),
+          );
+          await _persistMessages();
+        } catch (_) {
+          rejected++;
+          if (!mounted || _chatService.userId != owner) return;
+          _showError(
+            'Один файл не удалось подготовить. Остальные сохранённые вложения доступны в чате.',
+          );
+        }
+      }
+      if (!mounted || _chatService.userId != owner) return;
+      if (_cancelMediaPreparation) return;
+      setState(() {
+        _replyingTo = null;
+        _mediaProgress = 'Отправляем ${pending.length} вложений';
+      });
+      // Save the entire selection before the first upload, for independent retries.
+      try {
+        await _persistMessages();
+      } catch (_) {
+        if (mounted) {
+          final ids = pending.map((m) => m.id).toSet();
+          setState(
+            () => _messages = _messages
+                .map(
+                  (m) => ids.contains(m.id)
+                      ? m.withDelivery(MessageDelivery.failed)
+                      : m,
+                )
+                .toList(),
+          );
+          _showError(
+            'Не удалось сохранить очередь. Освободите место на устройстве.',
+          );
+        }
+        return;
+      }
+      _scrollToBottom();
+      for (var index = 0; index < pending.length; index++) {
+        if (!mounted || _chatService.userId != owner) return;
+        setState(
+          () => _mediaProgress = 'Отправляем ${index + 1} из ${pending.length}',
+        );
+        final sent = await _transmit(pending[index]);
+        if (!sent) {
+          if (!mounted) return;
+          final waiting = pending.skip(index + 1).map((m) => m.id).toSet();
+          setState(
+            () => _messages = _messages
+                .map(
+                  (message) => waiting.contains(message.id)
+                      ? message.withDelivery(MessageDelivery.failed)
+                      : message,
+                )
+                .toList(),
+          );
+          await _persistMessages();
+          break;
+        }
+      }
+    } catch (_) {
+      _showError(
+        'Не удалось подготовить вложения. Попробуйте выбрать их снова.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _mediaBusy = false;
+          _mediaProgress = null;
+        });
+      }
     }
   }
 
@@ -676,14 +907,32 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _showError('Максимум 4000 символов');
       return;
     }
+    final messageId = newRideId();
+    String? retainedAudio = audioPath;
+    if (audioPath != null) {
+      try {
+        retainedAudio = await retainChatMedia(
+          XFile(audioPath),
+          me,
+          messageId,
+          '.m4a',
+        );
+      } catch (_) {
+        _showError(
+          'Не удалось сохранить голосовое. Освободите место и повторите.',
+        );
+        return;
+      }
+      if (!mounted || _chatService.userId != me) return;
+    }
     final pending = ChatMessage(
-      id: newRideId(),
+      id: messageId,
       senderId: me,
       receiverId: widget.friend.id,
       body: text,
       sticker: sticker,
       photoUrl: photoPath,
-      audioUrl: audioPath,
+      audioUrl: retainedAudio,
       audioSeconds: audioSeconds,
       replyToId: _replyingTo?.id,
       createdAt: DateTime.now().toUtc(),
@@ -696,7 +945,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _stickerPanelOpen = false;
       _replyingTo = null;
     });
-    unawaited(_persistMessages());
+    try {
+      await _persistMessages();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _messages = _messages
+              .map(
+                (m) => m.id == pending.id
+                    ? m.withDelivery(MessageDelivery.failed)
+                    : m,
+              )
+              .toList(),
+        );
+        _showError(
+          'Не удалось сохранить очередь. Освободите место на устройстве.',
+        );
+      }
+      return;
+    }
+    if (!mounted || _chatService.userId != me) return;
     _scrollToBottom();
     await _transmit(pending);
   }
@@ -760,7 +1028,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _transmit(ChatMessage pending, {bool retry = false}) async {
+  Future<bool> _transmit(ChatMessage pending, {bool retry = false}) async {
+    if (!mounted ||
+        _chatService.userId != pending.senderId ||
+        (retry && _mediaBusy)) {
+      return false;
+    }
     setState(() {
       final index = _messages.indexWhere((m) => m.id == pending.id);
       if (index >= 0) {
@@ -775,6 +1048,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         text: pending.body,
         sticker: pending.sticker,
         photoPath: pending.photoUrl,
+        videoPath: pending.videoUrl,
+        videoPosterPath: pending.videoPosterUrl,
+        videoMetadata: pending.videoMetadata,
         audioPath: pending.audioUrl,
         audioSeconds: pending.audioSeconds,
         replyToId: pending.replyToId,
@@ -783,10 +1059,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (saved == null) {
         throw const ChatServiceException('Сервер не подтвердил отправку');
       }
-      if (!mounted) return;
+      if (!mounted || _chatService.userId != pending.senderId) return false;
       setState(() => _messages = _merge(_messages, [saved]));
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         final index = _messages.indexWhere((m) => m.id == pending.id);
         if (index >= 0 && _messages[index].delivery != MessageDelivery.sent) {
@@ -798,8 +1075,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ? error.message
             : 'Не удалось отправить. Нажмите на сообщение, чтобы повторить.',
       );
+      return false;
     } finally {
-      await _persistMessages();
+      try {
+        await _persistMessages();
+      } catch (_) {
+        _showError(
+          'Не удалось сохранить очередь. Освободите место на устройстве.',
+        );
+      }
     }
   }
 
@@ -1304,7 +1588,37 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           message.sticker!,
                           style: const TextStyle(fontSize: 44),
                         )
-                      else if (message.isPhoto) ...[
+                      else if (message.isVideo) ...[
+                        SizedBox(
+                          width: 220,
+                          child: VideoPoster(
+                            posterSource: message.videoPosterUrl,
+                            metadata: message.videoMetadata,
+                            localSource:
+                                message.delivery != MessageDelivery.sent
+                                ? message.videoUrl
+                                : null,
+                            onRetry: () => _refreshAttachment(message),
+                            onTap: () {
+                              unawaited(_audioPlayer.stop());
+                              setState(() => _playingMessageId = null);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatVideoPlayer(
+                                    source: message.videoUrl!,
+                                    autoPlay: true,
+                                    onRefresh: () async =>
+                                        (await _chatService.refreshAttachment(
+                                          message,
+                                        ))?.videoUrl,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else if (message.isPhoto) ...[
                         // Фото-сообщение; тап — просмотр на весь экран.
                         GestureDetector(
                           onTap: () => _showPhotoFullScreen(message),
@@ -1504,6 +1818,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   /// Контекстное меню сообщения (длинное нажатие): копировать текст,
   /// удалить своё. Фото открывается по тапу на весь экран.
   Future<void> _showMessageMenu(ChatMessage message) async {
+    if (_mediaBusy && message.delivery != MessageDelivery.sent) return;
     final isMine = message.senderId == _chatService.userId;
     final canCopy = (message.body ?? '').trim().isNotEmpty;
     final canDelete = isMine && message.delivery == MessageDelivery.sent;
@@ -1587,8 +1902,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
     if (action == 'discard') {
-      setState(() => _messages.removeWhere((m) => m.id == message.id));
-      unawaited(_persistMessages());
+      try {
+        await _chatService.queueDiscardedAttachment(message);
+        if (!mounted || message.senderId != _chatService.userId) return;
+        setState(() => _messages.removeWhere((m) => m.id == message.id));
+        await _persistMessages();
+        unawaited(_chatService.retryAttachmentCleanup());
+      } catch (_) {
+        if (mounted) setState(() => _messages = _merge(_messages, [message]));
+        _showError('Не удалось сохранить удаление. Попробуйте ещё раз.');
+      }
       return;
     }
     if (action == 'edit') {
@@ -1745,6 +2068,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_mediaProgress != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_mediaProgress!)),
+                    if (_mediaProgress!.startsWith('Сохраняем'))
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _cancelMediaPreparation = true;
+                          _mediaProgress = 'Останавливаем подготовку…';
+                        }),
+                        child: const Text('Остановить'),
+                      ),
+                  ],
+                ),
+              ),
             if (_replyingTo != null && !_recording)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 4, 6),
@@ -1803,6 +2149,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     },
                   ),
                   PopupMenuButton<String>(
+                    enabled: !_mediaBusy,
                     tooltip: 'Вложение',
                     icon: const Icon(Icons.attach_file),
                     onSelected: (value) {
@@ -1828,6 +2175,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             );
                           }
                         });
+                      } else if (value == 'video') {
+                        _prepareMedia(_pickVideo);
                       } else if (value == 'voice') {
                         _toggleVoiceRecording();
                       } else {
@@ -1857,7 +2206,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         value: 'photo',
                         child: ListTile(
                           leading: Icon(Icons.photo_outlined),
-                          title: Text('Фото из галереи'),
+                          title: Text('Фото из галереи (до 20)'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'video',
+                        child: ListTile(
+                          leading: Icon(Icons.video_library_outlined),
+                          title: Text('Видео из галереи'),
                         ),
                       ),
                       PopupMenuItem(

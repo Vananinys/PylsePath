@@ -11,10 +11,14 @@ class ChatPhoto extends StatefulWidget {
     required this.source,
     required this.onRetry,
     this.fullScreen = false,
+    this.decodeWidth,
+    this.compact = false,
   });
   final String source;
   final Future<void> Function() onRetry;
   final bool fullScreen;
+  final int? decodeWidth;
+  final bool compact;
   @override
   State<ChatPhoto> createState() => _ChatPhotoState();
 }
@@ -44,39 +48,56 @@ class _ChatPhotoState extends State<ChatPhoto> {
         : null;
   }
 
-  Widget _error() => SizedBox(
-    height: 120,
-    child: Center(
-      child: TextButton.icon(
-        onPressed: _retrying
-            ? null
-            : () async {
-                setState(() => _retrying = true);
-                try {
-                  await widget.onRetry();
-                } catch (_) {
-                  /* The button stays available. */
-                }
-                if (mounted) {
-                  setState(() {
-                    _revision++;
-                    _loadLocal();
-                    _retrying = false;
-                  });
-                }
-              },
-        icon: const Icon(Icons.refresh),
-        label: Text(_retrying ? 'Загружаем…' : 'Загрузить фото'),
-      ),
-    ),
-  );
+  Widget _error() => widget.compact
+      ? const Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: Colors.white,
+            size: 24,
+          ),
+        )
+      : SizedBox(
+          height: 120,
+          child: Center(
+            child: TextButton.icon(
+              onPressed: _retrying
+                  ? null
+                  : () async {
+                      setState(() => _retrying = true);
+                      try {
+                        await widget.onRetry();
+                      } catch (_) {
+                        /* The button stays available. */
+                      }
+                      if (mounted) {
+                        setState(() {
+                          _revision++;
+                          _loadLocal();
+                          _retrying = false;
+                        });
+                      }
+                    },
+              icon: const Icon(Icons.refresh),
+              label: Text(_retrying ? 'Загружаем…' : 'Загрузить фото'),
+            ),
+          ),
+        );
   @override
   Widget build(BuildContext context) {
     final width = widget.fullScreen ? null : 220.0;
     final fit = widget.fullScreen ? BoxFit.contain : BoxFit.cover;
+    final decodeWidth =
+        widget.decodeWidth ??
+        (widget.fullScreen
+            ? null
+            : (220 * MediaQuery.devicePixelRatioOf(context)).round().clamp(
+                220,
+                880,
+              ));
     if (_remote) {
       return Image.network(
         widget.source,
+        cacheWidth: decodeWidth,
         key: ValueKey('${widget.source}_$_revision'),
         width: width,
         fit: fit,
@@ -95,6 +116,7 @@ class _ChatPhotoState extends State<ChatPhoto> {
       builder: (_, snapshot) => snapshot.hasData
           ? Image.memory(
               snapshot.data!,
+              cacheWidth: decodeWidth,
               width: width,
               fit: fit,
               errorBuilder: (_, error, stack) => _error(),

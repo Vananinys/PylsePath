@@ -12,6 +12,7 @@ import '../services/route_library.dart';
 import '../utils/gpx_share.dart';
 import '../widgets/route_share_sheet.dart';
 import '../widgets/route_trace_preview.dart';
+import 'route_builder_screen.dart';
 
 class SavedRoutesScreen extends StatefulWidget {
   const SavedRoutesScreen({super.key});
@@ -107,6 +108,17 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
     const sorts = ['Недавние', 'Короче', 'Длиннее', 'Больше набора'];
     return Scaffold(
       appBar: AppBar(title: const Text('Мои маршруты')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final saved = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (_) => const RouteBuilderScreen()),
+          );
+          if (saved == true && mounted) await _load();
+        },
+        icon: const Icon(Icons.add_location_alt_outlined),
+        label: const Text('Создать маршрут'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -515,6 +527,11 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                 label: const Text('Открыть на карте'),
               ),
               OutlinedButton.icon(
+                onPressed: () => Navigator.pop(ctx, 'geometry'),
+                icon: const Icon(Icons.edit_road_outlined),
+                label: const Text('Изменить линию и точки (копия)'),
+              ),
+              OutlinedButton.icon(
                 onPressed: () => Navigator.pop(ctx, 'edit'),
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Название, коллекция и заметка'),
@@ -548,6 +565,12 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
     );
     if (!mounted) return;
     switch (action) {
+      case 'geometry':
+        final saved = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => RouteBuilderScreen(source: route)),
+        );
+        if (saved == true && mounted) await _load();
       case 'open':
         Navigator.pop(context, route);
       case 'edit':

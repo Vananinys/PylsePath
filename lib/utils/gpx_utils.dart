@@ -6,10 +6,14 @@ class ParsedGpxTrack {
     this.points = const [],
     this.segmentStarts = const [],
     this.name = '',
+    this.sourcePointIndices = const [],
   });
   final List<LatLng> points;
   final List<int> segmentStarts;
   final String name;
+
+  /// Original XML point index for each retained point; invalid points count too.
+  final List<int> sourcePointIndices;
 }
 
 /// Сборка и разбор GPX-трека.
@@ -97,10 +101,13 @@ class GpxUtils {
                   .toList();
       }
       final points = <LatLng>[], starts = <int>[];
+      final sourceIndices = <int>[];
+      var sourceIndex = 0;
       for (final nodes in groups) {
         var newSegment = true;
         for (final node in nodes) {
           if (points.length >= 100000) break;
+          final originalIndex = sourceIndex++;
           final lat = double.tryParse(node.getAttribute('lat') ?? '');
           final lon = double.tryParse(node.getAttribute('lon') ?? '');
           if (lat == null ||
@@ -116,6 +123,7 @@ class GpxUtils {
             starts.add(points.length);
             newSegment = false;
           }
+          sourceIndices.add(originalIndex);
           points.add(LatLng(lat, lon));
         }
         if (points.length >= 100000) break;
@@ -130,6 +138,7 @@ class GpxUtils {
       return ParsedGpxTrack(
         points: List.unmodifiable(points),
         segmentStarts: List.unmodifiable(starts),
+        sourcePointIndices: List.unmodifiable(sourceIndices),
         name: name.substring(0, name.length.clamp(0, 240)),
       );
     } on XmlException {

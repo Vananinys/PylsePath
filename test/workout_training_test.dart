@@ -59,6 +59,12 @@ Position fix(double latitude, DateTime timestamp, {double accuracy = 5}) =>
       speedAccuracy: 1,
     );
 
+void deliver(MapNavigationController controller, Position position) =>
+    controller.applyGpsSampleForTesting(
+      position,
+      observedAt: position.timestamp,
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -125,7 +131,8 @@ void main() {
         (55.003, 80),
         (55.0035, 90),
       ]) {
-        controller.applyGpsSampleForTesting(
+        deliver(
+          controller,
           fix(sample.$1, start.add(Duration(seconds: sample.$2))),
         );
       }
@@ -135,9 +142,7 @@ void main() {
       final before = controller.totalDistanceMeters;
       controller.pauseWorkout();
       controller.resumeWorkout();
-      controller.applyGpsSampleForTesting(
-        fix(56, start.add(const Duration(seconds: 120))),
-      );
+      deliver(controller, fix(56, start.add(const Duration(seconds: 120))));
       expect(controller.totalDistanceMeters, closeTo(before, .01));
       expect(controller.recordedSegments.length, 3);
       controller.dispose();

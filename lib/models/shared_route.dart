@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'activity_type.dart';
 import 'saved_route.dart';
 import 'workout_details.dart';
+import 'ride_media.dart';
 
 /// A bounded snapshot: opening a share never requires access to private rides.
 class SharedRoute {
@@ -14,6 +15,7 @@ class SharedRoute {
     required this.points,
     this.activity = ActivityType.cycling,
     this.segmentStarts = const [0],
+    this.media = const [],
   });
   final String title;
   final String kind;
@@ -22,6 +24,7 @@ class SharedRoute {
   final List<LatLng> points;
   final ActivityType activity;
   final List<int> segmentStarts;
+  final List<SharedRideMedia> media;
   String get label => kind == 'ride' ? 'Заезд' : 'Маршрут';
 
   factory SharedRoute.fromSavedRoute(
@@ -29,14 +32,18 @@ class SharedRoute {
     String kind = 'ride',
     bool includeTrack = true,
     double hideRadiusMeters = 0,
+    List<SharedRideMedia> media = const [],
   }) {
     final source = includeTrack ? route.routePoints : <LatLng>[];
     final radius = hideRadiusMeters.isFinite
         ? hideRadiusMeters.clamp(0.0, 5000.0)
         : 0.0;
     final originalStarts = route.workoutDetails.segmentStarts.toSet();
-    final chunks = <List<LatLng>>[];
-    var current = <LatLng>[];
+    if (media.length > 20) {
+      throw const FormatException('Слишком много материалов');
+    }
+    final chunks = <List<int>>[];
+    var current = <int>[];
     const distance = Distance();
     for (var i = 0; i < source.length; i++) {
       final point = source[i];
@@ -48,20 +55,28 @@ class SharedRoute {
         if (current.length >= 2) chunks.add(current);
         current = [];
       }
-      if (!hidden) current.add(point);
+      if (!hidden) current.add(i);
     }
     if (current.length >= 2) chunks.add(current);
     final stride = (source.length / 1000).ceil().clamp(1, 1000000);
     final points = <LatLng>[];
     final starts = <int>[];
+    final remapped = <int, int>{};
+    final anchors = media.map((item) => item.pointIndex).toSet();
     for (final chunk in chunks) {
       if (points.length + 2 > 1200) break;
       starts.add(points.length);
       final last = chunk.length - 1;
-      for (var i = 0; i < last && points.length < 1199; i += stride) {
-        points.add(chunk[i]);
+      final indices = {
+        chunk.last,
+        for (var i = 0; i < last; i += stride) chunk[i],
+        ...chunk.where(anchors.contains),
+      }.toList()..sort();
+      for (final index in indices) {
+        if (points.length >= 1200) break;
+        remapped[index] = points.length;
+        points.add(source[index]);
       }
-      points.add(chunk.last);
     }
     return SharedRoute(
       title: route.title.length > 240
@@ -73,6 +88,11 @@ class SharedRoute {
       points: points,
       activity: route.activityType,
       segmentStarts: starts,
+      media: [
+        for (final item in media)
+          if (remapped.containsKey(item.pointIndex))
+            item.at(remapped[item.pointIndex]!),
+      ],
     );
   }
 
@@ -85,6 +105,7 @@ class SharedRoute {
     'activity': activity.name,
     'segment_starts': segmentStarts,
     'points': points.map((p) => [p.latitude, p.longitude]).toList(),
+    'media': media.map((item) => item.toJson()).toList(),
   };
 
   static SharedRoute? tryParse(Object? raw) {
@@ -136,6 +157,18 @@ class SharedRoute {
           starts.add(value);
         }
       }
+      final mediaRaw = raw['media'] ?? const [];
+      if (mediaRaw is! List || mediaRaw.length > 20) return null;
+      final media = <SharedRideMedia>[];
+      for (final value in mediaRaw) {
+        final item = SharedRideMedia.tryParse(value);
+        if (item == null ||
+            item.pointIndex >= points.length ||
+            media.any((m) => m.id == item.id)) {
+          return null;
+        }
+        media.add(item);
+      }
       return SharedRoute(
         title: title,
         kind: raw['kind'],
@@ -148,6 +181,7 @@ class SharedRoute {
                 .firstOrNull ??
             ActivityType.cycling,
         segmentStarts: starts.toList()..sort(),
+        media: media,
       );
     } catch (_) {
       return null;

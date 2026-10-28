@@ -22,6 +22,8 @@ import '../screens/post_comments_screen.dart';
 import '../screens/public_profile_screen.dart';
 import 'community_post_card.dart';
 import '../utils/gpx_share.dart';
+import '../services/ride_media_service.dart';
+import 'ride_media_selection.dart';
 import 'track_privacy_picker.dart';
 
 Future<bool> showCommunityComposer(
@@ -595,10 +597,13 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   bool _shareGpx = false;
   int _hideRadius = 200;
   final List<String> _photoPaths = [];
+  Set<String> _rideMediaIds = {};
+  late final String? _publicationOwner;
 
   @override
   void initState() {
     super.initState();
+    _publicationOwner = _communityService.userId;
     final route = widget.route;
     if (route != null) {
       _bodyController.text =
@@ -693,16 +698,24 @@ class __ComposerDialogState extends State<_ComposerDialog> {
     if (body.isEmpty && _photoPaths.isEmpty && _selectedRideId == null) return;
     setState(() => _publishing = true);
     try {
+      final owner = _publicationOwner;
+      if (owner == null || owner != _communityService.userId) {
+        throw StateError('Аккаунт изменился. Откройте публикацию заново.');
+      }
+      final selectedRoute = _rideByLocalId[_selectedRideId];
+      final SharedRoute? snapshot = selectedRoute == null
+          ? null
+          : await RideMediaService.prepareShare(
+              selectedRoute,
+              selectedIds: _shareGpx ? _rideMediaIds : {},
+              includeTrack: _shareGpx,
+              hideRadiusMeters: _hideRadius.toDouble(),
+            );
+      if (!mounted || owner != _communityService.userId) return;
       await _communityService.createPost(
         body,
         rideId: _rideByLocalId[_selectedRideId]?.remoteId,
-        routeAttachment: _rideByLocalId[_selectedRideId] == null
-            ? null
-            : SharedRoute.fromSavedRoute(
-                _rideByLocalId[_selectedRideId]!,
-                includeTrack: _shareGpx,
-                hideRadiusMeters: _hideRadius.toDouble(),
-              ),
+        routeAttachment: snapshot,
         photoPaths: _photoPaths,
         // Snapshot GPX includes only the points visible in the post. Do not
         // grant the legacy RPC access to the original untrimmed ride.
@@ -715,6 +728,16 @@ class __ComposerDialogState extends State<_ComposerDialog> {
       setState(() => _publishing = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _publishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Не удалось подготовить материалы. Проверьте файлы, сеть и формат видео. Попробуйте MP4 с H.264/AAC.',
+          ),
+        ),
+      );
     }
   }
 
@@ -850,9 +873,10 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                       return FilterChip(
                         label: Text(ride.label),
                         selected: selected,
-                        onSelected: (_) => setState(
-                          () => _selectedRideId = selected ? null : ride.id,
-                        ),
+                        onSelected: (_) => setState(() {
+                          _selectedRideId = selected ? null : ride.id;
+                          _rideMediaIds = {};
+                        }),
                         selectedColor: Colors.deepOrange.withValues(alpha: 0.2),
                         checkmarkColor: Colors.deepOrange,
                       );
@@ -867,6 +891,14 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                       radius: _hideRadius,
                       onEnabled: (value) => setState(() => _shareGpx = value),
                       onRadius: (value) => setState(() => _hideRadius = value),
+                    ),
+                  if (_selectedRideId != null)
+                    RideMediaSelection(
+                      key: ValueKey('media_$_selectedRideId'),
+                      rideId: _selectedRideId!,
+                      enabled: _shareGpx,
+                      busy: _publishing,
+                      onChanged: (ids) => _rideMediaIds = ids,
                     ),
                 ],
               ],

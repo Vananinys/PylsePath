@@ -3,6 +3,22 @@ part of '../../main.dart';
 /// Нижняя панель заезда, HUD предзапуска и действия с панелью друга
 /// на карте (профиль, удаление, стикеры).
 mixin _RideSheetsMixin on _MapScreenStateBase {
+  Future<void> _openGroupFromPreparation() async {
+    if (_isScreenLocked) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            GroupRideScreen(navigationController: _navigationController),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _isPreRideOpen = true;
+      _preRideGroupRoomId = GroupRideService().activeRoomId;
+    });
+  }
+
   /// Нижняя панель карты в стиле Komoot: второстепенные действия (история,
   /// сохранённые маршруты) и главная кнопка «Свободный заезд», по нажатию
   /// на которую раскрывается HUD подготовки ([PreRideWidget]).
@@ -42,6 +58,18 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
         _showSnackBar('Удерживайте нужное место на карте и выберите маршрут');
       case RouteEntryAction.saved:
         _openSavedRoutes();
+      case RouteEntryAction.constructor:
+        final saved = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RouteBuilderScreen(
+              initialCenter: _navigationController.currentLocation,
+            ),
+          ),
+        );
+        if (saved == true && mounted) _openSavedRoutes();
+      case RouteEntryAction.myPlaces:
+        _openMyPlaces();
       case RouteEntryAction.roundTrip:
         _openRoundTripPlanner();
     }
@@ -111,6 +139,16 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
       return;
     }
     _startingRide = true;
+    final group = GroupRideService();
+    final selectedRoom = _preRideGroupRoomId;
+    final selectedOwner = group.userId;
+    final selectedRevision = group.membershipRevision;
+    bool selectionValid() =>
+        selectedRoom == null ||
+        (selectedRoom == group.activeRoomId &&
+            selectedOwner != null &&
+            selectedOwner == group.userId &&
+            selectedRevision == group.membershipRevision);
     await _navigationController.refreshEquipment();
     if (!mounted) {
       _startingRide = false;
@@ -120,6 +158,16 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
       context.read<ProfileProvider>().profile.weightKg,
     );
     try {
+      if (selectedRoom != null) {
+        await group.refreshMembers();
+        if (!mounted || !selectionValid() || group.error != null) {
+          if (mounted)
+            _showSnackBar(
+              'Не удалось подтвердить группу. Откройте её или выберите самостоятельную поездку.',
+            );
+          return;
+        }
+      }
       if (_navigationController.gpsSignal.value.quality != GpsQuality.good) {
         final proceed = await showDialog<bool>(
           context: context,
@@ -174,11 +222,17 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
         builder: (_) => const RideCountdown(),
       );
       if (confirmed != true || !mounted || !_isForeground) return;
+      if (!selectionValid()) {
+        _showSnackBar(
+          'Группа изменилась во время подготовки. Выберите её заново.',
+        );
+        return;
+      }
       if (_navigationController.routePoints.isNotEmpty &&
           !_navigationController.isNavigating) {
         _navigationController.toggleNavigation();
       }
-      _navigationController.startWorkout();
+      _navigationController.startWorkout(groupRoomId: selectedRoom);
       setState(() => _isPreRideOpen = false);
       _setCameraLockMode(CameraLockMode.followAndHeading);
       if (_isMapReady) _mapController.move(_displayPosition.value, 17);

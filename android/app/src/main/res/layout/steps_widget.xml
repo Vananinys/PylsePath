@@ -1,0 +1,8 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/steps_widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:gravity="center_vertical" android:padding="20dp" android:background="@drawable/steps_widget_background">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PulsePath  ↗" android:textColor="#B6F373" android:textSize="14sp" android:textStyle="bold" />
+    <TextView android:id="@+id/steps_day" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="ШАГИ СЕГОДНЯ" android:textColor="#B8C8BC" android:textSize="11sp" android:layout_marginTop="8dp" />
+    <TextView android:id="@+id/steps_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0" android:textColor="#FFFFFF" android:textSize="38sp" android:textStyle="bold" android:maxLines="1" />
+    <TextView android:id="@+id/steps_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Откройте PulsePath" android:textColor="#B8C8BC" android:textSize="11sp" android:maxLines="2" />
+</LinearLayout>

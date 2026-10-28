@@ -169,6 +169,8 @@ class NotificationService extends ChangeNotifier {
 
   String _preview(ChatMessage m) => m.isStickerOnly
       ? 'Стикер ${m.sticker}'
+      : m.isVideo
+      ? '🎬 Видео'
       : m.isPhoto
       ? '📷 Фото'
       : m.isVoice

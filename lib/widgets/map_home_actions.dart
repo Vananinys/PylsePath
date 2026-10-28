@@ -88,7 +88,7 @@ class MapHomeActions extends StatelessWidget {
   }
 }
 
-enum RouteEntryAction { search, map, saved, roundTrip }
+enum RouteEntryAction { search, map, saved, roundTrip, myPlaces, constructor }
 
 Future<RouteEntryAction?> showRouteEntrySheet(BuildContext context) =>
     showModalBottomSheet<RouteEntryAction>(
@@ -133,6 +133,18 @@ Future<RouteEntryAction?> showRouteEntrySheet(BuildContext context) =>
                   Icons.bookmarks_outlined,
                   'Сохранённые маршруты',
                   'Выбрать готовый маршрут',
+                ),
+                (
+                  RouteEntryAction.constructor,
+                  Icons.edit_road_outlined,
+                  'Конструктор маршрута',
+                  'Свои точки, обрезка, круг и построение по дорогам',
+                ),
+                (
+                  RouteEntryAction.myPlaces,
+                  Icons.place_outlined,
+                  'Мои места',
+                  'Дом, работа и личные точки',
                 ),
                 (
                   RouteEntryAction.roundTrip,

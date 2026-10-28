@@ -28,6 +28,7 @@ class GpsSignal {
     unavailable: unavailable,
     stale:
         updatedAt != null &&
-        now.difference(updatedAt!) >= const Duration(seconds: 30),
+        (now.difference(updatedAt!) >= const Duration(seconds: 30) ||
+            updatedAt!.isAfter(now.add(const Duration(seconds: 5)))),
   );
 }

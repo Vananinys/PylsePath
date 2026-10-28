@@ -27,27 +27,36 @@ RouteStep _step(double longitude, double offset) => RouteStep(
   routeOffsetMeters: offset,
 );
 
+void deliver(MapNavigationController controller, Position position) =>
+    controller.applyGpsSampleForTesting(
+      position,
+      observedAt: position.timestamp,
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('route guidance advances across skipped fixes and never goes backward', () {
-    final controller = MapNavigationController()
-      ..setRouteForTesting(
-        points: const [LatLng(55, 83), LatLng(55, 83.004)],
-        steps: [_step(83, 0), _step(83.0015, 100), _step(83.003, 200)],
-      )
-      ..setNavigating(true);
+  test(
+    'route guidance advances across skipped fixes and never goes backward',
+    () {
+      final controller = MapNavigationController()
+        ..setRouteForTesting(
+          points: const [LatLng(55, 83), LatLng(55, 83.004)],
+          steps: [_step(83, 0), _step(83.0015, 100), _step(83.003, 200)],
+        )
+        ..setNavigating(true);
 
-    controller.applyGpsSampleForTesting(_fix(83.0003, 1));
-    expect(controller.currentStepIndex, 1);
+      deliver(controller, _fix(83.0003, 1));
+      expect(controller.currentStepIndex, 1);
 
-    // A sparse GPS stream can jump past the maneuver coordinate entirely.
-    controller.applyGpsSampleForTesting(_fix(83.002, 2));
-    expect(controller.currentStepIndex, 2);
+      // A sparse GPS stream can jump past the maneuver coordinate entirely.
+      deliver(controller, _fix(83.002, 2));
+      expect(controller.currentStepIndex, 2);
 
-    // A noisy fix behind the rider cannot restore an earlier instruction.
-    controller.applyGpsSampleForTesting(_fix(83.001, 3));
-    expect(controller.currentStepIndex, 2);
-    controller.dispose();
-  });
+      // A noisy fix behind the rider cannot restore an earlier instruction.
+      deliver(controller, _fix(83.001, 3));
+      expect(controller.currentStepIndex, 2);
+      controller.dispose();
+    },
+  );
 }

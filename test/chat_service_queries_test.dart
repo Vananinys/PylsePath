@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -22,8 +26,18 @@ void main() {
     'created_at': '2026-10-17T10:00:00Z',
     'reactions': <String, dynamic>{},
   };
+  bool batchSigningFails = false;
+  bool deleted = false;
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
+    final support = Directory.systemTemp.createTempSync(
+      'pulsepath-cleanup-integration-',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (_) async => support.path,
+        );
     final client = MockClient((request) async {
       requests.add(request);
       if (request.url.path.endsWith('/token')) {
@@ -52,7 +66,31 @@ void main() {
           request: request,
         );
       }
+      if (request.url.path.contains('/object/sign/')) {
+        return http.Response(
+          batchSigningFails ? '{"message":"offline"}' : '[]',
+          batchSigningFails ? 503 : 200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'DELETE' &&
+          request.url.path.endsWith('/object/chat_media')) {
+        return http.Response(
+          '[]',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
       if (request.url.path.endsWith('/chat_messages')) {
+        if (request.method == 'DELETE') {
+          deleted = true;
+        } else if (deleted)
+          return http.Response(
+            '[]',
+            200,
+            headers: {'content-type': 'application/json'},
+            request: request,
+          );
         return http.Response(
           jsonEncode(request.method == 'POST' ? row : [row]),
           request.method == 'POST' ? 201 : 200,
@@ -136,4 +174,53 @@ void main() {
       expect(requests.any((request) => request.method == 'POST'), isFalse);
     },
   );
+  test(
+    'Batch signing failure keeps stable references without individual fan-out',
+    () async {
+      batchSigningFails = true;
+      row['photo_url'] = 'chat:$me/chat_photo_$messageId.jpg';
+      final messages = await ChatService().fetchConversation(
+        friend,
+        strict: true,
+      );
+      expect(messages, isNotEmpty);
+      expect(messages.first.photoUrl, row['photo_url']);
+      final signatures = requests
+          .where((r) => r.url.path.contains('/object/sign/'))
+          .toList();
+      expect(signatures, hasLength(1));
+      expect(signatures.single.url.path, endsWith('/object/sign/chat_media'));
+      row.remove('photo_url');
+      batchSigningFails = false;
+    },
+  );
+  test('Deleting a media message records cleanup and removes its exact storage path', () async {
+    row['video_url'] = 'chat:$me/chat_video_$messageId.mp4';
+    row['video_poster_url'] = 'chat:$me/chat_poster_$messageId.jpg';
+    expect(await ChatService().deleteMessage(messageId), isTrue);
+    await ChatService().retryAttachmentCleanup();
+    final removals = requests
+        .where(
+          (r) =>
+              r.method == 'DELETE' && r.url.path.endsWith('/object/chat_media'),
+        )
+        .toList();
+    expect(
+      removals,
+      hasLength(1),
+      reason:
+          requests.map((r) => '${r.method} ${r.url.path}').join('\n') +
+          (await SharedPreferences.getInstance())
+              .getString('chat_attachment_cleanup_v1_$me')
+              .toString(),
+    );
+    final paths = (jsonDecode(removals.single.body) as Map)['prefixes'] as List;
+    expect(paths.toSet(), {
+      '$me/chat_video_$messageId.mp4',
+      '$me/chat_poster_$messageId.jpg',
+    });
+    row.remove('video_url');
+    row.remove('video_poster_url');
+    deleted = false;
+  });
 }

@@ -1,3 +1,4 @@
+import '../widgets/home_steps_pill.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -469,6 +470,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildInterfaceSection(context),
         const Divider(),
         _sectionHeader('Шагомер и активность'),
+        const HomeStepsSetting(),
         ListTile(
           leading: const Icon(Icons.directions_walk),
           title: const Text('Шагомер и дневная цель'),

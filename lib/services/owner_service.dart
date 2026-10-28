@@ -14,10 +14,20 @@ class OwnerService {
     }
   }
 
-  Future<Map<String, dynamic>> entitlements() async => Map<String, dynamic>.from(
-    await _client?.rpc('my_app_entitlements') ??
-        <String, dynamic>{},
-  );
+  static SupabaseClient get _writeClient {
+    final client = _client;
+    if (client == null || client.auth.currentUser == null) {
+      throw StateError(
+        'Войдите в аккаунт и повторите действие. Изменения не сохранены.',
+      );
+    }
+    return client;
+  }
+
+  Future<Map<String, dynamic>> entitlements() async =>
+      Map<String, dynamic>.from(
+        await _client?.rpc('my_app_entitlements') ?? <String, dynamic>{},
+      );
   Future<List<CatalogAchievement>> catalog({
     bool includeInactive = false,
   }) async {
@@ -49,8 +59,7 @@ class OwnerService {
   }
 
   Future<void> save(Map<String, dynamic> row) async {
-    final client = _client;
-    if (client == null) return;
+    final client = _writeClient;
     if (row['id'] == null) {
       await client
           .from('achievement_catalog')
@@ -86,8 +95,7 @@ class OwnerService {
   }
 
   Future<void> saveTitle(Map<String, dynamic> row) async {
-    final client = _client;
-    if (client == null) return;
+    final client = _writeClient;
     if (row['id'] == null) {
       await client
           .from('title_catalog')
@@ -138,8 +146,7 @@ class OwnerService {
     required String label,
     required String icon,
   }) async {
-    final client = _client;
-    if (client == null) return;
+    final client = _writeClient;
     if (key.startsWith('builtin:')) {
       await client
           .rpc(
@@ -166,12 +173,9 @@ class OwnerService {
 
   Future<List<Map<String, dynamic>>> rewardUsers([String query = '']) async =>
       (await _client
-              ?.rpc(
-                'owner_reward_users',
-                params: {'p_query': query},
-              )
-              .timeout(const Duration(seconds: 12)) ??
-          const <Map<String, dynamic>>[])
+                  ?.rpc('owner_reward_users', params: {'p_query': query})
+                  .timeout(const Duration(seconds: 12)) ??
+              const <Map<String, dynamic>>[])
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
 
@@ -193,12 +197,12 @@ class OwnerService {
 
   Future<List<Map<String, dynamic>>> recipientAwards(String userId) async =>
       (await _client
-              ?.from('user_owner_awards')
-              .select()
-              .eq('user_id', userId)
-              .order('granted_at', ascending: false)
-              .timeout(const Duration(seconds: 12)) ??
-          const [])
+                  ?.from('user_owner_awards')
+                  .select()
+                  .eq('user_id', userId)
+                  .order('granted_at', ascending: false)
+                  .timeout(const Duration(seconds: 12)) ??
+              const [])
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
 
@@ -210,26 +214,27 @@ class OwnerService {
     bool all = false,
     String reason = '',
   }) async =>
-      ((await _client
-              ?.rpc(
-                'owner_award_users',
-                params: {
-                  'p_action': action,
-                  'p_kind': kind,
-                  'p_key': key,
-                  'p_user_id': userId,
-                  'p_all': all,
-                  'p_reason': reason,
-                },
-              )
-              .timeout(const Duration(seconds: 20))) as num? ?? -1)
+      ((await _writeClient
+                  .rpc(
+                    'owner_award_users',
+                    params: {
+                      'p_action': action,
+                      'p_kind': kind,
+                      'p_key': key,
+                      'p_user_id': userId,
+                      'p_all': all,
+                      'p_reason': reason,
+                    },
+                  )
+                  .timeout(const Duration(seconds: 20)))
+              as num)
           .toInt();
 
   Future<List<Map<String, dynamic>>> awardHistory() async =>
       (await _client
-              ?.rpc('owner_award_history_details')
-              .timeout(const Duration(seconds: 12)) ??
-          const [])
+                  ?.rpc('owner_award_history_details')
+                  .timeout(const Duration(seconds: 12)) ??
+              const [])
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
 
@@ -238,14 +243,13 @@ class OwnerService {
       action: 'grant',
       kind: 'title',
       key: id,
-      userId: _client?.auth.currentUser?.id,
+      userId: _writeClient.auth.currentUser!.id,
     );
   }
 
   Future<void> revoke(String id) async {
-    final client = _client;
-    final owner = client?.auth.currentUser?.id;
-    if (client == null || owner == null) return;
+    final client = _writeClient;
+    final owner = client.auth.currentUser!.id;
     final award = await client
         .from('user_owner_awards')
         .select('kind,award_key')

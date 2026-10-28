@@ -16,13 +16,15 @@ class ChatReplyPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final target = message;
-    final thumbnail = target?.photoUrl;
+    final thumbnail = target?.videoPosterUrl ?? target?.photoUrl;
     final text = target == null
         ? 'Исходное сообщение удалено или недоступно'
         : target.routeAttachment != null
         ? '${target.routeAttachment!.label}: ${target.routeAttachment!.title}'
         : target.isVoice
         ? 'Голосовое сообщение · ${target.audioSeconds ?? 0} с'
+        : target.isVideo
+        ? 'Видео${target.videoMetadata == null ? '' : ' · ${target.videoMetadata!.durationLabel}'}'
         : target.isPhoto
         ? ((target.body ?? '').isEmpty ? 'Фото' : target.body!)
         : (target.body?.trim().isNotEmpty ?? false)
@@ -49,6 +51,10 @@ class ChatReplyPreview extends StatelessWidget {
                 child: thumbnail.startsWith('http')
                     ? Image.network(
                         thumbnail,
+                        cacheWidth:
+                            (38 * MediaQuery.devicePixelRatioOf(context))
+                                .round()
+                                .clamp(38, 152),
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) =>
                             const Icon(Icons.photo_outlined),

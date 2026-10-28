@@ -1,9 +1,29 @@
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pulsepath/data/workout_draft_store.dart';
 import 'package:pulsepath/models/activity_type.dart';
+
+class RejectBackups extends InMemorySharedPreferencesStore {
+  RejectBackups(String original)
+    : super.withData({'flutter.workout_draft_account-a': original});
+  bool reject = true;
+  int backupAttempts = 0;
+  @override
+  Future<bool> setValue(String type, String key, Object value) async {
+    if (key.contains('_damaged_')) {
+      backupAttempts++;
+      if (reject) return false;
+    }
+    return super.setValue(type, key, value);
+  }
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -60,5 +80,45 @@ void main() {
     );
     await expectLater(store.load(), throwsFormatException);
     expect(prefs.getString(key), isNotNull);
+  });
+  test(
+    'A new checkpoint preserves corrupt bytes even when load was not called',
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+      const key = 'workout_draft_$owner';
+      const original = '{unfinished-gps';
+      await prefs.setString(key, original);
+      await WorkoutDraftStore(owner).save(draft);
+      final backup = '${key}_damaged_${sha256.convert(utf8.encode(original))}';
+      expect(prefs.getString(backup), original);
+      expect((await WorkoutDraftStore(owner).load())?.localId, draft.localId);
+      await WorkoutDraftStore(owner).save(draft);
+      expect(
+        prefs.getKeys().where(
+          (key) => key.startsWith('workout_draft_${owner}_damaged_'),
+        ),
+        hasLength(1),
+      );
+    },
+  );
+  test('A rejected backup cannot be trusted through the optimistic preferences cache', () async {
+    const original = '{broken-final-checkpoint';
+    final platform = RejectBackups(original);
+    SharedPreferencesStorePlatform.instance = platform;
+    final prefs = await SharedPreferences.getInstance();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await expectLater(WorkoutDraftStore(owner).save(draft), throwsStateError);
+      expect(
+        (await platform.getAll())['flutter.workout_draft_$owner'],
+        original,
+      );
+    }
+    expect(platform.backupAttempts, 2);
+    platform.reject = false;
+    await WorkoutDraftStore(owner).save(draft);
+    final backup =
+        'flutter.workout_draft_${owner}_damaged_${sha256.convert(utf8.encode(original))}';
+    expect((await platform.getAll())[backup], original);
+    expect(prefs.getString('workout_draft_$owner'), isNot(original));
   });
 }

@@ -14,6 +14,7 @@ class _Platform extends StepRecordingPlatform {
   Completer<void>? gate;
   final Map<String, int> days = {};
   final List<String> calls = [];
+  final bindings = <Map<String, dynamic>>[];
   Map<String, dynamic>? initializedWith;
 
   @override
@@ -26,6 +27,7 @@ class _Platform extends StepRecordingPlatform {
     Map<String, dynamic>? arguments,
   ]) async {
     calls.add(method);
+    if (method == 'bindOwner') bindings.add(Map.of(arguments!));
     if (method == 'status') {
       return {'available': services, 'permissionGranted': permission};
     }
@@ -260,4 +262,27 @@ void main() {
     expect(platform.recording, true);
     service.endLiveUpdates();
   });
+  test(
+    'Auth binding is immediate, owner-scoped and independent from UI disposal',
+    () async {
+      await service.initialize();
+      expect(platform.bindings.last['owner'], 'rider-a');
+      final count = platform.bindings.length;
+      await service.stop();
+      await service.initialize();
+      expect(platform.bindings.length, count);
+      platform.gate = Completer<void>();
+      final pending = service.refresh();
+      await Future<void>.delayed(Duration.zero);
+      owner = 'rider-b';
+      await service.bindToUser(owner);
+      expect(platform.bindings.last['owner'], 'rider-b');
+      expect(platform.bindings.last['at'], now.millisecondsSinceEpoch);
+      platform.gate!.complete();
+      await pending;
+      expect(service.steps, 0);
+      await service.bindToUser(null);
+      expect(platform.bindings.last['owner'], isNull);
+    },
+  );
 }

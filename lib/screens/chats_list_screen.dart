@@ -297,7 +297,13 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         subtitle: Text(
           last == null
               ? 'Диалог ещё не начат'
-              : (last.isStickerOnly
+              : (last.isVideo
+                    ? 'Видео'
+                    : last.isPhoto
+                    ? 'Фото'
+                    : last.isVoice
+                    ? 'Голосовое сообщение'
+                    : last.isStickerOnly
                     ? 'Стикер ${last.sticker}'
                     : last.body ?? ''),
           maxLines: 1,

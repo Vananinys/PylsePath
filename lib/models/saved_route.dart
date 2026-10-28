@@ -182,23 +182,28 @@ class SavedRoute {
   };
 
   factory SavedRoute.fromJson(Map<String, dynamic> json) {
-    // История заездов — самая тяжёлая локальная модель, и одна повреждённая
-    // запись не должна ломать чтение/сохранение всей истории: координаты и
-    // текстовые поля разбираются с отбраковкой мусора (как viaPoints ниже).
-    var pointsList = (json['routePoints'] as List? ?? [])
-        .where(
-          (p) =>
-              p is List &&
-              p.length == 2 &&
-              p[0] is num &&
-              p[1] is num &&
-              (p[0] as num).isFinite &&
-              (p[1] as num).isFinite &&
-              (p[0] as num).abs() <= 90 &&
-              (p[1] as num).abs() <= 180,
-        )
-        .map((p) => LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()))
-        .toList();
+    // Track indices are shared by moments and GPS segment boundaries.
+    // Reject damage instead of silently shifting those indices.
+    final rawPoints = json['routePoints'];
+    if (rawPoints is! List) {
+      throw const FormatException('Отсутствуют точки трека');
+    }
+    final pointsList = <LatLng>[];
+    for (final p in rawPoints) {
+      if (p is! List ||
+          p.length != 2 ||
+          p[0] is! num ||
+          p[1] is! num ||
+          !(p[0] as num).isFinite ||
+          !(p[1] as num).isFinite ||
+          (p[0] as num).abs() > 90 ||
+          (p[1] as num).abs() > 180) {
+        throw const FormatException('Повреждена точка трека');
+      }
+      pointsList.add(
+        LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+      );
+    }
     // Новый формат — ISO-строка; легаси — миллисекунды от эпохи (num).
     final rawCreatedAt = json['createdAt'];
     final DateTime? createdAt = switch (rawCreatedAt) {
@@ -212,7 +217,9 @@ class SavedRoute {
     if (finishLat is num &&
         finishLon is num &&
         finishLat.isFinite &&
-        finishLon.isFinite) {
+        finishLon.isFinite &&
+        finishLat.abs() <= 90 &&
+        finishLon.abs() <= 180) {
       finish = LatLng(finishLat.toDouble(), finishLon.toDouble());
     } else if (pointsList.isNotEmpty) {
       finish = pointsList.last;
