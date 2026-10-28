@@ -274,7 +274,7 @@ class AppUpdateService {
         await for (final chunk in response.stream.timeout(
           const Duration(seconds: 30),
         )) {
-          final bytes = chunk as List<int>;
+          final List<int> bytes = chunk;
           received += bytes.length;
           if (received > release.apkSizeBytes) {
             throw StateError('Размер APK больше заявленного');
