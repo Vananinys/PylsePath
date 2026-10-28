@@ -6,10 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+
+enum UpdateChannel { stable, beta }
 
 class AppRelease {
   const AppRelease({
@@ -20,6 +23,8 @@ class AppRelease {
     required this.apkSha256,
     required this.apkSizeBytes,
     required this.notes,
+    this.channel = UpdateChannel.stable,
+    this.sourceCommit,
   });
 
   final int versionCode;
@@ -29,6 +34,8 @@ class AppRelease {
   final String apkSha256;
   final int apkSizeBytes;
   final String notes;
+  final UpdateChannel channel;
+  final String? sourceCommit;
 
   static final _pathPattern = RegExp(
     r'^android/([0-9]+)/pulsepath-([0-9]+)\.apk$',
@@ -43,8 +50,14 @@ class AppRelease {
     final hash = json['apk_sha256'];
     final size = json['apk_size_bytes'];
     final notes = json['notes'];
+    final channel = json['channel'] ?? 'stable';
+    final commit = json['source_commit'];
     final match = path is String ? _pathPattern.firstMatch(path) : null;
-    if (code is! int ||
+    if ((channel != 'stable' && channel != 'beta') ||
+        (commit != null &&
+            (commit is! String ||
+                !RegExp(r'^[0-9a-f]{40}$').hasMatch(commit))) ||
+        code is! int ||
         code <= 0 ||
         name is! String ||
         name.isEmpty ||
@@ -72,6 +85,8 @@ class AppRelease {
       apkSha256: hash,
       apkSizeBytes: size,
       notes: notes,
+      channel: channel == 'beta' ? UpdateChannel.beta : UpdateChannel.stable,
+      sourceCommit: commit as String?,
     );
   }
 
@@ -122,17 +137,70 @@ class AppUpdateService {
 
   static Future<AppRelease?> availableRelease() async {
     if (!supported) return null;
-    final rows = await Supabase.instance.client
-        .from('app_releases')
-        .select(
-          'version_code,version_name,apk_path,apk_url,apk_sha256,apk_size_bytes,notes',
-        )
-        .order('version_code', ascending: false)
-        .limit(1)
-        .timeout(const Duration(seconds: 12));
-    if (rows.isEmpty) return null;
-    final release = AppRelease.fromJson(rows.first);
-    return release.versionCode > await installedVersionCode() ? release : null;
+    final channel = await selectedChannel();
+    final releases = await releaseHistory(channel: channel);
+    return newestCompatible(releases, await installedVersionCode(), channel);
+  }
+
+  static const _channelKey = 'app_update_channel_v1';
+  static Future<UpdateChannel> selectedChannel() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_channelKey) == 'beta'
+        ? UpdateChannel.beta
+        : UpdateChannel.stable;
+  }
+
+  static Future<void> selectChannel(UpdateChannel channel) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString(_channelKey, channel.name)) {
+      await prefs.reload();
+      throw StateError('Не удалось сохранить канал обновлений');
+    }
+  }
+
+  /// Old clients read app_releases only; beta rows never enter that table.
+  static Future<List<AppRelease>> releaseHistory({
+    UpdateChannel channel = UpdateChannel.stable,
+  }) async {
+    const columns =
+        'version_code,version_name,apk_path,apk_url,apk_sha256,apk_size_bytes,notes,source_commit';
+    Future<List<AppRelease>> read(String table, UpdateChannel kind) async {
+      final rows = await Supabase.instance.client
+          .from(table)
+          .select(columns)
+          .lte('published_at', DateTime.now().toUtc().toIso8601String())
+          .order('version_code', ascending: false)
+          .limit(100)
+          .timeout(const Duration(seconds: 12));
+      return rows
+          .map((row) => AppRelease.fromJson({...row, 'channel': kind.name}))
+          .toList();
+    }
+
+    final stable = await read('app_releases', UpdateChannel.stable);
+    final beta = channel == UpdateChannel.beta
+        ? await read('app_beta_releases', UpdateChannel.beta)
+        : <AppRelease>[];
+    return [...stable, ...beta]
+      ..sort((a, b) => b.versionCode.compareTo(a.versionCode));
+  }
+
+  static AppRelease? newestCompatible(
+    List<AppRelease> releases,
+    int installed,
+    UpdateChannel channel,
+  ) {
+    final candidates =
+        releases
+            .where(
+              (r) =>
+                  r.versionCode > installed &&
+                  (channel == UpdateChannel.beta ||
+                      r.channel == UpdateChannel.stable),
+            )
+            .toList()
+          ..sort((a, b) => b.versionCode.compareTo(a.versionCode));
+    return candidates.firstOrNull;
   }
 
   static Future<File> download(

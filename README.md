@@ -9,3 +9,6 @@
 Если DNS `dl.google.com` недоступен и в `build/test_dependencies/recording-maven` есть подготовленные зависимости, скрипт автоматически включает автономный режим Gradle. Его можно включить явно: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run_android.ps1 -BuildApk -Offline --release --no-pub`. `-Offline` действует на Gradle и Pub; `--no-pub` пропускает Pub. Для принудительной сетевой сборки есть `-Online`. Автономной сборке нужны заранее сохранённые зависимости и установленный Gradle. Скрипт не удаляет генерируемые кэши без отдельного параметра `-ResetGeneratedCaches`.
 
 Проверено 22 октября 2026: исходная команда `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run_android.ps1 -BuildApk --release --no-pub` успешно собрала `build/app/outputs/flutter-apk/app-release.apk` при недоступном DNS Google Maven. Локальный Maven-репозиторий подключён перед сетевыми, чтобы Gradle не выбирал неполные записи сетевого кэша. Журнал: `build/android_launcher_release_fix.log`.
+
+Актуальные инструкции сохранения исходников, восстановления и каналов обновлений: [docs/GIT_AND_RELEASES_RU.md](docs/GIT_AND_RELEASES_RU.md).
+Добровольные локальные счётчики и анализ отчётов: [docs/USAGE_STATISTICS_RU.md](docs/USAGE_STATISTICS_RU.md).

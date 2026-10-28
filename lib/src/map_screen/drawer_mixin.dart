@@ -78,6 +78,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Сохраненные маршруты'),
         subtitle: const Text('Избранное и offline-треки'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.savedRoutesOpened);
           Navigator.pop(context);
           _openSavedRoutes();
         },
@@ -95,6 +96,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
               unread > 0 ? _buildDrawerBadge(unread) : const SizedBox.shrink(),
         ),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.chatsOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -107,6 +109,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Сообщество'),
         subtitle: const Text('Лента, друзья, видимость на карте'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.communityOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -122,6 +125,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Тренировочный центр'),
         subtitle: const Text('Календарь, динамика и история'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.trainingOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -139,6 +143,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Достижения'),
         subtitle: const Text('Рекорды и бейджи'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.achievementsOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -154,6 +159,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Тепловая карта'),
         subtitle: const Text('Все ваши заезды на одной карте'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.heatmapOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -169,6 +175,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Офлайн-карты'),
         subtitle: const Text('Скачать область для поездки без сети'),
         onTap: () {
+          UsageStatistics.instance.record(UsageEvent.offlineMapsOpened);
           Navigator.pop(context);
           Navigator.push(
             context,
@@ -188,6 +195,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Совместная поездка'),
         subtitle: const Text('Катайте вместе с друзьями'),
         onTap: () async {
+          UsageStatistics.instance.record(UsageEvent.groupOpened);
           Navigator.pop(context);
           final result = await Navigator.push(
             context,
@@ -216,6 +224,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
         title: const Text('Мой гараж'),
         subtitle: const Text('Велосипеды и экипировка'),
         onTap: () async {
+          UsageStatistics.instance.record(UsageEvent.garageOpened);
           final provider = context.read<ProfileProvider>();
           Navigator.pop(context);
           await Navigator.push(

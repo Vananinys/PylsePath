@@ -96,3 +96,6 @@ __pycache__/
 **/*.p12
 **/*.pfx
 **/node_modules/
+# Voluntary tester exports are private local data, never source files.
+/usage-reports/
+/analysis-output/

@@ -1,3 +1,4 @@
+import 'services/usage_statistics.dart';
 import 'widgets/home_steps_pill.dart';
 import 'widgets/map_home_actions.dart';
 import 'widgets/incoming_chat_preview.dart';
@@ -169,6 +170,14 @@ void main() async {
 
   final settings = AppSettings();
   await settings.load();
+  try {
+    final package = await PackageInfo.fromPlatform();
+    UsageStatistics.instance.version =
+        '${package.version}+${package.buildNumber}';
+    UsageStatistics.instance.record(UsageEvent.appOpened);
+  } catch (_) {
+    /* Optional local counters never block startup. */
+  }
   await NavigationPreferences.instance.load();
   final repository = SavedRoutesRepository();
   runApp(PulsePathApp(settings: settings, repository: repository));

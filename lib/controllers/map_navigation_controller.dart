@@ -1,3 +1,4 @@
+import '../services/usage_statistics.dart';
 import '../models/workout_details.dart';
 import '../services/distance_laps.dart';
 import '../services/workout_step_tracker.dart';
@@ -387,6 +388,7 @@ class MapNavigationController extends ChangeNotifier {
             (!_hasSession && !_isNavigating))
           return;
         _gpsRecoveryAttempts++;
+        UsageStatistics.instance.record(UsageEvent.gpsRecoveryStarted);
         _waitingForRecoveredStream = true;
         _breakTrackSegment = true;
         try {
@@ -1660,6 +1662,7 @@ class MapNavigationController extends ChangeNotifier {
             massAssumed: bikeKg < 3 || bikeKg > 80,
           );
     _garageService.bindToSession(_sessionVehicle);
+    UsageStatistics.instance.record(UsageEvent.workoutStarted);
     _startWorkoutTimer();
     _captureWorkoutSample(force: true);
     _queueDraft(force: true);
@@ -1778,6 +1781,7 @@ class MapNavigationController extends ChangeNotifier {
 
   void pauseWorkout() {
     if (!_isWorkoutActive) return;
+    UsageStatistics.instance.record(UsageEvent.workoutPaused);
     _stepTracker.pause();
     _isWorkoutActive = false;
     _isWorkoutPaused = true;
@@ -1798,6 +1802,7 @@ class MapNavigationController extends ChangeNotifier {
   void resumeWorkout() {
     _stationaryProbe = null;
     if (!_isWorkoutPaused || _isSavingWorkout || _disposed) return;
+    UsageStatistics.instance.record(UsageEvent.workoutResumed);
     _stepTracker.resume();
     _brakeLoad?.breakSegment();
     _isWorkoutActive = true;
@@ -1891,6 +1896,7 @@ class MapNavigationController extends ChangeNotifier {
     try {
       _queueDraft(force: true);
       await _workoutHistoryRepository.addWorkout(route);
+      UsageStatistics.instance.record(UsageEvent.workoutSaved);
       if (!_disposed) _resetWorkoutState();
       try {
         await _draftStore.delete();
@@ -1907,6 +1913,7 @@ class MapNavigationController extends ChangeNotifier {
       );
       return route;
     } catch (_) {
+      UsageStatistics.instance.record(UsageEvent.workoutSaveFailed);
       // Preserve the track on a local write error. Retry Finish or Resume.
       if (!_disposed) _startLivePublishTimer();
       rethrow;
@@ -1929,6 +1936,7 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
     try {
       await _draftStore.delete();
+      UsageStatistics.instance.record(UsageEvent.workoutDiscarded);
       if (!_disposed) _resetWorkoutState();
     } finally {
       _isSavingWorkout = false;
@@ -2378,6 +2386,8 @@ class MapNavigationController extends ChangeNotifier {
         _lastStreamPosition = position;
         _lastStreamFixAt = _gpsNow();
         _gpsRecoveryAttempts = 0;
+        if (_waitingForRecoveredStream || _streamFailed)
+          UsageStatistics.instance.record(UsageEvent.gpsRecovered);
         _waitingForRecoveredStream = false;
         _streamFailed = false;
         _locationReady = true;
@@ -2391,6 +2401,7 @@ class MapNavigationController extends ChangeNotifier {
         _breakTrackSegment = true;
         _locationReady = false;
         _scheduleGpsRecovery();
+        UsageStatistics.instance.record(UsageEvent.gpsStreamFailed);
         debugPrint('[GPS] stream failed: $error');
         if (!_disposed) gpsSignal.value = const GpsSignal(unavailable: true);
       },
@@ -2713,6 +2724,7 @@ class MapNavigationController extends ChangeNotifier {
       _acceptRoutingResult(result.route, generation, activity);
     } catch (error) {
       if (!_disposed && generation == _routeGeneration) {
+        UsageStatistics.instance.record(UsageEvent.routeBuildFailed);
         _routeError = 'Не удалось построить круг. $error';
       }
       rethrow;
@@ -2729,6 +2741,7 @@ class MapNavigationController extends ChangeNotifier {
     int generation,
     ActivityType activity,
   ) {
+    UsageStatistics.instance.record(UsageEvent.routeBuilt);
     _preserveTrack = false;
     _resetDeviation();
     _routePoints = result.points;
@@ -2761,6 +2774,7 @@ class MapNavigationController extends ChangeNotifier {
         via: List.of(_routeVia),
       );
       if (_disposed || generation != _routeGeneration) return;
+      UsageStatistics.instance.record(UsageEvent.routeBuilt);
       _preserveTrack = false;
       _resetDeviation();
       _routePoints = result.points;
@@ -2778,6 +2792,7 @@ class MapNavigationController extends ChangeNotifier {
       unawaited(_loadSurfaceInfo(result.points, generation, activity));
     } catch (error) {
       if (!_disposed && generation == _routeGeneration) {
+        UsageStatistics.instance.record(UsageEvent.routeBuildFailed);
         _routeError = error is TimeoutException
             ? 'Сервис маршрутов не ответил. Проверьте интернет и повторите.'
             : 'Не удалось построить маршрут. $error';
@@ -2827,6 +2842,7 @@ class MapNavigationController extends ChangeNotifier {
       _acceptRoutingResult(result, generation, activity);
     } catch (_) {
       if (!_disposed && generation == _routeGeneration) {
+        UsageStatistics.instance.record(UsageEvent.routeBuildFailed);
         _routeError =
             'Не удалось изменить остановки. Предыдущий маршрут сохранён.';
       }

@@ -1,4 +1,7 @@
+import 'app_versions_screen.dart';
+import 'usage_statistics_screen.dart';
 import '../widgets/home_steps_pill.dart';
+
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -615,6 +618,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : () => PushService.instance.showWaterReminder(preview: true),
           ),
         const Divider(),
+        ListTile(
+          leading: const Icon(Icons.insights_outlined),
+          title: const Text('Помочь улучшить PulsePath'),
+          subtitle: const Text(
+            'Добровольные локальные счётчики, без GPS-треков',
+          ),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UsageStatisticsScreen()),
+          ),
+        ),
         _sectionHeader('Приватность'),
         _buildPrivacySection(context),
         const Divider(),
@@ -639,6 +653,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         if (AppUpdateService.supported) ...[
           _sectionHeader('Приложение'),
+          ListTile(
+            leading: const Icon(Icons.history_outlined),
+            title: const Text('Версии и бета-тестирование'),
+            subtitle: const Text(
+              'Канал обновлений, предыдущие APK и исходный код',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AppVersionsScreen()),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.system_update_outlined),
             title: const Text('Проверить обновления'),
