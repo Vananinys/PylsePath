@@ -15,3 +15,6 @@ create trigger app_beta_release_file_guard before insert or update
   on public.app_beta_releases for each row execute function public.pulsepath_check_release_file();
 comment on table public.app_beta_releases is
   'Opt-in beta APK catalog. No stable release push trigger; never insert beta builds into app_releases.';
+-- Apply after the beta clone, so this constraint applies only to stable rows.
+alter table public.app_releases add constraint app_releases_stable_name
+  check (version_name !~* '-(alpha|beta|rc)([.-]|$)');
