@@ -1,5 +1,8 @@
+import 'live_trail_style.dart';
+
 /// Модели сообщества: друзья, заявки в друзья, живая позиция друга.
 class FriendProfile {
+  final LiveTrailStyle? liveTrailStyle;
   final double? liveSpeedKmh;
   final String? liveActivity;
   final bool livePaused;
@@ -27,6 +30,7 @@ class FriendProfile {
   final DateTime? liveUpdatedAt;
 
   const FriendProfile({
+    this.liveTrailStyle,
     this.liveSpeedKmh,
     this.liveActivity,
     this.livePaused = false,
@@ -101,6 +105,11 @@ class FriendProfile {
   factory FriendProfile.fromRow(Map<String, dynamic> row) {
     final liveUpdatedAt = _parseDate(row['live_updated_at']);
     return FriendProfile(
+      liveTrailStyle: row['live_trail_style'] is Map
+          ? LiveTrailStyle.fromRow(
+              Map<String, dynamic>.from(row['live_trail_style'] as Map),
+            )
+          : null,
       liveSpeedKmh: _toDouble(row['live_speed_kmh']),
       liveActivity: row['live_activity'] as String?,
       livePaused: row['live_paused'] == true,
@@ -123,6 +132,7 @@ class FriendProfile {
   }
 
   FriendProfile copyWith({
+    LiveTrailStyle? liveTrailStyle,
     double? liveSpeedKmh,
     String? liveActivity,
     bool? livePaused,
@@ -131,6 +141,7 @@ class FriendProfile {
     DateTime? liveUpdatedAt,
   }) {
     return FriendProfile(
+      liveTrailStyle: liveTrailStyle ?? this.liveTrailStyle,
       liveSpeedKmh: liveSpeedKmh,
       liveActivity: liveActivity,
       livePaused: livePaused ?? this.livePaused,

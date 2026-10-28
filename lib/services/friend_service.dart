@@ -3,6 +3,9 @@ import '../data/ui_snapshot_cache.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
+import '../models/live_trail_style.dart';
+
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -114,6 +117,21 @@ class FriendService {
       final liveByUser = <String, Map<String, dynamic>>{
         for (final raw in liveRows) ((raw)['user_id'] ?? '').toString(): raw,
       };
+      final stylesByUser = <String, Map<String, dynamic>>{};
+      try {
+        final styles = await client
+            .from('profile_trail_styles')
+            .select()
+            .inFilter('user_id', friendIds)
+            .timeout(const Duration(seconds: 6));
+        for (final row in styles) {
+          stylesByUser[row['user_id'].toString()] = Map<String, dynamic>.from(
+            row,
+          );
+        }
+      } catch (_) {
+        /* A cosmetics outage must not hide friends or positions. */
+      }
 
       if (userId != id) return const [];
       await UiSnapshotCache('friends', id).write(
@@ -134,6 +152,7 @@ class FriendService {
       return profiles.map((raw) {
         final data = Map<String, dynamic>.from(raw);
         final live = liveByUser[data['id']?.toString() ?? ''];
+        data['live_trail_style'] = stylesByUser[data['id']?.toString() ?? ''];
         if (live != null) {
           data['live_latitude'] = live['latitude'];
           data['live_longitude'] = live['longitude'];
@@ -466,8 +485,9 @@ class FriendService {
       String? activity,
       bool paused,
     )
-    onChanged,
-  ) async {
+    onChanged, {
+    void Function(String userId, LiveTrailStyle style)? onStyleChanged,
+  }) async {
     final client = _client;
     if (client == null) return;
 
@@ -475,6 +495,18 @@ class FriendService {
     try {
       _positionsChannel = client
           .channel('live_positions_feed')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'profile_trail_styles',
+            callback: (payload) {
+              final row = payload.newRecord;
+              final owner = row['user_id'];
+              if (owner is String && owner.isNotEmpty) {
+                onStyleChanged?.call(owner, LiveTrailStyle.fromRow(row));
+              }
+            },
+          )
           .onPostgresChanges(
             event: PostgresChangeEvent.all,
             schema: 'public',
@@ -517,10 +549,7 @@ class FriendService {
     try {
       // Удаляем симметричные строки дружбы через RPC
       await client
-          .rpc(
-            'pulsepath_remove_friend',
-            params: {'p_friend_id': friendId},
-          )
+          .rpc('pulsepath_remove_friend', params: {'p_friend_id': friendId})
           .timeout(const Duration(seconds: 15));
 
       // Исправлено: удаляем Live-позицию друга из таблицы live_positions

@@ -4,6 +4,7 @@ import '../state/profile_provider.dart';
 import 'navigation_preferences_screen.dart';
 import 'profile_screen.dart';
 import 'trail_appearance_screen.dart';
+import 'owned_trail_style_screen.dart';
 
 /// One entry point for the existing appearance editors; their storage stays intact.
 class CustomizationScreen extends StatelessWidget {
@@ -26,9 +27,19 @@ class CustomizationScreen extends StatelessWidget {
         const SizedBox(height: 20),
         _tile(
           context,
+          Icons.auto_awesome,
+          'Мой шлейф',
+          'Вы выбираете оформление, друзья видят ваш выбор',
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const OwnedTrailStyleScreen()),
+          ),
+        ),
+        _tile(
+          context,
           Icons.gesture,
-          'Шлейфы и следы',
-          'Рисунок, цвет, размер и плотность; след во время тренировки и вне её',
+          'Следы маршрутов и видимость',
+          'Оформление записанных путей и показ шлейфов на вашем экране',
           () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const TrailAppearanceScreen()),

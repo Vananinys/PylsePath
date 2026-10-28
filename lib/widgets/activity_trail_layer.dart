@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 
 import '../data/trail_appearance.dart';
 import '../models/activity_type.dart';
+import '../models/live_trail_style.dart';
 
 class TrailStamp {
   const TrailStamp(this.position, this.angle, this.alternate);
@@ -85,6 +86,7 @@ class ActivityTrailLayer extends StatefulWidget {
     this.live = false,
     this.idle = false,
     this.phaseOffset = 0,
+    this.liveAppearance,
   });
   final List<List<LatLng>> segments;
   final ActivityType activity;
@@ -94,6 +96,7 @@ class ActivityTrailLayer extends StatefulWidget {
   final double baseWidth;
   final bool live, idle;
   final double phaseOffset;
+  final LiveTrailStyle? liveAppearance;
   @override
   State<ActivityTrailLayer> createState() => _ActivityTrailLayerState();
 }
@@ -107,17 +110,16 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
     listenable: TrailAppearance.instance,
     builder: (context, _) {
       final prefs = TrailAppearance.instance, camera = MapCamera.of(context);
+      final personal = widget.liveAppearance ?? const LiveTrailStyle();
       final enabled = widget.live
-          ? (widget.idle ? prefs.onIdle : prefs.onFriends)
+          ? (widget.idle ? prefs.onIdle : prefs.onFriends) && personal.enabled
           : widget.recorded
           ? prefs.onRecording
           : prefs.onRoutes;
       final style = prefs.effective(
         widget.activity,
         transport: widget.transport,
-        pattern: widget.live
-            ? (widget.idle ? prefs.idleStyle : prefs.friendStyle)
-            : null,
+        pattern: widget.live ? personal.style : null,
       );
       if (widget.live && !enabled) return const SizedBox.shrink();
       final decorated =
@@ -146,7 +148,10 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                   for (final segment in widget.segments)
                     Polyline(
                       points: segment,
-                      color: enabled
+                      color: widget.live
+                          ? TrailAppearance.colors[personal.colorIndex]
+                                .withValues(alpha: personal.opacity)
+                          : enabled
                           ? prefs.color.withValues(
                               alpha: decorated
                                   ? prefs.opacity * .28
@@ -164,12 +169,14 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                   painter: TrailPainter(
                     _world,
                     style,
-                    (widget.live && !widget.idle
-                            ? widget.baseColor
+                    (widget.live
+                            ? TrailAppearance.colors[personal.colorIndex]
                             : prefs.color)
-                        .withValues(alpha: prefs.opacity),
-                    prefs.size,
-                    prefs.spacing,
+                        .withValues(
+                          alpha: widget.live ? personal.opacity : prefs.opacity,
+                        ),
+                    widget.live ? personal.size : prefs.size,
+                    widget.live ? personal.spacing : prefs.spacing,
                     origin: origin,
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
                     phaseOffset: widget.phaseOffset,

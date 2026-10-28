@@ -975,7 +975,24 @@ class MapNavigationController extends ChangeNotifier {
       _friends.addEntries(cached.map((friend) => MapEntry(friend.id, friend)));
       notifyListeners();
     }
-    await _friendService.subscribePositions(_onFriendPositionChanged);
+    await _friendService.subscribePositions(
+      _onFriendPositionChanged,
+      onStyleChanged: (id, style) {
+        if (_disposed || !_hasCurrentOwner) return;
+        final friend = _friends[id];
+        if (friend == null) return;
+        _friends[id] = friend.copyWith(
+          liveLatitude: friend.liveLatitude,
+          liveLongitude: friend.liveLongitude,
+          liveUpdatedAt: friend.liveUpdatedAt,
+          liveSpeedKmh: friend.liveSpeedKmh,
+          liveActivity: friend.liveActivity,
+          livePaused: friend.livePaused,
+          liveTrailStyle: style,
+        );
+        notifyListeners();
+      },
+    );
     await _refreshFriends();
   }
 
@@ -1007,6 +1024,7 @@ class MapNavigationController extends ChangeNotifier {
     String? activity,
     bool paused,
   ) {
+    if (_disposed || !_hasCurrentOwner) return;
     final friend = _friends[userId];
     if (friend == null) return; // не друг — игнорируем
     _friends[userId] = friend.copyWith(

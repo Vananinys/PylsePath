@@ -21,6 +21,7 @@ import 'services/smooth_map_position.dart';
 import 'services/smooth_map_heading.dart';
 import 'widgets/friend_markers_layer.dart';
 import 'widgets/friend_trails_layer.dart';
+import 'services/owned_trail_style_service.dart';
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -182,6 +183,7 @@ void main() async {
     /* Optional local counters never block startup. */
   }
   await NavigationPreferences.instance.load();
+  OwnedTrailStyleService.instance.start();
   try {
     await TrailAppearance.instance.load();
   } catch (_) {

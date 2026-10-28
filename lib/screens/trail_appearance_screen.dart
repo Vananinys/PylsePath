@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/trail_appearance.dart';
 import '../models/activity_type.dart';
 import '../widgets/activity_trail_layer.dart';
+import 'owned_trail_style_screen.dart';
 
 class TrailAppearanceScreen extends StatefulWidget {
   const TrailAppearanceScreen({super.key, this.appearance});
@@ -32,7 +33,19 @@ class _TrailAppearanceScreenState extends State<TrailAppearanceScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('След на карте')),
+    appBar: AppBar(
+      title: const Text('Следы маршрутов'),
+      actions: [
+        IconButton(
+          tooltip: 'Мой шлейф',
+          icon: const Icon(Icons.auto_awesome),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const OwnedTrailStyleScreen()),
+          ),
+        ),
+      ],
+    ),
     body: SafeArea(
       child: ListenableBuilder(
         listenable: prefs,
@@ -203,26 +216,32 @@ class _TrailAppearanceScreenState extends State<TrailAppearanceScreen> {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Шлейфы друзей'),
+                    title: const Text('Показывать шлейфы друзей'),
+                    subtitle: const Text(
+                      'Рисунок и цвет выбирает каждый друг сам.',
+                    ),
                     value: prefs.onFriends,
                     onChanged: (v) => _change(() => prefs.update(friends: v)),
                   ),
-                  DropdownButtonFormField<TrailStyle>(
-                    key: ValueKey('friend-${prefs.friendStyle.name}'),
-                    initialValue: prefs.friendStyle,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Оформление шлейфов друзей',
+                  Visibility(
+                    visible: false,
+                    child: DropdownButtonFormField<TrailStyle>(
+                      key: ValueKey('friend-${prefs.friendStyle.name}'),
+                      initialValue: prefs.friendStyle,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Оформление шлейфов друзей',
+                      ),
+                      items: [
+                        for (final style in TrailStyle.values)
+                          DropdownMenuItem(
+                            value: style,
+                            child: Text(style.label),
+                          ),
+                      ],
+                      onChanged: (v) =>
+                          _change(() => prefs.update(friendsPattern: v)),
                     ),
-                    items: [
-                      for (final style in TrailStyle.values)
-                        DropdownMenuItem(
-                          value: style,
-                          child: Text(style.label),
-                        ),
-                    ],
-                    onChanged: (v) =>
-                        _change(() => prefs.update(friendsPattern: v)),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -233,22 +252,25 @@ class _TrailAppearanceScreenState extends State<TrailAppearanceScreen> {
                     value: prefs.onIdle,
                     onChanged: (v) => _change(() => prefs.update(idle: v)),
                   ),
-                  DropdownButtonFormField<TrailStyle>(
-                    key: ValueKey('idle-${prefs.idleStyle.name}'),
-                    initialValue: prefs.idleStyle,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Мой шлейф вне тренировки',
+                  Visibility(
+                    visible: false,
+                    child: DropdownButtonFormField<TrailStyle>(
+                      key: ValueKey('idle-${prefs.idleStyle.name}'),
+                      initialValue: prefs.idleStyle,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Мой шлейф вне тренировки',
+                      ),
+                      items: [
+                        for (final style in TrailStyle.values)
+                          DropdownMenuItem(
+                            value: style,
+                            child: Text(style.label),
+                          ),
+                      ],
+                      onChanged: (v) =>
+                          _change(() => prefs.update(idlePattern: v)),
                     ),
-                    items: [
-                      for (final style in TrailStyle.values)
-                        DropdownMenuItem(
-                          value: style,
-                          child: Text(style.label),
-                        ),
-                    ],
-                    onChanged: (v) =>
-                        _change(() => prefs.update(idlePattern: v)),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,

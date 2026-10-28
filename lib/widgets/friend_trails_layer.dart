@@ -8,6 +8,7 @@ import '../models/activity_type.dart';
 import '../models/friend_profile.dart';
 import '../models/friend_trail_buffer.dart';
 import 'activity_trail_layer.dart';
+import '../services/owned_trail_style_service.dart';
 
 /// Short, fading tails under friend avatars. Does not intercept map gestures.
 class FriendTrailsLayer extends StatefulWidget {
@@ -69,6 +70,13 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: OwnedTrailStyleService.instance,
+      builder: (context, _) => _buildTrails(context),
+    );
+  }
+
+  Widget _buildTrails(BuildContext context) {
     MapCamera.of(context);
     final now = DateTime.now();
     final lines = <Polyline>[];
@@ -101,6 +109,9 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
             recorded: true,
             live: true,
             idle: widget.idle,
+            liveAppearance: widget.idle
+                ? OwnedTrailStyleService.instance.style
+                : friend.liveTrailStyle,
             phaseOffset: points.first.pathOffset,
             baseColor: color,
           ),
