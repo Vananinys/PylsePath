@@ -56,8 +56,8 @@ class _LocalTrackMediaLayerState extends State<LocalTrackMediaLayer> {
           for (final group in groups)
             Marker(
               point: widget.points[group.first.pointIndex],
-              width: 60,
-              height: 60,
+              width: 32,
+              height: 32,
               child: TrackMediaThumbnail(
                 local: group.first,
                 count: group.length,

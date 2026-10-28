@@ -108,15 +108,15 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
       );
       final decorated =
           enabled && style != TrailStyle.line && camera.zoom >= 12;
-      if (decorated && (_source != widget.segments || _zoom != camera.zoom)) {
+      if (decorated && (_source != widget.segments || _zoom != 16)) {
         _source = widget.segments;
-        _zoom = camera.zoom;
+        _zoom = 16;
         _world = [
           for (final segment in widget.segments)
             [
               for (final p in segment)
                 (() {
-                  final q = camera.project(p);
+                  final q = camera.project(p, 16);
                   return Offset(q.x, q.y);
                 })(),
             ],
@@ -126,7 +126,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
       return IgnorePointer(
         child: Stack(
           children: [
-            if (!decorated || prefs.guide)
+            if (!decorated || (prefs.guide && style == TrailStyle.line))
               PolylineLayer(
                 polylines: [
                   for (final segment in widget.segments)
@@ -154,6 +154,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                     prefs.size,
                     prefs.spacing,
                     origin: origin,
+                    scale: math.pow(2, camera.zoom - 16).toDouble(),
                   ),
                 ),
               ),
@@ -172,9 +173,11 @@ class TrailPainter extends CustomPainter {
     this.markerSize,
     this.spacing, {
     this.origin = Offset.zero,
+    this.scale = 1,
   });
   final List<List<Offset>> segments;
   final Offset origin;
+  final double scale;
   final TrailStyle style;
   final Color color;
   final double markerSize, spacing;
@@ -198,7 +201,12 @@ class TrailPainter extends CustomPainter {
     final stamps = sampleTrail(
       segments,
       spacing,
-      (Offset.zero & size).shift(origin).inflate(markerSize * 2),
+      Rect.fromLTWH(
+        origin.dx / scale,
+        origin.dy / scale,
+        size.width / scale,
+        size.height / scale,
+      ).inflate(markerSize * 2 / scale),
     );
     canvas.save();
     canvas.translate(-origin.dx, -origin.dy);
@@ -211,9 +219,9 @@ class TrailPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     for (final stamp in stamps) {
       canvas.save();
-      canvas.translate(stamp.position.dx, stamp.position.dy);
+      canvas.translate(stamp.position.dx * scale, stamp.position.dy * scale);
       canvas.rotate(stamp.angle + math.pi / 2);
-      canvas.scale(markerSize / 12);
+      canvas.scale(markerSize / 12 * math.min(1.0, scale));
       switch (style) {
         case TrailStyle.footprints:
         case TrailStyle.boots:
@@ -302,6 +310,7 @@ class TrailPainter extends CustomPainter {
   bool shouldRepaint(TrailPainter old) =>
       old.segments != segments ||
       old.origin != origin ||
+      old.scale != scale ||
       old.style != style ||
       old.color != color ||
       old.markerSize != markerSize ||

@@ -64,7 +64,7 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
 
   @override
   Widget build(BuildContext context) {
-    final camera = MapCamera.of(context);
+    MapCamera.of(context);
     final now = DateTime.now();
     final lines = <Polyline>[];
     final decorations = <Widget>[];
@@ -82,48 +82,28 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
       final activity = ActivityType.values
           .where((a) => a.name == friend.liveActivity)
           .firstOrNull;
-      final style = activity == null
-          ? TrailStyle.dots
-          : _automatic.effective(activity);
-      for (var i = 1; i < points.length; i++) {
-        final age =
-            now.difference(points[i - 1].at).inMilliseconds /
-            FriendTrailBuffer.lifetime.inMilliseconds;
-        final alpha = (.7 * (1 - age)).clamp(.08, .7).toDouble();
-        final segment = [points[i - 1].position, points[i].position];
-        lines.add(
-          Polyline(
-            points: segment,
-            color: color.withValues(alpha: alpha * .55),
-            strokeWidth: 3,
+      final age =
+          now.difference(points.last.at).inMilliseconds /
+          FriendTrailBuffer.lifetime.inMilliseconds;
+      decorations.add(
+        Opacity(
+          opacity: (1 - age).clamp(0.0, 1.0),
+          child: ActivityTrailLayer(
+            segments: [
+              [for (final point in points) point.position],
+            ],
+            activity: activity ?? ActivityType.hiking,
+            recorded: true,
+            baseColor: color,
           ),
-        );
-        if (camera.zoom >= 15) {
-          final projected = [for (final p in segment) camera.project(p)];
-          decorations.add(
-            CustomPaint(
-              size: Size.infinite,
-              painter: TrailPainter(
-                [
-                  [for (final p in projected) Offset(p.x, p.y)],
-                ],
-                style,
-                color.withValues(alpha: alpha),
-                8,
-                24,
-                origin: Offset(camera.pixelOrigin.x, camera.pixelOrigin.y),
-              ),
-            ),
-          );
-        }
-      }
+        ),
+      );
     }
     return IgnorePointer(
       child: Stack(
         children: [
           PolylineLayer(polylines: lines),
-          if (decorations.isNotEmpty)
-            MobileLayerTransformer(child: Stack(children: decorations)),
+          if (decorations.isNotEmpty) Stack(children: decorations),
         ],
       ),
     );

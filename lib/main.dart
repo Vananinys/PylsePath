@@ -1250,6 +1250,30 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                     ],
                   ),
                 ), // ValueListenableBuilder(positionNotifier)
+                if (!isTracking)
+                  ValueListenableBuilder<LatLng>(
+                    valueListenable: _navigationController.positionNotifier,
+                    builder: (context, position, _) => FriendTrailsLayer(
+                      key: ValueKey('idle-trail-${UserScope.currentUserId()}'),
+                      friends:
+                          _navigationController.gpsSignal.value.updatedAt ==
+                              null
+                          ? const []
+                          : [
+                              FriendProfile(
+                                id: 'self',
+                                username: '',
+                                liveLatitude: position.latitude,
+                                liveLongitude: position.longitude,
+                                liveUpdatedAt: _navigationController
+                                    .gpsSignal
+                                    .value
+                                    .updatedAt,
+                                liveActivity: 'walking',
+                              ),
+                            ],
+                    ),
+                  ),
                 FriendTrailsLayer(
                   key: ValueKey('friend-trails-${UserScope.currentUserId()}'),
                   friends: !_navigationController.canDisplayFriendTrails
@@ -1371,9 +1395,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               ],
             ),
 
-            if (!isTracking &&
-                !_navigationController.isNavigating &&
-                !_isPreRideOpen)
+            if (!_isPreRideOpen)
               IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: SearchPanel(
@@ -1408,10 +1430,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
               ),
-            if ((isTracking ||
-                    _navigationController.isNavigating ||
-                    _isPreRideOpen) &&
-                !_isScreenLocked)
+            if (_isPreRideOpen && !_isScreenLocked)
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 12,
                 left: 16,
@@ -1426,8 +1445,8 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 _searchResults.isEmpty &&
                 MediaQuery.viewInsetsOf(context).bottom == 0)
               Positioned(
-                top: MediaQuery.paddingOf(context).top + 12,
-                left: 68,
+                top: MediaQuery.paddingOf(context).top + 76,
+                left: 16,
                 right: 12,
                 child: ValueListenableBuilder<LatLng>(
                   valueListenable: _navigationController.positionNotifier,
@@ -1452,7 +1471,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               Positioned(
                 top:
                     MediaQuery.paddingOf(context).top +
-                    (showNavigationCard ? 140 : 80),
+                    (showNavigationCard ? 204 : 80),
                 left: 16,
                 right: 16,
                 child: Row(
@@ -1473,6 +1492,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                         onTap: _loadPreRideWeather,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     const HomeStepsPill(),
                   ],
                 ),
@@ -1480,7 +1500,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
 
             Positioned(
               right: 12,
-              bottom: MediaQuery.paddingOf(context).bottom + 84,
+              bottom: MediaQuery.paddingOf(context).bottom + 104,
               child: IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: MapCredits(layer: _mapLayerIndex),

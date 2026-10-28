@@ -62,7 +62,7 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
       _selectedId = item.id;
       _point = item.pointIndex.clamp(0, widget.points.length - 1);
     });
-    if (_mapReady) _map.move(widget.points[_point], _zoom < 16 ? 16 : _zoom);
+    if (_mapReady) _map.move(widget.points[_point], _map.camera.zoom);
   }
 
   void _group(List<RideMedia> items) {
@@ -466,8 +466,8 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
                               ))
                                 Marker(
                                   point: points[group.first.pointIndex],
-                                  width: 60,
-                                  height: 60,
+                                  width: 32,
+                                  height: 32,
                                   child: TrackMediaThumbnail(
                                     local: group.first,
                                     count: group.length,

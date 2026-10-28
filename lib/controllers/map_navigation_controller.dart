@@ -2076,9 +2076,16 @@ class MapNavigationController extends ChangeNotifier {
     _navigationProgressMeters = 0;
     // Парсинг строк «12.5 км»/«1 ч 23 мин» живёт в модели SavedRoute —
     // единственном месте с этой логикой.
-    _routeDistanceKm = route.distanceKm;
-    _routeDurationMin = route.durationMin;
     _selectedActivity = route.activityType;
+    // Geometry avoids ambiguous legacy display strings and excludes track gaps.
+    _routeDistanceKm = _routePoints.length >= 2
+        ? routeSegments.fold<double>(
+                0,
+                (sum, segment) => sum + TrailGuidance.length(segment),
+              ) /
+              1000
+        : route.distanceKm;
+    _routeDurationMin = _routeDistanceKm! / _selectedActivity.avgSpeedKmH * 60;
     _isBookmarked = true;
     _isNavigating = false;
     _isFollowingUser = false;

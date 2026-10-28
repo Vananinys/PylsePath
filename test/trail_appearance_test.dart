@@ -240,6 +240,12 @@ void main() {
       final after = painter();
       expect(identical(before.segments, after.segments), true);
       expect(after.origin, isNot(before.origin));
+      controller.move(const LatLng(55.0003, 83.0003), 17);
+      await tester.pumpAndSettle();
+      final zoomed = painter();
+      expect(identical(before.segments, zoomed.segments), true);
+      expect(zoomed.scale, 2);
+      expect(zoomed.spacing, before.spacing);
       expect(segments.first.first, const LatLng(55, 83));
       expect(tester.takeException(), isNull);
     },

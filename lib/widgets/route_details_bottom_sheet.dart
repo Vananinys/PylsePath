@@ -411,7 +411,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                           subtitle: Text(selectedActivity.label),
                           children: [
                             SizedBox(
-                              height: 42,
+                              height:
+                                  32 +
+                                  MediaQuery.textScalerOf(context).scale(20),
                               child: ListView.separated(
                                 scrollDirection: Axis.horizontal,
                                 itemCount: activityTypes.length,

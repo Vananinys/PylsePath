@@ -45,15 +45,17 @@ class MapWeatherPill extends StatelessWidget {
                 color: Colors.blueGrey,
               ),
             const SizedBox(width: 5),
-            Text(
-              isLoading
-                  ? 'Погода…'
-                  : weather?.temperatureC != null
-                  ? '${weather!.temperatureC!.round()}° · ${weather!.label}'
-                  : 'Погода',
-              style: Theme.of(context).textTheme.labelMedium,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Flexible(
+              child: Text(
+                isLoading
+                    ? 'Погода…'
+                    : weather?.temperatureC != null
+                    ? '${weather!.temperatureC!.round()}° · ${weather!.label}'
+                    : 'Погода',
+                style: Theme.of(context).textTheme.labelMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
