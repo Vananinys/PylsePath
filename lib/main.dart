@@ -361,6 +361,9 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   DateTime? _lastHistorySync;
   DateTime? _lastHistoryPull;
   NetworkRecoverySync? _networkRecovery;
+  bool get _useOfflineMap => NavigationPreferences.instance.cachedMapOnly || (_networkRecovery?.offline ?? false);
+  bool get _usePreparedMapSource => NavigationPreferences.instance.cachedMapOnly ||
+      ((_networkRecovery?.offline ?? false) && AppConfig.offlineTileUrl.isNotEmpty);
 
   void _retryLocalChanges(bool restored) {
     if (!mounted || !_isForeground || UserScope.currentUserId() == null) return;
@@ -803,7 +806,8 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
       if (!mounted) return;
       unawaited(_syncPendingHistory());
       context.read<ProfileProvider>().ensureLoaded();
-      _networkRecovery = NetworkRecoverySync(onSync: _retryLocalChanges)
+      _networkRecovery = NetworkRecoverySync(onSync: _retryLocalChanges,
+        onStatusChanged: (_) { if (mounted) setState(() {}); })
         ..start();
       PushService.instance.onChatOpen = _openChatFromPush;
       PushService.instance.onGarageOpen = () async {
@@ -1115,21 +1119,21 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 },
               ),
               children: [
-                if (!NavigationPreferences.instance.cachedMapOnly ||
+                if (!_useOfflineMap ||
                     OfflineMapsService.isAvailable)
                   TileLayer(
                     key: ValueKey(
-                      '$_mapLayerIndex:${NavigationPreferences.instance.cachedMapOnly}',
+                      '$_mapLayerIndex:${_useOfflineMap}',
                     ),
-                    urlTemplate: _mapLayerIndex == 3
+                    urlTemplate: _usePreparedMapSource ? OfflineMapsService.routeTileUrl : _mapLayerIndex == 3
                         ? SatelliteMap.template
                         : _MapScreenStateBase._mapLayerUrls[_mapLayerIndex],
-                    maxNativeZoom: _mapLayerIndex == 3
+                    maxNativeZoom: _usePreparedMapSource ? 16 : _mapLayerIndex == 3
                         ? SatelliteMap.maxZoom
                         : 19,
                     subdomains: const ['a', 'b', 'c'],
                     // Кэширование тайлов (офлайн-карты); без FMTC — сетевой провайдер.
-                    tileProvider: NavigationPreferences.instance.cachedMapOnly
+                    tileProvider: _useOfflineMap
                         ? OfflineMapsService.tileProvider(offlineOnly: true)
                         : _mapLayerIndex == 3
                         ? NetworkTileProvider()
@@ -1454,6 +1458,10 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 child: ValueListenableBuilder<LatLng>(
                   valueListenable: _navigationController.positionNotifier,
                   builder: (context, position, _) => NavigationCard(
+                    onReconnectAhead: () async {
+                      try { await _navigationController.reconnectAhead(); }
+                      catch (error) { if (mounted) _showSnackBar(error.toString()); }
+                    },
                     offRoute: _navigationController.isOffRoute,
                     preserveTrack: _navigationController.followsSavedTrack,
                     deviationMeters: _navigationController.routeDeviationMeters,
@@ -1508,7 +1516,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               bottom: bottomPanelHeight + 8,
               child: IgnorePointer(
                 ignoring: _isScreenLocked,
-                child: MapCredits(layer: _mapLayerIndex),
+                child: MapCredits(layer: _usePreparedMapSource ? 0 : _mapLayerIndex),
               ),
             ),
             // Баннер входящего сообщения: тап — открыть чат с отправителем.
@@ -1585,7 +1593,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 setState(() => _isScreenLocked = false);
                 _showSnackBar('Экран разблокирован');
               },
-              mapLayerLabel: _mapLayerIndex == 3
+              mapLayerLabel: _usePreparedMapSource ? 'Офлайн-карта' : _mapLayerIndex == 3
                   ? 'Спутник'
                   : _MapScreenStateBase._mapLayerLabels[_mapLayerIndex],
               onMapLayerPressed: _chooseMapLayer,
@@ -1938,6 +1946,9 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                       selectedActivity: _navigationController.selectedActivity,
                       activityTypes: ActivityType.values,
                       hasOfflineInstructions: _navigationController.routeSteps.isNotEmpty,
+                      routeProgressMeters: ((_navigationController.routeDistanceKm ?? 0) * 1000 - _navigationController.remainingRouteMeters).clamp(0, double.infinity),
+                      onAddPlaceStop: !_navigationController.canEditWaypoints ? null : (point) => _navigationController.replanWithWaypoints([..._navigationController.routeWaypoints, point]),
+                      routePoints: _navigationController.routePoints,
                       routeDistanceKm: _navigationController.routeDistanceKm,
                       routeDurationMin: _navigationController.routeDurationMin,
                       elevationGainMeters:

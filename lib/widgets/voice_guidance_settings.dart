@@ -34,10 +34,20 @@ class _VoiceGuidanceSettingsState extends State<VoiceGuidanceSettings> {
     }
   }
 
-  Future<void> _change({bool? navigation, bool? reminders}) async {
+  Future<void> _change({
+    bool? navigation,
+    bool? reminders,
+    double? speechVolume,
+    bool? brief,
+  }) async {
     setState(() => _busy = true);
     try {
-      await _voice.configure(navigation: navigation, reminders: reminders);
+      await _voice.configure(
+        navigation: navigation,
+        reminders: reminders,
+        speechVolume: speechVolume,
+        brief: brief,
+      );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -56,6 +66,31 @@ class _VoiceGuidanceSettingsState extends State<VoiceGuidanceSettings> {
     animation: _voice,
     builder: (context, _) => Column(
       children: [
+        ListTile(
+          title: Text(
+            'Громкость подсказок · ${(_voice.volume * 100).round()}%',
+          ),
+          subtitle: const Text('Относительно громкости мультимедиа телефона'),
+        ),
+        Slider(
+          value: _voice.volume,
+          min: 0,
+          max: 1,
+          divisions: 10,
+          onChanged: _loaded && !_busy && _voice.supported
+              ? (v) => _change(speechVolume: v)
+              : null,
+        ),
+        SwitchListTile(
+          title: const Text('Реже подсказывать повороты'),
+          subtitle: const Text(
+            'Один раз перед поворотом вместо предварительной и ближней подсказки',
+          ),
+          value: _voice.briefTurns,
+          onChanged: _loaded && !_busy && _voice.supported
+              ? (v) => _change(brief: v)
+              : null,
+        ),
         SwitchListTile(
           secondary: const Icon(Icons.record_voice_over_outlined),
           title: const Text('Озвучивать повороты'),

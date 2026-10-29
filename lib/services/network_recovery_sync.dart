@@ -8,10 +8,13 @@ import 'package:flutter/services.dart';
 class NetworkRecoverySync {
   NetworkRecoverySync({
     required this.onSync,
+    this.onStatusChanged,
     Stream<bool>? changes,
     this.retryInterval = const Duration(seconds: 30),
   }) : _changes = changes;
   final void Function(bool restored) onSync;
+  final void Function(bool online)? onStatusChanged;
+  bool get offline => _online == false;
   final Stream<bool>? _changes;
   final Duration retryInterval;
   StreamSubscription<bool>? _subscription;
@@ -29,8 +32,10 @@ class NetworkRecoverySync {
             : const Stream<bool>.empty());
     _subscription = source.listen(
       (online) {
+        final changed = online != _online;
         final restored = online && _online != true;
         _online = online;
+        if (changed && !_disposed) onStatusChanged?.call(online);
         if (restored && _foreground && !_disposed) onSync(true);
       },
       onError: (Object error) {

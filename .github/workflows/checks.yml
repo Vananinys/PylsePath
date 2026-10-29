@@ -24,7 +24,10 @@ jobs:
       - run: flutter pub get
       - name: Live trail stability and map layout
         run: flutter test --no-pub test/map_trail_stability_test.dart test/owned_trail_style_test.dart
+      - name: Offline route planning and navigation package
+        run: flutter test --no-pub test/navigation_package_test.dart test/route_offline_readiness_test.dart test/navigator_upgrade_test.dart test/offline_sync_test.dart test/workout_draft_store_test.dart test/location_recovery_test.dart
       - name: Release channels, privacy and data integrity
+        # Offline planning, voice parameters and forward reconnection are checked separately.
         # Include bounded live-tail phase and independent appearance persistence.
         run: flutter test --no-pub test/app_release_test.dart test/release_channels_test.dart test/usage_statistics_test.dart test/update_privacy_screens_test.dart test/privacy_registration_test.dart test/deepseek_integrity test/workout_draft_store_test.dart test/history_integrity_test.dart test/upgrade_qa test/upgrade_safety_regression_test.dart test/trail_appearance_test.dart test/messenger_test.dart
       - name: Analyze release and counters code

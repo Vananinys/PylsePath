@@ -74,6 +74,104 @@ class MapNavigationController extends ChangeNotifier {
   bool get isOffRoute => _offRoute;
   double get routeDeviationMeters => _routeDeviation;
   bool get followsSavedTrack => _preserveTrack;
+  Future<void> reconnectAhead() async {
+    if (_disposed ||
+        !_hasCurrentOwner ||
+        _isLoadingRoute ||
+        _routePoints.length < 2)
+      throw StateError('Маршрут недоступен');
+    if (_routeSegmentStarts.isNotEmpty || _routeVia.isNotEmpty)
+      throw StateError(
+        'Для трека с разрывами или остановками подключение впереди нужно выбрать вручную.',
+      );
+    final original = List<LatLng>.of(_routePoints);
+    final originalSteps = List<RouteStep>.of(_routeSteps);
+    var offset = 0.0, target = -1, targetProgress = 0.0, best = double.infinity;
+    for (var i = 1; i < original.length; i++) {
+      offset += GeoUtils.distanceBetween(original[i - 1], original[i]);
+      if (offset < _navigationProgressMeters + 50 ||
+          offset > _navigationProgressMeters + 1500)
+        continue;
+      final distance = GeoUtils.distanceBetween(_currentLocation, original[i]);
+      if (distance < best) {
+        target = i;
+        targetProgress = offset;
+        best = distance;
+      }
+    }
+    if (target < 0 || best > 3000)
+      throw StateError(
+        'Подходящая точка впереди не найдена. Выберите место на карте.',
+      );
+    final generation = ++_routeGeneration;
+    _routeError = null;
+    _isLoadingRoute = true;
+    notifyListeners();
+    try {
+      final connector = await _routingService.buildRoute(
+        start: _currentLocation,
+        end: original[target],
+        activity: _selectedActivity,
+      );
+      if (_disposed || !_hasCurrentOwner || generation != _routeGeneration)
+        return;
+      if (connector.points.length < 2 ||
+          GeoUtils.distanceBetween(connector.points.last, original[target]) >
+              10) {
+        throw StateError(
+          'Сервис не подтвердил точное подключение к треку. Старый маршрут сохранён.',
+        );
+      }
+      final joined = [...connector.points, ...original.skip(target + 1)];
+      _routePoints = joined;
+      final connectorLength = TrailGuidance.length(connector.points);
+      final combinedSteps = <RouteStep>[
+        ...(connector.steps.isEmpty
+                ? TrailGuidance.steps(connector.points)
+                : connector.steps)
+            .where((step) => step.routeOffsetMeters < connectorLength - 5),
+        for (final step in originalSteps.where(
+          (step) => step.routeOffsetMeters >= targetProgress,
+        ))
+          RouteStep(
+            instruction: step.instruction,
+            streetName: step.streetName,
+            icon: step.icon,
+            location: step.location,
+            distance: step.distance,
+            routeOffsetMeters:
+                connectorLength + step.routeOffsetMeters - targetProgress,
+          ),
+      ];
+      _routeSteps = combinedSteps.isEmpty
+          ? TrailGuidance.steps(joined)
+          : combinedSteps;
+      _routeSegmentStarts = {};
+      _navigationProgressMeters = 0;
+      _currentStepIndex = 0;
+      _preserveTrack = true;
+      _isBookmarked = false;
+      _routeDistanceKm = TrailGuidance.length(joined) / 1000;
+      _routeDurationMin =
+          _routeDistanceKm! / _selectedActivity.avgSpeedKmH * 60;
+      _surfaceInfo = null;
+      _elevationGainMeters = 0;
+      _elevationLossMeters = 0;
+      _resetDeviation();
+      VoiceGuidanceService.instance.resetTurns();
+      routeNotice =
+          'Подключение по дорогам к точке ${(targetProgress / 1000).toStringAsFixed(1)} км старого пути, дальше — по треку. Исходный сохранённый маршрут не изменён.';
+    } catch (_) {
+      if (!_disposed && generation == _routeGeneration) _routeError = 'Не удалось подключиться впереди. Нужен интернет; предыдущий путь сохранён.';
+      rethrow;
+    } finally {
+      if (!_disposed && generation == _routeGeneration) {
+        _isLoadingRoute = false;
+        notifyListeners();
+      }
+    }
+  }
+
   bool get canReturnToStart => _recordedPath.length >= 2;
 
   void _resetDeviation() {
@@ -2837,6 +2935,7 @@ class MapNavigationController extends ChangeNotifier {
   /// Replanning is transactional: a failed request leaves the previous
   /// geometry, instructions and stop list available on the map.
   Future<void> replanWithWaypoints(List<LatLng> via) async {
+    if (_disposed || !_hasCurrentOwner) throw StateError('Аккаунт изменился');
     if (!canEditWaypoints) {
       throw StateError('Остановите навигацию перед изменением остановок');
     }
@@ -2863,7 +2962,7 @@ class MapNavigationController extends ChangeNotifier {
         activity: activity,
         via: List.of(via),
       );
-      if (_disposed || generation != _routeGeneration) return;
+      if (_disposed || !_hasCurrentOwner || generation != _routeGeneration) return;
       _routeVia = List.of(via);
       _isBookmarked = false;
       routeNotice = null;

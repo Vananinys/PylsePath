@@ -7,6 +7,7 @@ import 'package:flutter_map_tile_caching/flutter_map_tile_caching.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 import '../config.dart';
+import '../models/offline_route_tiles.dart';
 
 /// Офлайн-карты на базе FMTC (flutter_map_tile_caching, ObjectBox-бэкенд).
 ///
@@ -15,6 +16,55 @@ import '../config.dart';
 /// При сбое инициализации (web, нет места) сервис честно сообщит
 /// [isAvailable] = false — карта продолжит работать по сети.
 class OfflineMapsService {
+  static Stream<DownloadProgress> downloadRoute(List<LatLng> points) async* {
+    final plan = OfflineRouteTiles(points);
+    if (AppConfig.offlineTileUrl.isEmpty)
+      throw StateError(
+        'Источник для офлайн-загрузки не настроен. Публичный OSM не используется для предзагрузки.',
+      );
+    await ensureInitialised();
+    if (!isAvailable) throw StateError('Хранилище карт недоступно');
+    final region =
+        RectangleRegion(
+          LatLngBounds(
+            LatLng(plan.south, plan.west),
+            LatLng(plan.north, plan.east),
+          ),
+        ).toDownloadable(
+          minZoom: 13,
+          maxZoom: 16,
+          options: TileLayer(
+            urlTemplate: AppConfig.offlineTileUrl,
+            userAgentPackageName: 'com.pulsepath.app',
+          ),
+        );
+    yield* _store.download.startForeground(region: region);
+  }
+
+  /// No HTTP calls: inspect each required tile in the current map source's store.
+  static Future<({int present, int required})?> checkRoute(
+    List<LatLng> points,
+  ) async {
+    final plan = OfflineRouteTiles(points);
+    await ensureInitialised();
+    final provider = tileProvider(offlineOnly: true);
+    if (provider == null) return null;
+    final options = TileLayer(
+      urlTemplate: routeTileUrl,
+      userAgentPackageName: 'com.pulsepath.app',
+    );
+    var found = 0;
+    final tiles = plan.tiles;
+    for (final tile in tiles) {
+      if (await provider.checkTileCached(
+        coords: TileCoordinates(tile.x, tile.y, tile.z),
+        options: options,
+      ))
+        found++;
+    }
+    return (present: found, required: tiles.length);
+  }
+
   const OfflineMapsService._();
 
   static const String storeName = 'pulsepath_main';

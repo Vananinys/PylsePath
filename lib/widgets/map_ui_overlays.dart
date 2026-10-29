@@ -281,6 +281,7 @@ class _SearchPanelState extends State<SearchPanel> {
 }
 
 class NavigationCard extends StatelessWidget {
+  final VoidCallback? onReconnectAhead;
   final bool offRoute;
   final bool preserveTrack;
   final double deviationMeters;
@@ -291,6 +292,7 @@ class NavigationCard extends StatelessWidget {
   final bool isRerouting;
 
   const NavigationCard({
+    this.onReconnectAhead,
     this.offRoute = false,
     this.preserveTrack = false,
     this.deviationMeters = 0,
@@ -321,6 +323,12 @@ class NavigationCard extends StatelessWidget {
                 size: 36,
               ),
               const SizedBox(width: 14),
+              if (offRoute && onReconnectAhead != null)
+                IconButton.filledTonal(
+                  tooltip: 'Подключиться к маршруту впереди · нужен интернет',
+                  onPressed: isRerouting ? null : onReconnectAhead,
+                  icon: const Icon(Icons.alt_route),
+                ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

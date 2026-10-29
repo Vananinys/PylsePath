@@ -22,7 +22,10 @@ class VoiceGuidance(private val context: Context) {
                 val text = call.argument<String>("text")?.take(1000).orEmpty()
                 if (!ready || text.isBlank()) result.success(false)
                 else if (call.argument<Boolean>("navigation") != true && engine?.isSpeaking == true) result.success(false)
-                else result.success(engine?.speak(text, TextToSpeech.QUEUE_FLUSH, null,
+                else result.success(engine?.speak(text, TextToSpeech.QUEUE_FLUSH, android.os.Bundle().apply {
+                    val volume = call.argument<Number>("volume")?.toFloat() ?: 1f
+                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, if (volume.isFinite()) volume.coerceIn(0f, 1f) else 1f)
+                },
                     "pulsepath-${System.nanoTime()}") == TextToSpeech.SUCCESS)
             }
             "stop" -> { engine?.stop(); result.success(null) }

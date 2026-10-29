@@ -6,8 +6,12 @@ import '../models/activity_type.dart';
 import '../models/surface_info.dart';
 import 'route_offline_readiness.dart';
 import '../screens/offline_maps_screen.dart';
+import '../screens/route_places_screen.dart';
 
 class RouteDetailsBottomSheet extends StatelessWidget {
+  final Future<void> Function(LatLng)? onAddPlaceStop;
+  final double routeProgressMeters;
+  final List<LatLng> routePoints;
   final bool hasOfflineInstructions;
   final DraggableScrollableController? sheetController;
   final Widget? gearAdvisor;
@@ -44,6 +48,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
   final int Function() calculateCalories;
 
   const RouteDetailsBottomSheet({
+    this.onAddPlaceStop,
+    this.routeProgressMeters = 0,
+    this.routePoints = const [],
     this.hasOfflineInstructions = false,
     super.key,
     this.sheetController,
@@ -408,7 +415,13 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                             ),
                           ),
                         if (hasRoute)
+                          TextButton.icon(icon: const Icon(Icons.local_cafe_outlined),
+                            label: const Text('Вода и места по пути'),
+                            onPressed: routePoints.length < 2 ? null : () => Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => RoutePlacesScreen(points: List.of(routePoints), progressMeters: routeProgressMeters, onStop: onAddPlaceStop)))),
+                        if (hasRoute)
                           RouteOfflineReadiness(
+                            routePoints: routePoints,
                             saved: isBookmarked,
                             hasGeometry: hasRoute,
                             hasInstructions: hasOfflineInstructions,
@@ -420,6 +433,12 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                   label: 'Финиш маршрута · область вокруг точки, не весь путь'),
                               ))),
                           ),
+                        if (!selectedActivity.isFoot && selectedActivity != ActivityType.driving)
+                          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text(
+                            'Предпочтения «тише», «меньше подъёмов» и «меньше остановок» пока не применяются к расчёту. Тип велосипеда используется для оценки темпа; отсутствие трафика и безопасность не гарантируются.',
+                          )),
+                        if (elevationGainMeters == 0 && elevationLossMeters == 0)
+                          const Text('Набор высоты не подтверждён. Нулевые значения не означают, что маршрут плоский.'),
                         ExpansionTile(
                           key: const PageStorageKey('route-activity'),
                           tilePadding: EdgeInsets.zero,

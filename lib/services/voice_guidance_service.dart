@@ -13,6 +13,8 @@ class VoiceGuidanceService extends ChangeNotifier {
   static const _channel = MethodChannel('pulsepath/voice_guidance');
   Future<void>? _loading;
   bool navigationEnabled = true;
+  double volume = 1;
+  bool briefTurns = false;
   bool remindersEnabled = true;
   String? error;
   int _generation = 0;
@@ -29,12 +31,33 @@ class VoiceGuidanceService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     navigationEnabled = prefs.getBool('voice_navigation') ?? true;
     remindersEnabled = prefs.getBool('voice_reminders') ?? true;
+    final rawVolume = prefs.get('voice_volume');
+    volume = rawVolume is num && rawVolume.isFinite
+        ? rawVolume.toDouble().clamp(0, 1)
+        : 1;
+    briefTurns = prefs.get('voice_brief_turns') == true;
     notifyListeners();
   }
 
-  Future<void> configure({bool? navigation, bool? reminders}) async {
+  Future<void> configure({
+    bool? navigation,
+    bool? reminders,
+    double? speechVolume,
+    bool? brief,
+  }) async {
     await load();
     final prefs = await SharedPreferences.getInstance();
+    if (speechVolume != null && speechVolume.isFinite) {
+      final next = speechVolume.clamp(0.0, 1.0);
+      if (!await prefs.setDouble('voice_volume', next))
+        throw StateError('Не удалось сохранить громкость');
+      volume = next;
+    }
+    if (brief != null) {
+      if (!await prefs.setBool('voice_brief_turns', brief))
+        throw StateError('Не удалось сохранить частоту');
+      briefTurns = brief;
+    }
     if (navigation != null) {
       await prefs.setBool('voice_navigation', navigation);
       navigationEnabled = navigation;
@@ -92,6 +115,7 @@ class VoiceGuidanceService extends ChangeNotifier {
       final accepted = await _channel.invokeMethod<bool>('speak', {
         'text': text,
         'navigation': navigation,
+        'volume': volume,
       });
       if (accepted == true) {
         error = null;
@@ -144,6 +168,7 @@ class VoiceGuidanceService extends ChangeNotifier {
     final speed = speedKmh.isFinite ? speedKmh.clamp(0.0, 70.0) / 3.6 : 0.0;
     final early = (speed * 20).clamp(80.0, 250.0);
     final near = (speed * 5).clamp(15.0, 50.0);
+    if (briefTurns && meters > near) return;
     if (meters > early) return;
     final instruction = step.instruction;
     if (instruction == 'Начните движение' ||

@@ -8,9 +8,14 @@ import '../data/navigation_preferences.dart';
 /// Управление офлайн-картами: статистика кэша, загрузка области вокруг
 /// текущей позиции, очистка.
 class OfflineMapsScreen extends StatefulWidget {
+  final List<LatLng> routePoints;
   final LatLngWithLabel? currentLocation;
 
-  const OfflineMapsScreen({super.key, this.currentLocation});
+  const OfflineMapsScreen({
+    super.key,
+    this.currentLocation,
+    this.routePoints = const [],
+  });
 
   @override
   State<OfflineMapsScreen> createState() => _OfflineMapsScreenState();
@@ -64,7 +69,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
 
   Future<void> _startDownload() async {
     final location = widget.currentLocation;
-    if (location == null) {
+    if (location == null && widget.routePoints.length < 2) {
       _showMessage('Не удалось определить геопозицию');
       return;
     }
@@ -78,10 +83,13 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     });
 
     try {
-      await for (final progress in OfflineMapsService.downloadAround(
-        LatLng(location.latitude, location.longitude),
-        radiusKm: _radiusKm,
-      )) {
+      await for (final progress
+          in widget.routePoints.length >= 2
+              ? OfflineMapsService.downloadRoute(widget.routePoints)
+              : OfflineMapsService.downloadAround(
+                  LatLng(location!.latitude, location.longitude),
+                  radiusKm: _radiusKm,
+                )) {
         if (!mounted) return;
         setState(() {
           _maxTiles = progress.maxTiles;
@@ -290,12 +298,15 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed:
-                      location == null || AppConfig.offlineTileUrl.isEmpty
+                      (location == null && widget.routePoints.length < 2) ||
+                          AppConfig.offlineTileUrl.isEmpty
                       ? null
                       : _startDownload,
                   icon: const Icon(Icons.download_rounded),
                   label: Text(
-                    location == null
+                    widget.routePoints.length >= 2
+                        ? 'Скачать карты всего маршрута (13–16)'
+                        : location == null
                         ? 'Геопозиция не определена'
                         : 'Скачать область вокруг меня',
                   ),
