@@ -1937,6 +1937,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                       finishPoint: _navigationController.finishPoint,
                       selectedActivity: _navigationController.selectedActivity,
                       activityTypes: ActivityType.values,
+                      hasOfflineInstructions: _navigationController.routeSteps.isNotEmpty,
                       routeDistanceKm: _navigationController.routeDistanceKm,
                       routeDurationMin: _navigationController.routeDurationMin,
                       elevationGainMeters:

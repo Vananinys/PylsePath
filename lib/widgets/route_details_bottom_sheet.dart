@@ -4,8 +4,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/activity_type.dart';
 import '../models/surface_info.dart';
+import 'route_offline_readiness.dart';
+import '../screens/offline_maps_screen.dart';
 
 class RouteDetailsBottomSheet extends StatelessWidget {
+  final bool hasOfflineInstructions;
   final DraggableScrollableController? sheetController;
   final Widget? gearAdvisor;
   final Widget? waypointEditor;
@@ -41,6 +44,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
   final int Function() calculateCalories;
 
   const RouteDetailsBottomSheet({
+    this.hasOfflineInstructions = false,
     super.key,
     this.sheetController,
     this.gearAdvisor,
@@ -402,6 +406,19 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                 color: Colors.brown,
                               ),
                             ),
+                          ),
+                        if (hasRoute)
+                          RouteOfflineReadiness(
+                            saved: isBookmarked,
+                            hasGeometry: hasRoute,
+                            hasInstructions: hasOfflineInstructions,
+                            onSave: onToggleBookmark,
+                            onOpenMaps: () => Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => OfflineMapsScreen(
+                                currentLocation: finishPoint == null ? null : LatLngWithLabel(
+                                  latitude: finishPoint!.latitude, longitude: finishPoint!.longitude,
+                                  label: 'Финиш маршрута · область вокруг точки, не весь путь'),
+                              ))),
                           ),
                         ExpansionTile(
                           key: const PageStorageKey('route-activity'),
