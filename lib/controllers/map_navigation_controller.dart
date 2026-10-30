@@ -316,6 +316,11 @@ class MapNavigationController extends ChangeNotifier {
 
   void setSharingForeground(bool value) {
     _sharingForeground = value;
+    // Locking the display must never turn a transient zero-speed fix into a
+    // paused workout. A manual pause remains an explicit user decision.
+    _lowSpeedSince = null;
+    _stationaryProbe = null;
+    if (!value && _isAutoPaused && _isWorkoutPaused) resumeWorkout();
     if (value && _hasSession && workoutActivity.isFoot)
       unawaited(_stepTracker.refresh());
     if (!value && !_backgroundTrackingEnabled) {
@@ -1805,7 +1810,12 @@ class MapNavigationController extends ChangeNotifier {
   /// Поднимает уведомление в шторке на время заезда: перезапускает GPS-поток
   /// с foreground-конфигурацией и запрашивает разрешение на уведомления.
   Future<void> _startRideNotification() async {
-    if (!kIsWeb && Platform.isAndroid) {
+    // Start collection while the workout-start action is still in foreground;
+    // a notification permission dialog must not delay the recording service.
+    if (!_disposed && _hasSession) {
+      await restartPositionStream(withForeground: true);
+    }
+    if (!kIsWeb && Platform.isAndroid && _sharingForeground) {
       try {
         final notification = await NotificationPermissionService.request();
         debugPrint('[Workout] notification permission: $notification');
@@ -1813,9 +1823,7 @@ class MapNavigationController extends ChangeNotifier {
         debugPrint('[Workout] notification permission failed: $error');
       }
     }
-    if (!_disposed && _hasSession) {
-      await restartPositionStream(withForeground: true);
-    }
+    // Notification permission does not own the lifetime of the GPS stream.
   }
 
   /// Публикация позиции друзьям: реже в покое, чаще во время тренировки.
@@ -1863,7 +1871,7 @@ class MapNavigationController extends ChangeNotifier {
   /// Умная автопауза: как [pauseWorkout], но помечает паузу как автоматическую,
   /// чтобы возобновление произошло само при разгоне выше 2.0 км/ч.
   void _autoPause() {
-    if (!_isWorkoutActive || _isWorkoutPaused) return;
+    if (!_sharingForeground || !_isWorkoutActive || _isWorkoutPaused) return;
     _stepTracker.pause();
     debugPrint(
       '[Workout] автопауза: скорость < $_autoPauseBelowKmh км/ч '
@@ -2460,8 +2468,7 @@ class MapNavigationController extends ChangeNotifier {
           intervalDuration: Duration(seconds: inActiveRide ? 1 : 15),
           // Foreground service с уведомлением — только ВО ВРЕМЯ заезда
           // (поднимается в startWorkout, опускается на финише).
-          foregroundNotificationConfig:
-              withForeground && _backgroundTrackingEnabled
+          foregroundNotificationConfig: withForeground || _hasSession
               ? ForegroundNotificationConfig(
                   notificationTitle: _isWorkoutPaused
                       ? 'PulsePath — пауза'
@@ -2486,10 +2493,8 @@ class MapNavigationController extends ChangeNotifier {
         locationSettings = AppleSettings(
           accuracy: accuracy,
           distanceFilter: distanceFilter,
-          allowBackgroundLocationUpdates:
-              _backgroundTrackingEnabled && _hasSession,
-          showBackgroundLocationIndicator:
-              _backgroundTrackingEnabled && _hasSession,
+          allowBackgroundLocationUpdates: _hasSession,
+          showBackgroundLocationIndicator: _hasSession,
           pauseLocationUpdatesAutomatically: false,
         );
       }
@@ -2962,7 +2967,8 @@ class MapNavigationController extends ChangeNotifier {
         activity: activity,
         via: List.of(via),
       );
-      if (_disposed || !_hasCurrentOwner || generation != _routeGeneration) return;
+      if (_disposed || !_hasCurrentOwner || generation != _routeGeneration)
+        return;
       _routeVia = List.of(via);
       _isBookmarked = false;
       routeNotice = null;
@@ -3185,6 +3191,10 @@ class MapNavigationController extends ChangeNotifier {
   /// Автопауза: скорость выше 2.0 км/ч → [resumeWorkout]. Ручная пауза не
   /// прерывается автоматически.
   void _updateAutoPause(Position position) {
+    if (!_sharingForeground) {
+      _lowSpeedSince = null;
+      return;
+    }
     if (!_autoPauseEnabled) return;
     if (!_isWorkoutActive && !_isWorkoutPaused) return;
     if (!_isWorkoutActive && !_isAutoPaused) return; // ручная пауза

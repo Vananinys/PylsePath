@@ -7,6 +7,7 @@ import 'package:pulsepath/controllers/map_navigation_controller.dart';
 import 'package:pulsepath/models/gps_signal.dart';
 
 import 'location_recovery_test.dart' show PhoneLocation;
+import 'workout_training_test.dart' show TrainingClock;
 
 Position sample(
   DateTime at, {
@@ -71,6 +72,69 @@ void main() {
     controller.startWorkout();
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
+
+  test(
+    'Screen lock rejects stationary auto-pause and keeps recording movement',
+    () {
+      controller.startWorkout();
+      controller.setSharingForeground(false);
+      controller.acceptFreshnessProbeForTesting(
+        sample(phone.now.subtract(const Duration(seconds: 20))),
+      );
+      controller.acceptFreshnessProbeForTesting(sample(phone.now));
+      expect(controller.isWorkoutActive, isTrue);
+      expect(controller.isWorkoutPaused, isFalse);
+      controller.applyGpsSampleForTesting(sample(phone.now, speed: 3));
+      phone.now = phone.now.add(const Duration(seconds: 5));
+      controller.applyGpsSampleForTesting(
+        sample(phone.now, lat: 56.48015, speed: 3),
+      );
+      expect(controller.recordedPath.length, greaterThanOrEqualTo(2));
+      expect(controller.totalDistanceMeters, greaterThan(0));
+      expect(controller.isWorkoutActive, isTrue);
+    },
+  );
+  test('Locking resumes an automatic pause, but preserves a manual pause', () {
+    controller.startWorkout();
+    controller.acceptFreshnessProbeForTesting(
+      sample(phone.now.subtract(const Duration(seconds: 20))),
+    );
+    controller.acceptFreshnessProbeForTesting(sample(phone.now));
+    expect(controller.isAutoPaused, isTrue);
+    controller.setSharingForeground(false);
+    expect(controller.isWorkoutActive, isTrue);
+    expect(controller.isAutoPaused, isFalse);
+    controller.pauseWorkout();
+    controller.setSharingForeground(true);
+    controller.setSharingForeground(false);
+    expect(controller.isWorkoutPaused, isTrue);
+    expect(controller.isAutoPaused, isFalse);
+  });
+  test(
+    'Screen-off time counts without GPS even when old background option is off',
+    () {
+      controller.dispose();
+      final clock = TrainingClock();
+      controller = MapNavigationController(
+        activeClock: clock,
+        gpsNow: () => phone.now,
+      );
+      controller.setBackgroundTrackingEnabled(false);
+      controller.startWorkout();
+      clock.advance(8);
+      controller.setSharingForeground(false);
+      controller.acceptFreshnessProbeForTesting(
+        sample(phone.now.subtract(const Duration(seconds: 20))),
+      );
+      controller.acceptFreshnessProbeForTesting(sample(phone.now));
+      clock.advance(120);
+      expect(controller.activeWorkoutDuration.inSeconds, 128);
+      expect(controller.isWorkoutActive, isTrue);
+      controller.setSharingForeground(true);
+      clock.advance(5);
+      expect(controller.activeWorkoutDuration.inSeconds, 133);
+    },
+  );
 
   test('Future and stale samples cannot poison the track or freshness', () {
     controller.setAutoPauseEnabled(false);

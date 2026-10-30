@@ -179,13 +179,11 @@ class _RidePreparationPanelState extends State<RidePreparationPanel> {
             tilePadding: EdgeInsets.zero,
             title: const Text('Запись и отсечки'),
             subtitle: Text(
-              '${c.autoLapMeters == 0 ? 'Без отсечек' : 'Отсечки ${c.autoLapMeters ~/ 1000} км'} · ${c.backgroundTrackingEnabled ? 'фоновая запись включена' : 'без фоновой записи'}',
+              '${c.autoLapMeters == 0 ? 'Без отсечек' : 'Отсечки ${c.autoLapMeters ~/ 1000} км'} · запись с выключенным экраном',
             ),
             children: [
               Text(
-                c.backgroundTrackingEnabled
-                    ? 'Фоновая запись включена в настройках'
-                    : 'Фоновая запись отключена в настройках',
+                'Начатая тренировка записывается с выключенным экраном. Пауза и финиш — вручную.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),

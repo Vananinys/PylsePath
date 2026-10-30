@@ -478,7 +478,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Шагомер и активность': 'Шаги, дневная цель и огонёк активности',
         'Уведомления': 'Звук, вибрация и экран блокировки',
         'Тренировки':
-            'Фоновая запись ${_background ? 'включена' : 'выключена'} · автопауза ${_autoPause ? 'включена' : 'выключена'}',
+            'Запись с выключенным экраном · автопауза ${_autoPause ? 'при открытом приложении' : 'выключена'}',
         'Приватность':
             'Позиция друзьям ${_shareLive ? 'передаётся' : 'не передаётся'} · видимость профиля и резервная копия',
         'Аккаунт и данные': 'Облачная синхронизация, обновления и вход',
@@ -585,10 +585,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SwitchListTile(
           secondary: const Icon(Icons.screen_lock_portrait_outlined),
-          title: const Text('Фоновый режим'),
+          title: const Text('Подсказки и трансляция в фоне'),
           subtitle: const Text(
-            'Трек записывается даже с выключенным экраном '
-            '(постоянное уведомление во время заезда)',
+            'Голос, напоминания и разрешённая передача позиции друзьям в фоне. '
+            'Запись начатой тренировки продолжается с выключенным экраном независимо от этого переключателя.',
           ),
           value: _settingsLoaded && _background,
           onChanged: _settingsLoaded
@@ -599,8 +599,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           secondary: const Icon(Icons.motion_photos_paused),
           title: const Text('Умная автопауза'),
           subtitle: const Text(
-            'Пауза при остановке дольше 3 секунд, '
-            'возобновление при разгоне выше 2 км/ч',
+            'Только при открытом приложении: пауза при остановке дольше 3 секунд, '
+            'возобновление при разгоне выше 2 км/ч. Блокировка экрана не ставит запись на паузу.',
           ),
           value: _settingsLoaded && _autoPause,
           onChanged: _settingsLoaded
