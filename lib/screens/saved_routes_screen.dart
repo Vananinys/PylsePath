@@ -1,6 +1,9 @@
 import '../widgets/activity_trail_layer.dart';
 
 import 'package:flutter/material.dart';
+
+import '../widgets/section_intro.dart';
+
 import 'package:flutter_map/flutter_map.dart';
 
 import '../data/navigation_preferences.dart';
@@ -134,6 +137,21 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          SectionIntro(
+                            icon: Icons.route_outlined,
+                            eyebrow: 'ВАША КОЛЛЕКЦИЯ',
+                            title: 'Ваши маршруты',
+                            description: 'Откройте маршрут, чтобы посмотреть детали и начать подготовку. Новый путь создаётся кнопкой внизу.',
+                            children: [
+                              Text(
+                                'Сохранено маршрутов: ${_routes.length}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
                           if (_error != null)
                             ListTile(
                               title: Text(_error!),

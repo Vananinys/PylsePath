@@ -262,7 +262,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(group.title, 'Вечерняя поездка');
       expect(controller.isWorkoutActive, false);
-      await tester.tap(find.text('На главную — к старту'));
+      await tester.tap(find.text('Перейти к старту тренировки'));
       await tester.pumpAndSettle();
       expect(result, 'prepare_group');
       expect(controller.isWorkoutActive, false);
@@ -325,9 +325,20 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.text('В пути'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('В пути'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Предложить остановку'));
+      await tester.scrollUntilVisible(
+        find.text('Предложить остановку').hitTestable(),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Предложить остановку'));
       await tester.pumpAndSettle();
       expect(find.byType(GroupMeetingEditor), findsOneWidget);
@@ -435,4 +446,3 @@ void main() {
     },
   );
 }
-

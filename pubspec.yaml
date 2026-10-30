@@ -1,7 +1,7 @@
 name: pulsepath
 description: "PulsePath — мобильный навигатор с картой CartoDB Positron."
 publish_to: 'none'
-version: 1.13.0-ui-beta.1+84
+version: 1.13.0-ui-beta.2+85
 
 environment:
   sdk: '>=3.13.0 <4.0.0'

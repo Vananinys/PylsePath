@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/section_intro.dart';
+
 import 'package:latlong2/latlong.dart';
 
 import '../data/saved_places_repository.dart';
@@ -125,15 +128,21 @@ class _SavedPlacesScreenState extends State<SavedPlacesScreen> {
     appBar: AppBar(title: const Text('Мои места')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
-        : Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Личные точки этого аккаунта хранятся на устройстве. Нажмите на место, чтобы построить маршрут. Для маршрута по дорогам нужен интернет.',
+        : CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SectionIntro(
+                    compact: true,
+                    icon: Icons.bookmark_border,
+                    eyebrow: 'ЛИЧНЫЕ ТОЧКИ',
+                    title: 'Мои места',
+                    description: 'Выберите место, чтобы построить маршрут. Точки хранятся на этом устройстве для вашего аккаунта. Для построения по дорогам нужен интернет.',
+                  ),
                 ),
               ),
-              Expanded(
+              SliverFillRemaining(
                 child: _error != null
                     ? Center(
                         child: SingleChildScrollView(

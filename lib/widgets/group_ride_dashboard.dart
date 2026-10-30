@@ -11,6 +11,7 @@ import '../services/offline_maps_service.dart';
 import '../screens/group_meeting_editor.dart';
 import 'group_ride_actions.dart';
 import 'shared_route_card.dart';
+import 'section_intro.dart';
 
 /// A map and one task at a time, rather than all room controls in one feed.
 class GroupRideDashboard extends StatefulWidget {
@@ -47,6 +48,9 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
   int _tab = 0;
   String? _room;
   LatLng? _focus;
+  final _mapKey = GlobalKey();
+  final _scroll = ScrollController();
+  final _mapExpansion = ExpansibleController();
   GroupRideService get service => widget.service;
   bool get busy => widget.busy || service.coordinating;
   bool get recording =>
@@ -69,7 +73,34 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
     }
   }
 
-  void _point(LatLng point) => setState(() => _focus = point);
+  @override
+  void dispose() {
+    _mapExpansion.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _point(LatLng point) async {
+    setState(() => _focus = point);
+    if (_scroll.hasClients) {
+      await _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+    if (!mounted) return;
+    _mapExpansion.expand();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _mapKey.currentContext;
+      if (mounted && target != null)
+        Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 250),
+        );
+    });
+  }
+
   Future<void> _meeting() async {
     final scope = GroupActionScope(service);
     final result = await Navigator.push<GroupMeetPlan>(
@@ -211,143 +242,192 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
           ),
         ],
       ),
+      bottomNavigationBar: !inRoom
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: FilledButton.icon(
+                  onPressed: busy ? null : widget.onReturn,
+                  icon: Icon(
+                    recording ? Icons.map_outlined : Icons.play_circle_outline,
+                  ),
+                  label: Text(
+                    recording
+                        ? 'К своей поездке'
+                        : 'Перейти к старту тренировки',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
       body: !inRoom
           ? _welcome(context)
           : SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              child: ListView(
+                controller: _scroll,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
                 children: [
                   if (widget.busy || service.refreshing)
                     const LinearProgressIndicator(),
                   if (service.error != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        service.error!,
-                        maxLines: 3,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                    Card(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(service.error!),
                       ),
                     ),
                   if (service.notice != null)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(service.notice!, maxLines: 3),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(service.notice!),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          service.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(
-                          '${service.members.length} участников · готовы $ready${recording
-                              ? widget.navigation?.groupWorkoutConnected == true
-                                    ? ' · вы в групповом заезде'
-                                    : ' · у вас отдельная запись'
-                              : ' · собираемся'}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: _GroupRideMap(
-                      key: ValueKey(service.activeRoomId),
-                      service: service,
-                      focus: _focus,
-                      center: widget.navigation?.currentLocation,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                    child: Row(
-                      children: [
-                        for (final entry in [
-                          (0, Icons.flag_outlined, 'Сбор'),
-                          (1, Icons.people_outline, 'Люди'),
-                          (2, Icons.directions_bike, 'В пути'),
-                        ])
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 2,
-                              ),
-                              child: Badge(
-                                isLabelVisible: entry.$1 == 2 && eventCount > 0,
-                                label: Text('$eventCount'),
-                                child: ChoiceChip(
-                                  showCheckmark: false,
-                                  label: Text(entry.$3, maxLines: 1),
-                                  selected: _tab == entry.$1,
-                                  onSelected: (_) =>
-                                      setState(() => _tab = entry.$1),
-                                ),
-                              ),
+                  SectionIntro(
+                    compact: true,
+                    icon: Icons.groups_2_outlined,
+                    eyebrow: service.isHost ? 'ВЫ ОРГАНИЗАТОР' : 'ВЫ В ГРУППЕ',
+                    title: service.title,
+                    description: recording
+                        ? widget.navigation?.groupWorkoutConnected == true
+                              ? 'Вы записываете тренировку в этой группе.'
+                              : 'Сейчас у вас отдельная запись. Она продолжится независимо от группы.'
+                        : 'Группа собрана. Договоритесь о встрече, затем каждый начнёт свою запись.',
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Chip(
+                            avatar: const Icon(Icons.people_outline, size: 18),
+                            label: Text(
+                              'Участников: ${service.members.length}',
                             ),
                           ),
+                          Chip(
+                            avatar: const Icon(
+                              Icons.check_circle_outline,
+                              size: 18,
+                            ),
+                            label: Text('Готовы: $ready'),
+                          ),
+                        ],
+                      ),
+                      TextButton.icon(
+                        onPressed: busy ? null : _invite,
+                        icon: const Icon(Icons.person_add_alt),
+                        label: const Text('Пригласить друзей и показать код'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: ExpansionTile(
+                      controller: _mapExpansion,
+                      key: _mapKey,
+                      initiallyExpanded: false,
+                      leading: const Icon(Icons.map_outlined),
+                      title: const Text('Карта группы'),
+                      subtitle: const Text('Место встречи и доступные позиции'),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.sizeOf(context).height < 700
+                              ? 180
+                              : 220,
+                          child: _GroupRideMap(
+                            key: ValueKey(service.activeRoomId),
+                            service: service,
+                            focus: _focus,
+                            center: widget.navigation?.currentLocation,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Expanded(
-                    flex: 4,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                      child: switch (_tab) {
-                        0 => _gather(context, ready),
-                        1 => _people(context),
-                        _ => Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (service.coordination
-                                .activeSignals(DateTime.now())
-                                .isNotEmpty) ...[
-                              GroupEventsCarousel(
-                                service: service,
-                                onPoint: _point,
-                                disabled: busy,
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                            GroupRideActionPad(
-                              service: service,
-                              center: widget.navigation?.currentLocation,
-                              disabled: busy,
-                            ),
-                            const SizedBox(height: 12),
-                            if (service.coordination
-                                .activeSignals(DateTime.now())
-                                .isEmpty)
-                              GroupEventsCarousel(
-                                service: service,
-                                onPoint: _point,
-                                disabled: busy,
-                              ),
-                          ],
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final entry in [
+                        (0, Icons.flag_outlined, 'Сбор'),
+                        (1, Icons.people_outline, 'Люди'),
+                        (2, Icons.directions_bike, 'В пути'),
+                      ])
+                        ChoiceChip(
+                          avatar: Icon(entry.$2, size: 18),
+                          showCheckmark: false,
+                          label: Text(
+                            entry.$1 == 2 && eventCount > 0
+                                ? 'В пути · $eventCount'
+                                : entry.$3,
+                          ),
+                          selected: _tab == entry.$1,
+                          onSelected: (_) => setState(() => _tab = entry.$1),
                         ),
-                      },
-                    ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                    child: FilledButton.icon(
-                      onPressed: busy ? null : widget.onReturn,
-                      icon: Icon(
-                        recording ? Icons.map_outlined : Icons.arrow_forward,
-                      ),
-                      label: Text(
-                        recording ? 'К своей поездке' : 'На главную — к старту',
-                        textAlign: TextAlign.center,
-                      ),
+                  const SizedBox(height: 16),
+                  switch (_tab) {
+                    0 => _gather(context, ready),
+                    1 => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Кто едет с вами',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Готовность, личная запись и видимость позиции — разные состояния.',
+                        ),
+                        const SizedBox(height: 12),
+                        _people(context),
+                      ],
                     ),
-                  ),
+                    _ => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Связь в дороге',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Отправьте короткое сообщение или предложите остановку. Это не меняет маршрут других участников.',
+                        ),
+                        const SizedBox(height: 12),
+                        if (service.coordination
+                            .activeSignals(DateTime.now())
+                            .isNotEmpty) ...[
+                          GroupEventsCarousel(
+                            service: service,
+                            onPoint: _point,
+                            disabled: busy,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        GroupRideActionPad(
+                          service: service,
+                          center: widget.navigation?.currentLocation,
+                          disabled: busy,
+                        ),
+                        if (service.coordination
+                            .activeSignals(DateTime.now())
+                            .isEmpty) ...[
+                          const SizedBox(height: 12),
+                          GroupEventsCarousel(
+                            service: service,
+                            onPoint: _point,
+                            disabled: busy,
+                          ),
+                        ],
+                      ],
+                    ),
+                  },
                 ],
               ),
             ),
@@ -355,46 +435,62 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
   }
 
   Widget _welcome(BuildContext context) => SafeArea(
-    child: Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Icon(
-              Icons.groups_2_outlined,
-              size: 72,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Сначала соберём своих',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Создай группу или войди по коду друга. Здесь договариваемся о встрече, а поездку начинаем на главном экране.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            if (service.error != null) Text(service.error!),
-            FilledButton.icon(
-              onPressed: busy || service.refreshing ? null : widget.onCreate,
-              icon: const Icon(Icons.add),
-              label: const Text('Создать группу'),
-            ),
-            OutlinedButton.icon(
-              onPressed: busy || service.refreshing ? null : widget.onJoin,
-              icon: const Icon(Icons.key),
-              label: const Text('Войти по коду'),
-            ),
-          ],
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        const SectionIntro(
+          icon: Icons.groups_2_outlined,
+          eyebrow: 'СОВМЕСТНАЯ ПОЕЗДКА',
+          title: 'Поедем вместе',
+          description: 'Создайте группу для друзей или присоединитесь по коду. Здесь выбирают место встречи и общаются в дороге.',
         ),
-      ),
+        const SizedBox(height: 20),
+        if (service.error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(service.error!),
+          ),
+        FilledButton.icon(
+          onPressed: busy || service.refreshing ? null : widget.onCreate,
+          icon: const Icon(Icons.add),
+          label: const Text('Создать группу'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: busy || service.refreshing ? null : widget.onJoin,
+          icon: const Icon(Icons.key_outlined),
+          label: const Text('Войти по коду'),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: ExpansionTile(
+            title: const Text('Как проходит совместная поездка'),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: const [
+              SectionStep(
+                number: 1,
+                title: 'Соберите друзей',
+                description:
+                    'Отправьте приглашение в чат или поделитесь кодом группы.',
+              ),
+              SectionStep(
+                number: 2,
+                title: 'Договоритесь о встрече',
+                description:
+                    'Выберите место, время и при желании общий маршрут.',
+              ),
+              SectionStep(
+                number: 3,
+                title: 'Начните свою тренировку',
+                description: 'Каждый участник сам включает запись на главной карте. Создание группы запись не запускает.',
+              ),
+            ],
+          ),
+        ),
+      ],
     ),
   );
+
   Widget _gather(BuildContext context, int ready) {
     final plan = service.coordination.plan;
     final mine =
@@ -544,7 +640,7 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
             label: const Text('Позвать к старту'),
           ),
         const Text(
-          'Дальше: главный экран → «Начать тренировку» → «В группе». Так каждый включает свою запись.',
+          'Кнопка внизу откроет подготовку вашей тренировки. Запись начнётся только после вашего подтверждения.',
           style: TextStyle(fontSize: 12),
         ),
       ],
@@ -558,7 +654,9 @@ class _GroupRideDashboardState extends State<GroupRideDashboard> {
       children: [
         for (final member in service.members)
           SizedBox(
-            width: limits.maxWidth < 280
+            width:
+                limits.maxWidth < 360 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3
                 ? limits.maxWidth
                 : (limits.maxWidth - 8) / 2,
             child: Card(

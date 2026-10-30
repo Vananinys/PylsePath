@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/events_service.dart';
 import '../data/user_scope.dart';
+import '../widgets/section_intro.dart';
+import '../widgets/event_overview_card.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key, this.service});
@@ -16,6 +18,7 @@ class _EventsScreenState extends State<EventsScreen> {
   Map<String, dynamic>? _data;
   String? _error;
   bool _busy = false;
+  int _filter = 0;
   @override
   void initState() {
     super.initState();
@@ -107,27 +110,92 @@ class _EventsScreenState extends State<EventsScreen> {
     Map<String, String> labels,
   ) async {
     final values = {for (final entry in labels.entries) entry.key: ''};
+    final form = GlobalKey<FormState>();
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (c) => AlertDialog(
         title: Text(title),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final entry in labels.entries)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: TextField(
-                    onChanged: (text) => values[entry.key] = text,
-                    maxLength:
-                        entry.key == 'description' || entry.key == 'suggestion'
-                        ? 1000
-                        : 100,
-                    decoration: InputDecoration(labelText: entry.value),
+          child: Form(
+            key: form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (labels.containsKey('usability'))
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      'Опрос добровольный. Не указывайте контакты, адреса и другие личные данные. Ответы видят организатор и владелец приложения.',
+                    ),
                   ),
-                ),
-            ],
+                for (final entry in labels.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: entry.key == 'usability' || entry.key == 'usefulness'
+                        ? DropdownButtonFormField<int>(
+                            isExpanded: true,
+                            decoration: InputDecoration(labelText: entry.value),
+                            items: [
+                              for (var n = 1; n <= 5; n++)
+                                DropdownMenuItem(
+                                  value: n,
+                                  child: Text('$n из 5'),
+                                ),
+                            ],
+                            onChanged: (v) => values[entry.key] = '$v',
+                            validator: (v) =>
+                                v == null ? 'Выберите оценку' : null,
+                          )
+                        : TextFormField(
+                            validator: (raw) {
+                              final text = (raw ?? '').trim();
+                              final number = int.tryParse(text);
+                              if (entry.key == 'title' && text.length < 3)
+                                return 'Введите не меньше 3 символов';
+                              if (entry.key == 'days' &&
+                                  (number == null || number < 1 || number > 90))
+                                return 'От 1 до 90 дней';
+                              if (entry.key == 'target' &&
+                                  (number == null || number < 1))
+                                return 'Укажите число тренировок от 1';
+                              if (entry.key == 'xp' &&
+                                  text.isNotEmpty &&
+                                  (number == null ||
+                                      number < 0 ||
+                                      number > 500))
+                                return 'От 0 до 500 XP';
+                              if (entry.key == 'favorite' && text.isEmpty)
+                                return 'Расскажите о полезной функции';
+                              if (entry.key == 'user_id' &&
+                                  !RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(text))
+                                return 'Введите UUID аккаунта';
+                              return null;
+                            },
+                            keyboardType:
+                                ['days', 'target', 'xp'].contains(entry.key)
+                                ? TextInputType.number
+                                : TextInputType.multiline,
+                            minLines:
+                                entry.key == 'description' ||
+                                    entry.key == 'suggestion'
+                                ? 3
+                                : 1,
+                            maxLines:
+                                entry.key == 'description' ||
+                                    entry.key == 'suggestion'
+                                ? 5
+                                : 1,
+                            onChanged: (text) => values[entry.key] = text,
+                            maxLength:
+                                entry.key == 'description' ||
+                                    entry.key == 'suggestion'
+                                ? 1000
+                                : 100,
+                            decoration: InputDecoration(labelText: entry.value),
+                          ),
+                  ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -136,9 +204,13 @@ class _EventsScreenState extends State<EventsScreen> {
             child: const Text('Отмена'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(c, {
-              for (final entry in values.entries) entry.key: entry.value.trim(),
-            }),
+            onPressed: () {
+              if (form.currentState?.validate() != true) return;
+              Navigator.pop(c, {
+                for (final entry in values.entries)
+                  entry.key: entry.value.trim(),
+              });
+            },
             child: const Text('Продолжить'),
           ),
         ],
@@ -273,6 +345,18 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   Widget build(BuildContext context) {
     final data = _data;
+    final all = (data?['items'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final shown = all
+        .where(
+          (e) => switch (_filter) {
+            1 => e['joined'] == true,
+            2 => EventOverviewCard.ended(e) || e['earned'] == true,
+            _ => !EventOverviewCard.ended(e) && e['earned'] != true,
+          },
+        )
+        .toList();
     return Scaffold(
       appBar: AppBar(
         title: const Text('События и челленджи'),
@@ -297,12 +381,20 @@ class _EventsScreenState extends State<EventsScreen> {
             )
           : _error != null
           ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(_error!),
-                  TextButton(onPressed: _load, child: const Text('Повторить')),
-                ],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_outlined, size: 48),
+                    const SizedBox(height: 16),
+                    Text(_error!, textAlign: TextAlign.center),
+                    TextButton(
+                      onPressed: _load,
+                      child: const Text('Повторить'),
+                    ),
+                  ],
+                ),
               ),
             )
           : data == null
@@ -310,177 +402,157 @@ class _EventsScreenState extends State<EventsScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
                 children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  SectionIntro(
+                    icon: Icons.emoji_events_outlined,
+                    eyebrow: 'СООБЩЕСТВО PULSEPATH',
+                    title: 'Выберите событие',
+                    description: 'Выберите событие, выполните условия и получите награду. Участие добровольное.',
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Text(
-                            '${data['xp']} XP',
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
-                          const Text(
-                            'Опыт за выполненные челленджи и участие. Награда выдаётся один раз.',
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              for (final reward
-                                  in data['rewards'] as List? ?? [])
-                                Chip(
-                                  avatar: const Icon(
-                                    Icons.workspace_premium,
-                                    size: 18,
-                                  ),
-                                  label: Text(reward['badge'].toString()),
-                                ),
-                            ],
-                          ),
-                          if (data['owner'] == true)
-                            TextButton.icon(
-                              onPressed: _busy ? null : _role,
-                              icon: const Icon(Icons.manage_accounts),
-                              label: const Text(
-                                'Назначить организатора или модератора',
-                              ),
+                          Chip(
+                            avatar: const Icon(
+                              Icons.auto_awesome_outlined,
+                              size: 18,
                             ),
+                            label: Text('${data['xp'] ?? 0} XP получено'),
+                          ),
+                          Chip(
+                            avatar: const Icon(Icons.people_outline, size: 18),
+                            label: Text(
+                              'Участвуете: ${all.where((e) => e['joined'] == true && !EventOverviewCard.ended(e)).length}',
+                            ),
+                          ),
                         ],
                       ),
-                    ),
+                    ],
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'Опрос добровольный. Не указывайте адреса, контакты и другие личные данные. Ответы видят организатор и владелец приложения.',
-                    ),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      for (final item in [
+                        (0, 'Доступные'),
+                        (1, 'Моё участие'),
+                        (2, 'Завершённые'),
+                      ])
+                        ChoiceChip(
+                          label: Text(item.$2),
+                          selected: _filter == item.$1,
+                          onSelected: (_) => setState(() => _filter = item.$1),
+                        ),
+                    ],
                   ),
-                  if ((data['items'] as List).isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('Скоро здесь появятся новые события.'),
+                  const SizedBox(height: 16),
+                  if (shown.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Icon(
+                              _filter == 1
+                                  ? Icons.bookmark_border
+                                  : Icons.event_note_outlined,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _filter == 1
+                                  ? 'Вы пока не участвуете в событиях'
+                                  : _filter == 2
+                                  ? 'Завершённых событий пока нет'
+                                  : 'Новых событий пока нет',
+                              style: Theme.of(context).textTheme.titleMedium,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _filter == 1
+                                  ? 'Откройте «Доступные» и выберите то, что интересно.'
+                                  : 'Потяните список вниз, чтобы обновить события.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  for (final raw in data['items'] as List)
-                    _card(Map<String, dynamic>.from(raw as Map)),
+                  for (final event in shown) _card(event),
+                  if ((data['rewards'] as List? ?? []).isNotEmpty)
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text('Полученные награды'),
+                      children: [
+                        for (final reward in data['rewards'] as List)
+                          ListTile(
+                            leading: const Icon(
+                              Icons.workspace_premium_outlined,
+                            ),
+                            title: Text('${reward['badge']}'),
+                            subtitle: Text('${reward['xp'] ?? 0} XP'),
+                          ),
+                      ],
+                    ),
+                  if (data['owner'] == true)
+                    TextButton.icon(
+                      onPressed: _busy ? null : _role,
+                      icon: const Icon(Icons.manage_accounts),
+                      label: const Text(
+                        'Назначить организатора или модератора',
+                      ),
+                    ),
                 ],
               ),
             ),
     );
   }
 
-  Widget _card(Map<String, dynamic> event) {
-    final active =
-        DateTime.tryParse(event['ends_at'].toString())
-            ?.isAfter(DateTime.now()) ==
-        true;
-    final joined = event['joined'] == true;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  event['kind'] == 'challenge'
-                      ? Icons.emoji_events_outlined
-                      : Icons.event_outlined,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    event['title'].toString(),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(event['description'].toString()),
-            const SizedBox(height: 12),
-            Text('${event['xp']} XP · ${event['badge']}'),
-            Text(
-              'До ${DateTime.parse(event['ends_at']).toLocal().toString().substring(0, 16)}',
-            ),
-            if (event['kind'] == 'challenge')
-              Text(
-                'Цель: ${event['target']} тренировок после вступления. Сначала синхронизируйте поездки.',
-              ),
-            Wrap(
-              spacing: 8,
-              children: [
-                if (!joined && active)
-                  FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('join', {'event_id': event['id']}),
-                    child: const Text('Участвовать'),
-                  ),
-                if (joined && active)
-                  OutlinedButton(
-                    onPressed: _busy ? null : () => _feedback(event),
-                    child: const Text('Пройти опрос'),
-                  ),
-                if (joined && active)
-                  FilledButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('claim', {'event_id': event['id']}),
-                    child: Text(
-                      event['earned'] == true
-                          ? 'Награда получена'
-                          : 'Проверить прогресс',
-                    ),
-                  ),
-                if (_data?['owner'] == true || event['creator_id'] == _owner)
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => _action('results', {'event_id': event['id']}),
-                    child: const Text('Ответы'),
-                  ),
-                if (_data?['owner'] == true ||
-                    _data?['moderator'] == true ||
-                    event['creator_id'] == _owner)
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            final confirmed = await showDialog<bool>(
-                              context: context,
-                              builder: (c) => AlertDialog(
-                                title: const Text('Завершить событие?'),
-                                content: const Text(
-                                  'Оно исчезнет из активных. Полученные награды сохранятся.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(c, false),
-                                    child: const Text('Отмена'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.pop(c, true),
-                                    child: const Text('Завершить'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirmed == true)
-                              await _action('archive', {
-                                'event_id': event['id'],
-                              });
-                          },
-                    child: const Text('Завершить'),
-                  ),
-              ],
-            ),
-          ],
+  Widget _card(Map<String, dynamic> event) => EventOverviewCard(
+    event: event,
+    busy: _busy,
+    onJoin: () => _action('join', {'event_id': event['id']}),
+    onFeedback: () => _feedback(event),
+    onClaim: () => _action('claim', {'event_id': event['id']}),
+    onResults:
+        _data?['owner'] == true ||
+            (_owner != null && event['creator_id'] == _owner)
+        ? () => _action('results', {'event_id': event['id']})
+        : null,
+    onArchive:
+        _data?['owner'] == true ||
+            _data?['moderator'] == true ||
+            (_owner != null && event['creator_id'] == _owner)
+        ? () => _archive(event)
+        : null,
+  );
+
+  Future<void> _archive(Map<String, dynamic> event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Завершить событие?'),
+        content: const Text(
+          'Оно исчезнет из активных. Полученные награды сохранятся.',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Завершить'),
+          ),
+        ],
       ),
     );
+    if (confirmed == true && _current)
+      await _action('archive', {'event_id': event['id']});
   }
 }
