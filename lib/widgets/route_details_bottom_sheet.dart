@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/activity_type.dart';
 import '../models/surface_info.dart';
+import 'responsive_stats.dart';
 import 'route_offline_readiness.dart';
 import '../screens/offline_maps_screen.dart';
 import '../screens/route_places_screen.dart';
@@ -85,7 +86,8 @@ class RouteDetailsBottomSheet extends StatelessWidget {
     required this.calculateCalories,
   });
 
-  Widget _buildStatCard({
+  Widget _buildStatCard(
+    BuildContext context, {
     required IconData icon,
     required Color iconColor,
     required String title,
@@ -96,7 +98,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFF6F7F9),
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
@@ -112,9 +114,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Colors.black54,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -122,16 +124,12 @@ class RouteDetailsBottomSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 2),
@@ -139,7 +137,10 @@ class RouteDetailsBottomSheet extends StatelessWidget {
               subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 10,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -147,7 +148,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildSurfaceLegend(Color color, String label) {
+  Widget _buildSurfaceLegend(BuildContext context, Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -160,7 +161,10 @@ class RouteDetailsBottomSheet extends StatelessWidget {
         Flexible(
           child: Text(
             label,
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -170,14 +174,17 @@ class RouteDetailsBottomSheet extends StatelessWidget {
   }
 
   /// Секция покрытия: проценты, если данные есть, иначе честный «нет данных».
-  Widget _buildSurfaceSection() {
+  Widget _buildSurfaceSection(BuildContext context) {
     final surface = surfaceInfo;
     if (surface == null) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(vertical: 6),
         child: Text(
           'Покрытие: данных пока нет',
-          style: TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -185,12 +192,12 @@ class RouteDetailsBottomSheet extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Типы покрытия:',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: Colors.black87,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 8),
@@ -229,18 +236,21 @@ class RouteDetailsBottomSheet extends StatelessWidget {
           children: [
             Flexible(
               child: _buildSurfaceLegend(
+                context,
                 const Color(0xFF4F6D7A),
                 'Асфальт ${surface.asphaltPercent.round()}%',
               ),
             ),
             Flexible(
               child: _buildSurfaceLegend(
+                context,
                 const Color(0xFFF4B400),
                 'Гравий ${surface.gravelPercent.round()}%',
               ),
             ),
             Flexible(
               child: _buildSurfaceLegend(
+                context,
                 const Color(0xFF6D4C41),
                 'Грунт ${surface.dirtPercent.round()}%',
               ),
@@ -262,8 +272,8 @@ class RouteDetailsBottomSheet extends StatelessWidget {
       snapSizes: const [.28, .48, .86],
       controller: sheetController,
       builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
@@ -292,7 +302,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                             width: 36,
                             height: 5,
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade500,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(2.5),
                             ),
                           ),
@@ -318,53 +330,66 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                     finishAddress.startsWith('Точка на карте')
                                         ? 'Точка назначения на карте'
                                         : finishAddress,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 17,
-                                      color: Colors.black,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                     ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 2),
-                                  const Text(
+                                  Text(
                                     'Откуда: моё местоположение',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: Colors.grey,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.close, color: Colors.grey),
+                              tooltip: 'Убрать маршрут с карты',
+                              icon: Icon(
+                                Icons.close,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                               onPressed: onClearRoute,
                             ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         if (!isLoadingRoute && hasRoute) ...[
-                          Row(
+                          ResponsiveStats(
                             children: [
                               _buildStatCard(
+                                context,
                                 icon: Icons.timer_outlined,
                                 iconColor: const Color(0xFF2196F3),
                                 title: 'Время',
                                 value: routeDurationMin != null
                                     ? formatDuration(routeDurationMin!)
-                                    : '0 мин',
+                                    : 'Нет данных',
                                 subtitle: routeDurationMin != null
                                     ? formatETA(routeDurationMin!)
-                                    : 'до --:--',
+                                    : 'Время в пути',
                               ),
                               const SizedBox(width: 5),
                               _buildStatCard(
+                                context,
                                 icon: Icons.straighten_rounded,
                                 iconColor: const Color(0xFFFF9800),
                                 title: 'Дистанция',
-                                value:
-                                    '${(routeDistanceKm ?? 0).toStringAsFixed(1).replaceAll('.', ',')} км',
+                                value: routeDistanceKm == null
+                                    ? 'Нет данных'
+                                    : '${routeDistanceKm!.toStringAsFixed(1).replaceAll('.', ',')} км',
                                 subtitle:
                                     '~${selectedActivity.avgSpeedKmH.round()} км/ч',
                               ),
@@ -372,6 +397,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                               if (elevationGainMeters != 0 ||
                                   elevationLossMeters != 0)
                                 _buildStatCard(
+                                  context,
                                   icon: Icons.terrain_rounded,
                                   iconColor: const Color(0xFF4CAF50),
                                   title: 'Высота',
@@ -388,6 +414,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                 ),
                               const SizedBox(width: 5),
                               _buildStatCard(
+                                context,
                                 icon: Icons.local_fire_department_outlined,
                                 iconColor: const Color(0xFFFF5722),
                                 title: 'Энергия',
@@ -408,17 +435,31 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Text(
                               routeNotice!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.brown,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ),
                         if (hasRoute)
-                          TextButton.icon(icon: const Icon(Icons.local_cafe_outlined),
+                          TextButton.icon(
+                            icon: const Icon(Icons.local_cafe_outlined),
                             label: const Text('Вода и места по пути'),
-                            onPressed: routePoints.length < 2 ? null : () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => RoutePlacesScreen(points: List.of(routePoints), progressMeters: routeProgressMeters, onStop: onAddPlaceStop)))),
+                            onPressed: routePoints.length < 2
+                                ? null
+                                : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => RoutePlacesScreen(
+                                        points: List.of(routePoints),
+                                        progressMeters: routeProgressMeters,
+                                        onStop: onAddPlaceStop,
+                                      ),
+                                    ),
+                                  ),
+                          ),
                         if (hasRoute)
                           RouteOfflineReadiness(
                             routePoints: routePoints,
@@ -426,19 +467,34 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                             hasGeometry: hasRoute,
                             hasInstructions: hasOfflineInstructions,
                             onSave: onToggleBookmark,
-                            onOpenMaps: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => OfflineMapsScreen(
-                                currentLocation: finishPoint == null ? null : LatLngWithLabel(
-                                  latitude: finishPoint!.latitude, longitude: finishPoint!.longitude,
-                                  label: 'Финиш маршрута · область вокруг точки, не весь путь'),
-                              ))),
+                            onOpenMaps: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => OfflineMapsScreen(
+                                  currentLocation: finishPoint == null
+                                      ? null
+                                      : LatLngWithLabel(
+                                          latitude: finishPoint!.latitude,
+                                          longitude: finishPoint!.longitude,
+                                          label: 'Финиш маршрута · область вокруг точки, не весь путь',
+                                        ),
+                                ),
+                              ),
+                            ),
                           ),
-                        if (!selectedActivity.isFoot && selectedActivity != ActivityType.driving)
-                          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text(
-                            'Предпочтения «тише», «меньше подъёмов» и «меньше остановок» пока не применяются к расчёту. Тип велосипеда используется для оценки темпа; отсутствие трафика и безопасность не гарантируются.',
-                          )),
-                        if (elevationGainMeters == 0 && elevationLossMeters == 0)
-                          const Text('Набор высоты не подтверждён. Нулевые значения не означают, что маршрут плоский.'),
+                        if (!selectedActivity.isFoot &&
+                            selectedActivity != ActivityType.driving)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              'Предпочтения «тише», «меньше подъёмов» и «меньше остановок» пока не применяются к расчёту. Тип велосипеда используется для оценки темпа; отсутствие трафика и безопасность не гарантируются.',
+                            ),
+                          ),
+                        if (elevationGainMeters == 0 &&
+                            elevationLossMeters == 0)
+                          const Text(
+                            'Набор высоты не подтверждён. Нулевые значения не означают, что маршрут плоский.',
+                          ),
                         ExpansionTile(
                           key: const PageStorageKey('route-activity'),
                           tilePadding: EdgeInsets.zero,
@@ -469,12 +525,16 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         color: isSelected
                                             ? Colors.deepOrange
-                                            : const Color(0xFFF6F7F9),
+                                            : Theme.of(context)
+                                                  .colorScheme
+                                                  .surfaceContainerLow,
                                         borderRadius: BorderRadius.circular(14),
                                         border: isSelected
                                             ? null
                                             : Border.all(
-                                                color: Colors.grey.shade300,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .outlineVariant,
                                                 width: 1,
                                               ),
                                       ),
@@ -485,7 +545,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                             size: 18,
                                             color: isSelected
                                                 ? Colors.white
-                                                : Colors.black87,
+                                                : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
@@ -493,7 +555,9 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                             style: TextStyle(
                                               color: isSelected
                                                   ? Colors.white
-                                                  : Colors.black87,
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface,
                                               fontWeight: isSelected
                                                   ? FontWeight.bold
                                                   : FontWeight.w500,
@@ -555,7 +619,7 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            _buildSurfaceSection(),
+                            _buildSurfaceSection(context),
                             if (gearAdvisor != null) gearAdvisor!,
                           ],
                         ),
@@ -631,47 +695,57 @@ class RouteDetailsBottomSheet extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(54, 54),
-                            padding: EdgeInsets.zero,
-                            side: BorderSide(
-                              color: Colors.grey.shade300,
-                              width: 1.5,
+                        Tooltip(
+                          message: 'Сохранить маршрут',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(54, 54),
+                              padding: EdgeInsets.zero,
+                              side: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                                width: 1.5,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                            onPressed: onToggleBookmark,
+                            child: Icon(
+                              isBookmarked
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_border_rounded,
+                              color: isBookmarked
+                                  ? Colors.deepOrange
+                                  : Theme.of(context).colorScheme.onSurface,
+                              size: 24,
                             ),
-                          ),
-                          onPressed: onToggleBookmark,
-                          child: Icon(
-                            isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border_rounded,
-                            color: isBookmarked
-                                ? Colors.deepOrange
-                                : Colors.black87,
-                            size: 24,
                           ),
                         ),
                         const SizedBox(width: 10),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(54, 54),
-                            padding: EdgeInsets.zero,
-                            side: BorderSide(
-                              color: Colors.grey.shade300,
-                              width: 1.5,
+                        Tooltip(
+                          message: 'Поделиться маршрутом',
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(54, 54),
+                              padding: EdgeInsets.zero,
+                              side: BorderSide(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .outlineVariant,
+                                width: 1.5,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                            onPressed: onShareRoute,
+                            child: Icon(
+                              Icons.share_outlined,
+                              color: Theme.of(context).colorScheme.onSurface,
+                              size: 24,
                             ),
-                          ),
-                          onPressed: onShareRoute,
-                          child: const Icon(
-                            Icons.share_outlined,
-                            color: Colors.black87,
-                            size: 24,
                           ),
                         ),
                         const SizedBox(width: 10),

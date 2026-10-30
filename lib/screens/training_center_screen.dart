@@ -106,6 +106,7 @@ class _TrainingCenterScreenState extends State<TrainingCenterScreen> {
                       child: ListTile(
                         title: Text(_error!),
                         trailing: IconButton(
+                          tooltip: 'Обновить',
                           onPressed: _load,
                           icon: const Icon(Icons.refresh),
                         ),

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'notification_permission_service.dart';
 import '../config.dart';
+import '../config/app_variant.dart';
 import '../models/chat_message.dart';
 import '../utils/notification_identity.dart';
 import 'chat_service.dart';
@@ -121,7 +122,7 @@ class PushService {
       if (Platform.isAndroid && !_updateTopicSubscribed) {
         try {
           await FirebaseMessaging.instance.subscribeToTopic(
-            'pulsepath_android_updates',
+            AppVariant.updateTopic,
           );
           _updateTopicSubscribed = true;
         } catch (error) {

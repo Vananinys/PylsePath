@@ -69,7 +69,7 @@ class PreRideWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.18),
@@ -87,7 +87,7 @@ class PreRideWidget extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: _buildHeader(),
+              child: _buildHeader(context),
             ),
             const Divider(height: 1),
             Flexible(
@@ -105,7 +105,7 @@ class PreRideWidget extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF1E8),
+                          color: Theme.of(context).colorScheme.primaryContainer,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
@@ -126,10 +126,10 @@ class PreRideWidget extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    _buildSportModeRow(),
+                    _buildSportModeRow(context),
                     if (sportMode == SportMode.vehicle) ...[
                       const SizedBox(height: 10),
-                      _buildVehicleChip(),
+                      _buildVehicleChip(context),
                     ],
                     if (readiness != null) ...[
                       const SizedBox(height: 10),
@@ -176,18 +176,18 @@ class PreRideWidget extends StatelessWidget {
   }
 
   /// Заголовок: подпись и кнопка «свернуть» вниз.
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
         const Icon(Icons.directions_bike, size: 18, color: _accent),
         const SizedBox(width: 6),
-        const Expanded(
+        Expanded(
           child: Text(
             'Подготовка к тренировке',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: Colors.black54,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -197,10 +197,10 @@ class PreRideWidget extends StatelessWidget {
           child: InkResponse(
             onTap: isLocked ? null : onCollapse,
             radius: 20,
-            child: const Icon(
+            child: Icon(
               Icons.keyboard_arrow_down,
               size: 26,
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -209,10 +209,10 @@ class PreRideWidget extends StatelessWidget {
   }
 
   /// Чип техники: [ 🚴 Название (29") ▾ ]
-  Widget _buildVehicleChip() {
+  Widget _buildVehicleChip(BuildContext context) {
     final vehicle = selectedVehicle;
     return Material(
-      color: Colors.grey.shade50,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(30),
       child: InkWell(
         onTap: isLocked ? null : onSelectVehicle,
@@ -222,7 +222,9 @@ class PreRideWidget extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(30),
             border: Border.all(
-              color: vehicle == null ? Colors.grey.shade300 : _accent,
+              color: vehicle == null
+                  ? Theme.of(context).colorScheme.outlineVariant
+                  : _accent,
               width: vehicle == null ? 1 : 1.5,
             ),
           ),
@@ -238,16 +240,16 @@ class PreRideWidget extends StatelessWidget {
                             '${vehicle.wheelSize > 0 ? ' (${vehicle.wheelSize.toStringAsFixed(0)}")' : ''}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.black87,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.keyboard_arrow_down,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 size: 20,
               ),
             ],
@@ -258,7 +260,7 @@ class PreRideWidget extends StatelessWidget {
   }
 
   /// Выбор сначала делит тренировку на занятия на технике и на ногах.
-  Widget _buildSportModeRow() {
+  Widget _buildSportModeRow(BuildContext context) {
     final onFoot = sportMode != SportMode.vehicle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -289,7 +291,7 @@ class PreRideWidget extends StatelessWidget {
         if (onFoot) ...[
           const SizedBox(height: 8),
           SizedBox(
-            height: 42,
+            height: MediaQuery.textScalerOf(context).scale(48) + 8,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: SportMode.values.length - 1,
@@ -411,11 +413,13 @@ class _PreRideToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color background = value
         ? PreRideWidget._accent.withValues(alpha: 0.1)
-        : Colors.grey.shade50;
+        : Theme.of(context).colorScheme.surfaceContainerLow;
     final Color borderColor = value
         ? PreRideWidget._accent
-        : Colors.grey.shade300;
-    final Color textColor = value ? PreRideWidget._accent : Colors.black45;
+        : Theme.of(context).colorScheme.outlineVariant;
+    final Color textColor = value
+        ? PreRideWidget._accent
+        : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Opacity(
       opacity: enabled ? 1.0 : 0.45,
@@ -426,7 +430,7 @@ class _PreRideToggle extends StatelessWidget {
           onTap: enabled ? () => onChanged(!value) : null,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            height: 42,
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
@@ -437,7 +441,9 @@ class _PreRideToggle extends StatelessWidget {
                 Icon(
                   icon,
                   size: 18,
-                  color: value ? PreRideWidget._accent : Colors.grey,
+                  color: value
+                      ? PreRideWidget._accent
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -462,7 +468,7 @@ class _PreRideToggle extends StatelessWidget {
                     border: Border.all(
                       color: value
                           ? PreRideWidget._accent
-                          : Colors.grey.shade400,
+                          : Theme.of(context).colorScheme.outlineVariant,
                       width: 1.5,
                     ),
                   ),
@@ -523,13 +529,13 @@ class _SportChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color background = selected
         ? PreRideWidget._accent.withValues(alpha: 0.12)
-        : Colors.grey.shade50;
+        : Theme.of(context).colorScheme.surfaceContainerLow;
     final Color borderColor = selected
         ? PreRideWidget._accent
-        : Colors.grey.shade300;
+        : Theme.of(context).colorScheme.outlineVariant;
     final Color contentColor = selected
         ? PreRideWidget._accent
-        : Colors.black54;
+        : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Opacity(
       opacity: enabled ? 1.0 : 0.45,
@@ -540,7 +546,7 @@ class _SportChip extends StatelessWidget {
           onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            height: compact ? 42 : 46,
+            constraints: BoxConstraints(minHeight: compact ? 48 : 52),
             padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),

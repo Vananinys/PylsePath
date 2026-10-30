@@ -138,6 +138,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                             ListTile(
                               title: Text(_error!),
                               trailing: IconButton(
+                                tooltip: 'Обновить',
                                 onPressed: _load,
                                 icon: const Icon(Icons.refresh),
                               ),
@@ -478,7 +479,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                               activity: route.activityType,
                               transport: route.transportType,
                             ),
-                            const Align(
+                            Align(
                               alignment: Alignment.bottomRight,
                               child: ColoredBox(
                                 color: Colors.white70,
@@ -488,7 +489,9 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                                     '© OpenStreetMap',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: Colors.black87,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                     ),
                                   ),
                                 ),

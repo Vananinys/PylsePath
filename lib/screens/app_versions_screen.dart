@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_update_service.dart';
+import '../config/app_variant.dart';
 
 class AppVersionsScreen extends StatefulWidget {
   const AppVersionsScreen({super.key, this.loadReleases, this.installedCode});
@@ -250,26 +251,31 @@ class _AppVersionsScreenState extends State<AppVersionsScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Какие обновления получать',
+              AppVariant.uiBeta
+                  ? 'Обновления PulsePath UI Beta'
+                  : 'Какие обновления получать',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
-            SegmentedButton<UpdateChannel>(
-              segments: const [
-                ButtonSegment(
-                  value: UpdateChannel.stable,
-                  label: Text('Стабильные'),
-                ),
-                ButtonSegment(value: UpdateChannel.beta, label: Text('Бета')),
-              ],
-              selected: {_channel},
-              onSelectionChanged: _busy != null || _loading
-                  ? null
-                  : (value) => _changeChannel(value.single),
-            ),
+            if (!AppVariant.uiBeta)
+              SegmentedButton<UpdateChannel>(
+                segments: const [
+                  ButtonSegment(
+                    value: UpdateChannel.stable,
+                    label: Text('Стабильные'),
+                  ),
+                  ButtonSegment(value: UpdateChannel.beta, label: Text('Бета')),
+                ],
+                selected: {_channel},
+                onSelectionChanged: _busy != null || _loading
+                    ? null
+                    : (value) => _changeChannel(value.single),
+              ),
             const SizedBox(height: 12),
             Text(
-              _channel == UpdateChannel.beta
+              AppVariant.uiBeta
+                  ? 'Отдельное тестовое приложение. Обновления обычного PulsePath сюда не устанавливаются. Облачные данные вашего аккаунта общие; локальные настройки и несохранённые записи раздельные.'
+                  : _channel == UpdateChannel.beta
                   ? 'Показываем бета- и стабильные выпуски. Счётчики использования включаются отдельно.'
                   : 'Только проверенные стабильные выпуски. Выбор канала не переустанавливает приложение.',
             ),

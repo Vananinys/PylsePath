@@ -30,7 +30,8 @@ class _OnboardingGateState extends State<OnboardingGate> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ProfileProvider>();
-    if (!provider.isReady || (!provider.hasLocalProfile && provider.isLoading)) {
+    if (!provider.isReady ||
+        (!provider.hasLocalProfile && provider.isLoading)) {
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(color: Colors.deepOrange),
@@ -75,7 +76,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -92,7 +93,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Text(
                     'Соберите интерфейс под себя — позже всё можно изменить в Настройках.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   for (final preset in UiPreset.values)
@@ -115,12 +119,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   onPressed: _applying ? null : _finish,
                   child: _applying
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 24,
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.surface,
                           ),
                         )
                       : const Text('ПОЕХАЛИ', style: TextStyle(fontSize: 16)),
@@ -156,13 +160,15 @@ class _PresetCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected ? Colors.deepOrange : Colors.grey.shade300,
+              color: selected
+                  ? Colors.deepOrange
+                  : Theme.of(context).colorScheme.outlineVariant,
               width: selected ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(16),
             color: selected
                 ? Colors.deepOrange.withValues(alpha: 0.06)
-                : Colors.white,
+                : Theme.of(context).colorScheme.surface,
           ),
           child: Row(
             children: [
@@ -184,7 +190,7 @@ class _PresetCard extends StatelessWidget {
                       preset.description,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -192,7 +198,9 @@ class _PresetCard extends StatelessWidget {
               ),
               Icon(
                 selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: selected ? Colors.deepOrange : Colors.grey.shade400,
+                color: selected
+                    ? Colors.deepOrange
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ],
           ),

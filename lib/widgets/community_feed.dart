@@ -546,14 +546,18 @@ class _CommunityFeedState extends State<CommunityFeed> {
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
         children: [
-          Icon(Icons.forum, size: 56, color: Colors.grey.shade400),
+          Icon(
+            Icons.forum,
+            size: 56,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Лента пуста',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -566,7 +570,10 @@ class _CommunityFeedState extends State<CommunityFeed> {
                 'Ваши публикации и прикреплённые поездки появятся здесь',
             },
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -811,12 +818,18 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                               width: 72,
                               height: 72,
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade400),
+                                border: Border.all(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.add_photo_alternate_outlined,
-                                color: Colors.grey,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -860,7 +873,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                       'Прикрепить заезд:',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),

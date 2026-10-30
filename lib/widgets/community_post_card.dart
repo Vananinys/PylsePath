@@ -57,7 +57,7 @@ class CommunityPostCard extends StatelessWidget {
   }
 
   /// Сетка фотографий: 1 фото — во всю ширину, остальные — 2 колонки.
-  Widget _buildPhotoGrid(List<String> urls) {
+  Widget _buildPhotoGrid(BuildContext context, List<String> urls) {
     if (urls.length == 1) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -68,8 +68,11 @@ class CommunityPostCard extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Container(
             height: 100,
-            color: Colors.grey.shade200,
-            child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Icon(
+              Icons.broken_image_outlined,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       );
@@ -92,10 +95,10 @@ class CommunityPostCard extends StatelessWidget {
             urls[index],
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
-              color: Colors.grey.shade200,
-              child: const Icon(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Icon(
                 Icons.broken_image_outlined,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -160,9 +163,11 @@ class CommunityPostCard extends StatelessWidget {
                         ),
                         Text(
                           _timeAgo,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -171,10 +176,10 @@ class CommunityPostCard extends StatelessWidget {
                   if (isMine && onDelete != null)
                     IconButton(
                       tooltip: 'Удалить пост',
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete_outline,
                         size: 20,
-                        color: Colors.grey,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       onPressed: onDelete,
                     ),
@@ -197,7 +202,7 @@ class CommunityPostCard extends StatelessWidget {
             // Фотографии поста (до 4, сетка 2 колонки).
             if (post.photoUrls.isNotEmpty) ...[
               const SizedBox(height: 10),
-              _buildPhotoGrid(post.photoUrls),
+              _buildPhotoGrid(context, post.photoUrls),
             ],
             // Прикреплённый заезд.
             if (post.rideId != null && post.rideDistanceKm != null) ...[
@@ -276,7 +281,7 @@ class CommunityPostCard extends StatelessWidget {
                           size: 20,
                           color: post.likedByMe
                               ? Colors.deepOrange
-                              : Colors.grey,
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         if (post.likeCount > 0) ...[
                           const SizedBox(width: 5),
@@ -287,7 +292,9 @@ class CommunityPostCard extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                               color: post.likedByMe
                                   ? Colors.deepOrange
-                                  : Colors.grey,
+                                  : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -307,19 +314,23 @@ class CommunityPostCard extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.chat_bubble_outline,
                             size: 18,
-                            color: Colors.grey,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           if (post.commentsCount > 0) ...[
                             const SizedBox(width: 5),
                             Text(
                               '${post.commentsCount}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                             ),
                           ],

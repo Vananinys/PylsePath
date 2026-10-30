@@ -75,8 +75,8 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
     final moduleTiles = <String, Widget>{
       'saved_routes': ListTile(
         leading: const Icon(Icons.map_outlined, color: Colors.deepOrange),
-        title: const Text('Сохраненные маршруты'),
-        subtitle: const Text('Избранное и offline-треки'),
+        title: const Text('Сохранённые маршруты'),
+        subtitle: const Text('Готовые пути и избранное'),
         onTap: () {
           UsageStatistics.instance.record(UsageEvent.savedRoutesOpened);
           Navigator.pop(context);
@@ -173,7 +173,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
           color: Colors.deepOrange,
         ),
         title: const Text('Офлайн-карты'),
-        subtitle: const Text('Скачать область для поездки без сети'),
+        subtitle: const Text('Проверить карты для поездки без сети'),
         onTap: () {
           UsageStatistics.instance.record(UsageEvent.offlineMapsOpened);
           Navigator.pop(context);
@@ -253,8 +253,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
             accountEmail: Text('${profile.status} • ${profile.city}'),
           ),
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
+            child: NavigationMenu(
               children: [
                 ListTile(
                   leading: const Icon(
@@ -299,7 +298,10 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                   subtitle: const Text('Бета-тест, опросы и награды'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EventsScreen()),
+                    );
                   },
                 ),
                 for (final module in UiModules.drawerModules)
@@ -353,7 +355,7 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                 ListTile(
                   leading: const Icon(Icons.settings_outlined),
                   title: const Text('Настройки'),
-                  subtitle: const Text('Параметры заезда, аккаунт'),
+                  subtitle: const Text('Тема, запись, приватность и аккаунт'),
                   onTap: () {
                     // Захватываем ДО push: контекст дровера — под провайдером,
                     // а контекст билдера маршрута — уже нет.
@@ -412,7 +414,9 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
             alignment: Alignment.centerLeft,
             child: Text(
               // Версия подтягивается из pubspec.yaml через метаданные сборки.
-              _appVersion == null ? 'PulsePath' : 'PulsePath v$_appVersion',
+              _appVersion == null
+                  ? AppVariant.name
+                  : '${AppVariant.name} v$_appVersion',
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ),

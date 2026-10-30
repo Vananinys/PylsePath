@@ -1,237 +1,254 @@
-"path","inventory_status","surface_and_entry","code_review","visual_review","states_review","findings"
-"lib/main.dart","candidate","","pending","pending","pending",""
-"lib/screens/about_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/achievements_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/app_versions_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/auth_gate.dart","candidate","","pending","pending","pending",""
-"lib/screens/chat_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/chats_list_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/customization_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/daily_activity_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/developer_lab_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/developer_panel.dart","candidate","","pending","pending","pending",""
-"lib/screens/events_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/friends_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/garage_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/group_meeting_editor.dart","candidate","","pending","pending","pending",""
-"lib/screens/group_ride_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/heatmap_explorer_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/login_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/moderation_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/navigation_preferences_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/notifications_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/offline_maps_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/onboarding_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/owned_trail_style_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/owner_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/post_comments_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/privacy_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_cover_editor.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_customize_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/progress_backup_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/public_profile_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/register_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/reset_password_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_dashboard_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_heatmap_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_media_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/route_builder_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/route_places_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/satellite_settings_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/saved_places_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/saved_routes_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/settings_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/trail_appearance_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/training_center_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/usage_statistics_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/vehicle_detail_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/workout_detail_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/workout_history_screen.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/camera_compass_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/chat_push_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/drawer_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/markers_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/ride_sheets_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/route_actions_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/urban_map_mixin.dart","candidate","","pending","pending","pending",""
-"lib/widgets/achievement_hub.dart","candidate","","pending","pending","pending",""
-"lib/widgets/activity_chip.dart","candidate","","pending","pending","pending",""
-"lib/widgets/activity_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/activity_trail_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/app_update_dialog.dart","candidate","","pending","pending","pending",""
-"lib/widgets/app_update_gate.dart","candidate","","pending","pending","pending",""
-"lib/widgets/auth_header.dart","candidate","","pending","pending","pending",""
-"lib/widgets/background_location_settings.dart","candidate","","pending","pending","pending",""
-"lib/widgets/bike_diagram.dart","candidate","","pending","pending","pending",""
-"lib/widgets/bike_workshop_editors.dart","candidate","","pending","pending","pending",""
-"lib/widgets/bike_workshop_scene.dart","candidate","","pending","pending","pending",""
-"lib/widgets/brake_workshop.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_media_composer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_message_text.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_photo_editor.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_photo.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_reply_preview.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_video_player.dart","candidate","","pending","pending","pending",""
-"lib/widgets/community_feed.dart","candidate","","pending","pending","pending",""
-"lib/widgets/community_post_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_map_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_markers_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_motion_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_trails_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/garage_profile_gallery.dart","candidate","","pending","pending","pending",""
-"lib/widgets/gear_advisor_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/gps_signal_indicator.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_coordination_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_invitation_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_invitation_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_ride_actions.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_ride_dashboard.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_start_choice.dart","candidate","","pending","pending","pending",""
-"lib/widgets/heatmap_path_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/home_steps_pill.dart","candidate","","pending","pending","pending",""
-"lib/widgets/incoming_chat_preview.dart","candidate","","pending","pending","pending",""
-"lib/widgets/interval_training.dart","candidate","","pending","pending","pending",""
-"lib/widgets/local_track_media_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_credits.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_home_actions.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_sticker_flight.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_ui_overlays.dart","candidate","","pending","pending","pending",""
-"lib/widgets/moderation_dialogs.dart","candidate","","pending","pending","pending",""
-"lib/widgets/module_settings_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/offline_route_coverage.dart","candidate","","pending","pending","pending",""
-"lib/widgets/owner_award_management.dart","candidate","","pending","pending","pending",""
-"lib/widgets/pre_ride_widget.dart","candidate","","pending","pending","pending",""
-"lib/widgets/profile_cover_photo.dart","candidate","","pending","pending","pending",""
-"lib/widgets/profile_identity_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/pulsepath_logo.dart","candidate","","pending","pending","pending",""
-"lib/widgets/registration_privacy_fields.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_achievement_banner.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_media_selection.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_navigation_controls.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_preparation_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_pulse_view.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_share_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_share_preview.dart","candidate","","pending","pending","pending",""
-"lib/widgets/rider_marker.dart","candidate","","pending","pending","pending",""
-"lib/widgets/round_trip_planner.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_details_bottom_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_offline_readiness.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_share_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_trace_preview.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_waypoints_editor.dart","candidate","","pending","pending","pending",""
-"lib/widgets/settings_hub.dart","candidate","","pending","pending","pending",""
-"lib/widgets/shared_ride_media_viewer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/shared_route_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/surface_legend.dart","candidate","","pending","pending","pending",""
-"lib/widgets/swipe_to_reply.dart","candidate","","pending","pending","pending",""
-"lib/widgets/track_media_thumbnail.dart","candidate","","pending","pending","pending",""
-"lib/widgets/track_privacy_picker.dart","candidate","","pending","pending","pending",""
-"lib/widgets/training_heat_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/triangle_clipper.dart","candidate","","pending","pending","pending",""
-"lib/widgets/user_location_marker.dart","candidate","","pending","pending","pending",""
-"lib/widgets/vehicle_selector_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/video_player_surface.dart","candidate","","pending","pending","pending",""
-"lib/widgets/video_poster.dart","candidate","","pending","pending","pending",""
-"lib/widgets/voice_guidance_settings.dart","candidate","","pending","pending","pending",""
-"lib/widgets/widget_size_observer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_analytics.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_comparison.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_finish_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_stats_bottom_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_steps_panel.dart","candidate","","pending","pending","pending",""
-"lib/main.dart","candidate","","pending","pending","pending",""
-"lib/screens/about_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/achievements_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/app_versions_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/auth_gate.dart","candidate","","pending","pending","pending",""
-"lib/screens/chat_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/chats_list_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/customization_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/daily_activity_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/developer_lab_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/developer_panel.dart","candidate","","pending","pending","pending",""
-"lib/screens/events_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/friends_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/garage_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/group_meeting_editor.dart","candidate","","pending","pending","pending",""
-"lib/screens/group_ride_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/heatmap_explorer_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/login_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/moderation_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/navigation_preferences_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/notifications_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/offline_maps_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/onboarding_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/owned_trail_style_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/owner_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/post_comments_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/privacy_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_cover_editor.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_customize_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/profile_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/progress_backup_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/public_profile_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/register_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/reset_password_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_dashboard_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_heatmap_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/ride_media_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/route_builder_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/route_places_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/satellite_settings_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/saved_places_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/saved_routes_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/settings_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/trail_appearance_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/training_center_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/usage_statistics_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/vehicle_detail_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/workout_detail_screen.dart","candidate","","pending","pending","pending",""
-"lib/screens/workout_history_screen.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/camera_compass_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/chat_push_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/drawer_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/ride_sheets_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/route_actions_mixin.dart","candidate","","pending","pending","pending",""
-"lib/src/map_screen/urban_map_mixin.dart","candidate","","pending","pending","pending",""
-"lib/widgets/achievement_hub.dart","candidate","","pending","pending","pending",""
-"lib/widgets/app_update_dialog.dart","candidate","","pending","pending","pending",""
-"lib/widgets/bike_workshop_editors.dart","candidate","","pending","pending","pending",""
-"lib/widgets/bike_workshop_scene.dart","candidate","","pending","pending","pending",""
-"lib/widgets/brake_workshop.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_media_composer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_photo_editor.dart","candidate","","pending","pending","pending",""
-"lib/widgets/chat_video_player.dart","candidate","","pending","pending","pending",""
-"lib/widgets/community_feed.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_map_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/friend_markers_layer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/garage_profile_gallery.dart","candidate","","pending","pending","pending",""
-"lib/widgets/gear_advisor_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_coordination_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_invitation_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_invitation_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_ride_actions.dart","candidate","","pending","pending","pending",""
-"lib/widgets/group_ride_dashboard.dart","candidate","","pending","pending","pending",""
-"lib/widgets/home_steps_pill.dart","candidate","","pending","pending","pending",""
-"lib/widgets/interval_training.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_home_actions.dart","candidate","","pending","pending","pending",""
-"lib/widgets/map_ui_overlays.dart","candidate","","pending","pending","pending",""
-"lib/widgets/moderation_dialogs.dart","candidate","","pending","pending","pending",""
-"lib/widgets/offline_route_coverage.dart","candidate","","pending","pending","pending",""
-"lib/widgets/owner_award_management.dart","candidate","","pending","pending","pending",""
-"lib/widgets/registration_privacy_fields.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_media_selection.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_navigation_controls.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_preparation_panel.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_pulse_view.dart","candidate","","pending","pending","pending",""
-"lib/widgets/ride_share_preview.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_details_bottom_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/route_share_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/settings_hub.dart","candidate","","pending","pending","pending",""
-"lib/widgets/shared_ride_media_viewer.dart","candidate","","pending","pending","pending",""
-"lib/widgets/shared_route_card.dart","candidate","","pending","pending","pending",""
-"lib/widgets/vehicle_selector_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/video_player_surface.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_finish_sheet.dart","candidate","","pending","pending","pending",""
-"lib/widgets/workout_stats_bottom_sheet.dart","candidate","","pending","pending","pending",""
+﻿path,inventory_status,surface_and_entry,code_review,visual_review,states_review,findings
+lib/main.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/about_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/achievements_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/app_versions_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/auth_gate.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/chat_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/chats_list_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/customization_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/daily_activity_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/developer_lab_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/developer_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/events_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/friends_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/garage_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/group_meeting_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/group_ride_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/heatmap_explorer_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/login_screen.dart,source_indexed,,static_source_scan,widget_render_light_dark,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/moderation_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/navigation_preferences_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/notifications_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/offline_maps_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/onboarding_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/owned_trail_style_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/owner_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/post_comments_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/privacy_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_cover_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_customize_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/progress_backup_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/public_profile_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/register_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/reset_password_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_dashboard_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_heatmap_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_media_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/route_builder_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/route_places_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/satellite_settings_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/saved_places_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/saved_routes_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/settings_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/trail_appearance_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/training_center_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/usage_statistics_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/vehicle_detail_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/workout_detail_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/workout_history_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/camera_compass_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/chat_push_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/drawer_mixin.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/markers_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/ride_sheets_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/route_actions_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/urban_map_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/achievement_hub.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/activity_chip.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/activity_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/activity_trail_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/app_update_dialog.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/app_update_gate.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/auth_header.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/background_location_settings.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/bike_diagram.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/bike_workshop_editors.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/bike_workshop_scene.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/brake_workshop.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_media_composer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_message_text.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_photo_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_photo.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_reply_preview.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_video_player.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/community_feed.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/community_post_card.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_map_panel.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_markers_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_motion_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_trails_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/garage_profile_gallery.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/gear_advisor_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/gps_signal_indicator.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_coordination_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_invitation_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_invitation_sheet.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_ride_actions.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_ride_dashboard.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_start_choice.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/heatmap_path_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/home_steps_pill.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/incoming_chat_preview.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/interval_training.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/local_track_media_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_credits.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_home_actions.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_sticker_flight.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_ui_overlays.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/moderation_dialogs.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/module_settings_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/offline_route_coverage.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/owner_award_management.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/pre_ride_widget.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/profile_cover_photo.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/profile_identity_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/pulsepath_logo.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/registration_privacy_fields.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_achievement_banner.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_media_selection.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_navigation_controls.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_preparation_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_pulse_view.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_share_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_share_preview.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/rider_marker.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/round_trip_planner.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_details_bottom_sheet.dart,source_indexed,,changed_and_analyzed,widget_render_light_dark,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_offline_readiness.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_share_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_trace_preview.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_waypoints_editor.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/settings_hub.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/shared_ride_media_viewer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/shared_route_card.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/surface_legend.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/swipe_to_reply.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/track_media_thumbnail.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/track_privacy_picker.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/training_heat_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/triangle_clipper.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/user_location_marker.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/vehicle_selector_sheet.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/video_player_surface.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/video_poster.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/voice_guidance_settings.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/widget_size_observer.dart,supporting_dependency,,not_an_independent_ui_surface,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_analytics.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_comparison.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_finish_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_stats_bottom_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_steps_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/main.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/about_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/achievements_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/app_versions_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/auth_gate.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/chat_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/chats_list_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/customization_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/daily_activity_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/developer_lab_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/developer_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/events_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/friends_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/garage_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/group_meeting_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/group_ride_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/heatmap_explorer_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/login_screen.dart,source_indexed,,static_source_scan,widget_render_light_dark,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/moderation_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/navigation_preferences_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/notifications_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/offline_maps_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/onboarding_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/owned_trail_style_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/owner_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/post_comments_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/privacy_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_cover_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_customize_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/profile_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/progress_backup_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/public_profile_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/register_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/reset_password_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_dashboard_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_heatmap_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/ride_media_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/route_builder_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/route_places_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/satellite_settings_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/saved_places_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/saved_routes_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/settings_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/trail_appearance_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/training_center_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/usage_statistics_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/vehicle_detail_screen.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/workout_detail_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/screens/workout_history_screen.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/camera_compass_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/chat_push_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/drawer_mixin.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/ride_sheets_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/route_actions_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/src/map_screen/urban_map_mixin.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/achievement_hub.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/app_update_dialog.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/bike_workshop_editors.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/bike_workshop_scene.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/brake_workshop.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_media_composer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_photo_editor.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/chat_video_player.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/community_feed.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_map_panel.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/friend_markers_layer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/garage_profile_gallery.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/gear_advisor_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_coordination_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_invitation_card.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_invitation_sheet.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_ride_actions.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/group_ride_dashboard.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/home_steps_pill.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/interval_training.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_home_actions.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/map_ui_overlays.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/moderation_dialogs.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/offline_route_coverage.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/owner_award_management.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/registration_privacy_fields.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_media_selection.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_navigation_controls.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_preparation_panel.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_pulse_view.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/ride_share_preview.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_details_bottom_sheet.dart,source_indexed,,changed_and_analyzed,widget_render_light_dark,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/route_share_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/settings_hub.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/shared_ride_media_viewer.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/shared_route_card.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/vehicle_selector_sheet.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/video_player_surface.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_finish_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/workout_stats_bottom_sheet.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/data/navigation_preferences.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/data/trail_appearance.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/data/ui_modules.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/models/activity_type.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/models/camera_lock_mode.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/models/map_mark.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/models/route_step.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/models/saved_place.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/services/profile_presentation_service.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/services/routing_service.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/services/trail_guidance.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/services/weather_service.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/ui/app_appearance.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/ui/app_theme.dart,source_indexed,,changed_and_analyzed,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/utils/gpx_share.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/navigation_menu.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,
+lib/widgets/responsive_stats.dart,source_indexed,,static_source_scan,not_live_verified,see UI_INTERFACE_BETA_REVIEW_RU.md; no blanket device pass,

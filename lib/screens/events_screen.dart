@@ -278,6 +278,7 @@ class _EventsScreenState extends State<EventsScreen> {
         title: const Text('События и челленджи'),
         actions: [
           IconButton(
+            tooltip: 'Обновить',
             onPressed: _busy ? null : _load,
             icon: const Icon(Icons.refresh),
           ),

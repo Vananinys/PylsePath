@@ -83,7 +83,7 @@ void main() {
       });
       await _pumpProfile(tester);
       expect(
-        find.text('Не удалось загрузить профиль и историю. Данные не удалены.'),
+        find.text('История прочитана не полностью'),
         findsOneWidget,
       );
       final prefs = await SharedPreferences.getInstance();

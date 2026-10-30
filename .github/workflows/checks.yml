@@ -22,6 +22,10 @@ jobs:
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
       - run: python3 tools/verify_publishable_sources.py
       - run: flutter pub get
+      - name: Interface themes and isolated UI beta
+        run: |
+          flutter test --no-pub test/interface_beta_test.dart test/progressive_map_ui_test.dart test/notification_config_test.dart
+          flutter test --no-pub test/interface_beta_test.dart --dart-define=UI_BETA=true
       - name: Live trail stability and map layout
         run: flutter test --no-pub test/developer_lab_test.dart test/events_screen_test.dart test/motion_effects_stickers_test.dart test/friend_motion_test.dart test/map_trail_stability_test.dart test/owned_trail_style_test.dart
       - name: Offline route planning and navigation package

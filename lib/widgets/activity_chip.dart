@@ -25,14 +25,14 @@ class ActivityChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected
               ? Colors.deepOrange
-              : (isDarkMode ? Colors.grey.shade800 : const Color(0xFFF6F7F9)),
+              : Theme.of(context).colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
           border: isSelected
               ? null
               : Border.all(
                   color: isDarkMode
-                      ? Colors.grey.shade700
-                      : Colors.grey.shade300,
+                      ? Theme.of(context).colorScheme.outlineVariant
+                      : Theme.of(context).colorScheme.outlineVariant,
                   width: 1,
                 ),
         ),
@@ -43,7 +43,7 @@ class ActivityChip extends StatelessWidget {
               size: 18,
               color: isSelected
                   ? Colors.white
-                  : (isDarkMode ? Colors.white : Colors.black87),
+                  : Theme.of(context).colorScheme.onSurface,
             ),
             const SizedBox(width: 6),
             Text(
@@ -51,7 +51,7 @@ class ActivityChip extends StatelessWidget {
               style: TextStyle(
                 color: isSelected
                     ? Colors.white
-                    : (isDarkMode ? Colors.white : Colors.black87),
+                    : Theme.of(context).colorScheme.onSurface,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 fontSize: 14,
               ),

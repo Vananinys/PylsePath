@@ -147,6 +147,7 @@ class _InvitationSheetState extends State<_InvitationSheet> {
               title: const Text('Пригласить в заезд'),
               subtitle: Text(_service.title),
               trailing: IconButton(
+                tooltip: 'Закрыть',
                 onPressed: _sending == null
                     ? () => Navigator.pop(context)
                     : null,

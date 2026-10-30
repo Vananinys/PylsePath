@@ -106,25 +106,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: _loading && items.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : items.isEmpty
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_none, size: 64, color: Colors.grey),
+                  Icon(
+                    Icons.notifications_none,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   SizedBox(height: 16),
                   Text(
                     'Уведомлений нет',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   SizedBox(height: 6),
                   Text(
                     'Здесь появятся сообщения, заявки\nв друзья и события приложения',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -174,7 +181,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
         trailing: Text(
           _timeAgo(item.createdAt),
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         onTap: item.type == AppNotificationType.system
             ? null

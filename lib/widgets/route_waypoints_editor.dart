@@ -21,14 +21,17 @@ class RouteWaypointsEditor extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           'Остановки · ${via.length} / 8',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.black87,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const Text(
+        Text(
           'Удерживайте точку на карте и выберите «Добавить остановку».',
-          style: TextStyle(fontSize: 12, color: Colors.black54),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         for (var i = 0; i < via.length; i++)
           Row(
@@ -43,7 +46,10 @@ class RouteWaypointsEditor extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${via[i].latitude.toStringAsFixed(4)}, ${via[i].longitude.toStringAsFixed(4)}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
               IconButton(
@@ -73,9 +79,12 @@ class RouteWaypointsEditor extends StatelessWidget {
             ],
           ),
         if (controller.isNavigating && via.isNotEmpty)
-          const Text(
+          Text(
             'Для изменения остановок остановите навигацию.',
-            style: TextStyle(fontSize: 12, color: Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
       ],
     );

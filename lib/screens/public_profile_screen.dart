@@ -155,10 +155,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : profile == null
-          ? const Center(
+          ? Center(
               child: Text(
                 'Профиль не найден',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             )
           : ListView(
@@ -171,10 +173,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   status: profile.status ?? '',
                   city: profile.city ?? '',
                   sport: _ridingTypeLabel(profile),
-                  title: _presentation.selectedRank?.name ??
+                  title:
+                      _presentation.selectedRank?.name ??
                       _presentation.title?.label ??
                       _titleLabel,
-                  titleIcon: _presentation.selectedRank?.icon ??
+                  titleIcon:
+                      _presentation.selectedRank?.icon ??
                       _presentation.title?.icon ??
                       _titleIcon,
                 ),
@@ -262,7 +266,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         if (posts.isEmpty) {
           return Text(
             'Постов пока нет',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           );
         }
         return Column(
@@ -350,7 +357,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         leading: Icon(icon, color: Colors.deepOrange),
         title: Text(
           label,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         subtitle: Text(
           (value == null || value.isEmpty) ? 'Не указано' : value,
@@ -396,15 +406,20 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     }
 
     if (_relation == _Relation.requested) {
-      return const Center(
+      return Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.hourglass_top, color: Colors.grey),
+            Icon(
+              Icons.hourglass_top,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             SizedBox(width: 8),
             Text(
               'Заявка отправлена — ожидаем подтверждения',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

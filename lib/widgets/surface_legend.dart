@@ -28,7 +28,9 @@ class SurfaceLegend extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: isDarkMode ? Colors.white70 : Colors.black54,
+              color: isDarkMode
+                  ? Colors.white70
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

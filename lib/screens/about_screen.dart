@@ -106,7 +106,10 @@ class __VersionTextState extends State<_VersionText> {
     if (_version == null) return const SizedBox.shrink();
     return Text(
       _version!,
-      style: const TextStyle(fontSize: 13, color: Colors.grey),
+      style: TextStyle(
+        fontSize: 13,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }

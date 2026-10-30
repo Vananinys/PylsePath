@@ -488,6 +488,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_workoutRepo.recoveryNotice != null)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'История прочитана не полностью',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(_workoutRepo.recoveryNotice!),
+                      const Text(
+                        'Показатели ниже учитывают только доступные записи.',
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _loadData(showSpinner: false),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Повторить'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             // Верхний блок: аватар, имя, статус, город
             _buildProfileHeader(),
             if (_presentation.isPending)
@@ -791,7 +817,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fit: BoxFit.scaleDown,
             child: Text(
               title,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
             ),
@@ -932,7 +961,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Text(
                       _period.metricLabel,
-                      style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     // Значение забирает остаток строки и переносится —
@@ -962,7 +994,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.bold,
                         color: goalReached
                             ? Colors.green[700]
-                            : Colors.grey[700],
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -990,13 +1022,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Flexible(
               child: Text(
                 'Цель: ${_formatKm(goal)}',
-                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.edit, size: 16, color: Colors.grey),
+            Icon(
+              Icons.edit,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

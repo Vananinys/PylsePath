@@ -25,6 +25,7 @@ import '../widgets/background_location_settings.dart';
 import '../widgets/app_update_dialog.dart';
 import 'progress_backup_screen.dart';
 import '../widgets/settings_hub.dart';
+import '../ui/app_appearance.dart';
 import 'privacy_screen.dart';
 import 'customization_screen.dart';
 import 'developer_lab_screen.dart';
@@ -266,12 +267,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
           child: Text(
             'Приватность',
             style: TextStyle(
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.bold,
               fontSize: 12,
             ),
@@ -434,9 +435,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         Text(
                           '${preset.description}\n${UiModules.optionalModules.where((module) => preset.modules.contains(module.id)).map((module) => module.title).join(' · ')}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -474,7 +477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const DeveloperLabScreen()),
             ),
       summaries: {
-        'Внешний вид': 'Кастомизация: профиль, шлейфы, карта и набор разделов',
+        'Внешний вид': 'Светлая и тёмная тема, профиль, шлейфы и карта',
         'Шагомер и активность': 'Шаги, дневная цель и огонёк активности',
         'Уведомления': 'Звук, вибрация и экран блокировки',
         'Тренировки':
@@ -485,6 +488,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
       children: [
         _sectionHeader('Внешний вид'),
+        const AppearanceSetting(),
         ListTile(
           leading: const Icon(Icons.palette_outlined),
           title: const Text('Кастомизация'),

@@ -130,7 +130,12 @@ void main() {
       expect(loaded.single.videoUrl, '/private/video.mp4');
       expect(loaded.single.delivery, MessageDelivery.failed);
       owner = 'other';
-      expect(await store.readMessages(), isEmpty);
+      await expectLater(store.readMessages(), throwsStateError);
+      owner = 'alice';
+      expect(
+        (await store.readMessages()).single.videoUrl,
+        '/private/video.mp4',
+      );
     },
   );
 

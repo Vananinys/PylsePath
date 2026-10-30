@@ -241,7 +241,9 @@ class _RidePulseViewState extends State<RidePulseView> {
                       child: Tooltip(
                         message: '${moment.kind.label} · ${moment.note}',
                         child: CircleAvatar(
-                          backgroundColor: Colors.white,
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .surface,
                           child: Icon(
                             _icon(moment.kind),
                             color: _pulseColor,
@@ -273,7 +275,7 @@ class _RidePulseViewState extends State<RidePulseView> {
             top: 10,
             right: 10,
             child: Material(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               shape: const CircleBorder(),
               child: IconButton(
                 tooltip: 'Показать весь маршрут',
@@ -309,21 +311,25 @@ class _RidePulseViewState extends State<RidePulseView> {
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xffedf5f1),
+            color: Theme.of(context).colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.route_outlined, color: _pulseColor, size: 18),
+                  Icon(
+                    Icons.route_outlined,
+                    color: theme.colorScheme.onSecondaryContainer,
+                    size: 18,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'ВАШ ПУЛЬС МАРШРУТА',
                       style: TextStyle(
-                        color: _pulseColor,
+                        color: theme.colorScheme.onSecondaryContainer,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.1,
@@ -337,7 +343,7 @@ class _RidePulseViewState extends State<RidePulseView> {
                 '${_route.distanceKm.toStringAsFixed(2)} км',
                 style: theme.textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xff193d38),
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
                 ),
               ),
               const SizedBox(height: 4),

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../config/app_variant.dart';
 
 enum UpdateChannel { stable, beta }
 
@@ -145,6 +146,7 @@ class AppUpdateService {
   static const _channelKey = 'app_update_channel_v1';
   static bool _channelNeedsReload = false;
   static Future<UpdateChannel> selectedChannel() async {
+    if (AppVariant.uiBeta) return UpdateChannel.beta;
     final prefs = await SharedPreferences.getInstance();
     if (_channelNeedsReload) {
       try {
@@ -160,6 +162,12 @@ class AppUpdateService {
   }
 
   static Future<void> selectChannel(UpdateChannel channel) async {
+    if (AppVariant.uiBeta) {
+      if (channel != UpdateChannel.beta) {
+        throw StateError('UI Beta обновляется отдельно от обычного PulsePath');
+      }
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     try {
       if (!await prefs.setString(_channelKey, channel.name)) {
@@ -196,6 +204,9 @@ class AppUpdateService {
           .toList();
     }
 
+    if (AppVariant.uiBeta) {
+      return read(AppVariant.uiBetaCatalog, UpdateChannel.beta);
+    }
     final stable = await read('app_releases', UpdateChannel.stable);
     final beta = channel == UpdateChannel.beta
         ? await read('app_beta_releases', UpdateChannel.beta)

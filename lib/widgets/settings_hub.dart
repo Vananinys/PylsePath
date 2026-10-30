@@ -39,6 +39,15 @@ class _SettingsHubState extends State<SettingsHub> {
     'Приватность': Icons.shield_outlined,
     'Аккаунт и данные': Icons.cloud_done_outlined,
   };
+  static const _searchTerms = {
+    'Внешний вид': 'тема темная тёмная светлая системная оформление цвет шлейф модули разделы',
+    'Шагомер и активность':
+        'шаги шагомер цель калории разрешение физическая активность',
+    'Уведомления': 'звук вибрация баннеры напоминания телефон',
+    'Тренировки': 'голос громкость повороты gps жпс фон блокировка автопауза вода навигация карта передача',
+    'Приватность': 'видимость вес возраст пол позиция друзья данные согласие резервная копия',
+    'Аккаунт и данные': 'вход выход синхронизация облако версии обновление бета apk счётчики статистика',
+  };
   String _group(String title) => switch (title) {
     'Запись тренировки и помощники' ||
     'Экспериментальные функции' => 'Тренировки',
@@ -129,9 +138,10 @@ class _SettingsHubState extends State<SettingsHub> {
                             : 1;
                         final matches = groups.keys
                             .where(
-                              (name) => '$name ${widget.summaries[name]}'
-                                  .toLowerCase()
-                                  .contains(_query),
+                              (name) =>
+                                  '$name ${widget.summaries[name]} ${_searchTerms[name] ?? ''}'
+                                      .toLowerCase()
+                                      .contains(_query),
                             )
                             .toList();
                         return Wrap(

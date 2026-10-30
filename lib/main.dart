@@ -59,6 +59,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
 import 'ui/app_theme.dart';
+import 'ui/app_appearance.dart';
+import 'config/app_variant.dart';
+import 'widgets/navigation_menu.dart';
 import 'services/profile_presentation_service.dart';
 import 'services/network_recovery_sync.dart';
 import 'models/activity_type.dart';
@@ -176,6 +179,11 @@ void main() async {
   final settings = AppSettings();
   await settings.load();
   try {
+    await AppAppearance.instance.load();
+  } catch (_) {
+    // System appearance remains usable if local preferences are unavailable.
+  }
+  try {
     final package = await PackageInfo.fromPlatform();
     UsageStatistics.instance.version =
         '${package.version}+${package.buildNumber}';
@@ -210,14 +218,31 @@ class PulsePathApp extends StatefulWidget {
 
 class _PulsePathAppState extends State<PulsePathApp> {
   @override
+  void initState() {
+    super.initState();
+    AppAppearance.instance.addListener(_appearanceChanged);
+  }
+
+  void _appearanceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AppAppearance.instance.removeListener(_appearanceChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     // ProfileProvider живёт над всем приложением: кэш профиля сохраняется
     // между открытиями экрана профиля.
     return MaterialApp(
-      title: 'PulsePath Navigator',
+      title: AppVariant.name,
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.light,
+      themeMode: AppAppearance.instance.mode,
       theme: pulsePathTheme(),
+      darkTheme: pulsePathTheme(brightness: Brightness.dark),
       home: AppUpdateGate(
         child: AuthGate(
           authedChild: PulsePathMapScreen(
@@ -362,9 +387,13 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   DateTime? _lastHistorySync;
   DateTime? _lastHistoryPull;
   NetworkRecoverySync? _networkRecovery;
-  bool get _useOfflineMap => NavigationPreferences.instance.cachedMapOnly || (_networkRecovery?.offline ?? false);
-  bool get _usePreparedMapSource => NavigationPreferences.instance.cachedMapOnly ||
-      ((_networkRecovery?.offline ?? false) && AppConfig.offlineTileUrl.isNotEmpty);
+  bool get _useOfflineMap =>
+      NavigationPreferences.instance.cachedMapOnly ||
+      (_networkRecovery?.offline ?? false);
+  bool get _usePreparedMapSource =>
+      NavigationPreferences.instance.cachedMapOnly ||
+      ((_networkRecovery?.offline ?? false) &&
+          AppConfig.offlineTileUrl.isNotEmpty);
 
   void _retryLocalChanges(bool restored) {
     if (!mounted || !_isForeground || UserScope.currentUserId() == null) return;
@@ -807,9 +836,12 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
       if (!mounted) return;
       unawaited(_syncPendingHistory());
       context.read<ProfileProvider>().ensureLoaded();
-      _networkRecovery = NetworkRecoverySync(onSync: _retryLocalChanges,
-        onStatusChanged: (_) { if (mounted) setState(() {}); })
-        ..start();
+      _networkRecovery = NetworkRecoverySync(
+        onSync: _retryLocalChanges,
+        onStatusChanged: (_) {
+          if (mounted) setState(() {});
+        },
+      )..start();
       PushService.instance.onChatOpen = _openChatFromPush;
       PushService.instance.onGarageOpen = () async {
         if (!mounted) return;
@@ -1120,16 +1152,17 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 },
               ),
               children: [
-                if (!_useOfflineMap ||
-                    OfflineMapsService.isAvailable)
+                if (!_useOfflineMap || OfflineMapsService.isAvailable)
                   TileLayer(
-                    key: ValueKey(
-                      '$_mapLayerIndex:${_useOfflineMap}',
-                    ),
-                    urlTemplate: _usePreparedMapSource ? OfflineMapsService.routeTileUrl : _mapLayerIndex == 3
+                    key: ValueKey('$_mapLayerIndex:${_useOfflineMap}'),
+                    urlTemplate: _usePreparedMapSource
+                        ? OfflineMapsService.routeTileUrl
+                        : _mapLayerIndex == 3
                         ? SatelliteMap.template
                         : _MapScreenStateBase._mapLayerUrls[_mapLayerIndex],
-                    maxNativeZoom: _usePreparedMapSource ? 16 : _mapLayerIndex == 3
+                    maxNativeZoom: _usePreparedMapSource
+                        ? 16
+                        : _mapLayerIndex == 3
                         ? SatelliteMap.maxZoom
                         : 19,
                     subdomains: const ['a', 'b', 'c'],
@@ -1457,8 +1490,11 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   valueListenable: _navigationController.positionNotifier,
                   builder: (context, position, _) => NavigationCard(
                     onReconnectAhead: () async {
-                      try { await _navigationController.reconnectAhead(); }
-                      catch (error) { if (mounted) _showSnackBar(error.toString()); }
+                      try {
+                        await _navigationController.reconnectAhead();
+                      } catch (error) {
+                        if (mounted) _showSnackBar(error.toString());
+                      }
                     },
                     offRoute: _navigationController.isOffRoute,
                     preserveTrack: _navigationController.followsSavedTrack,
@@ -1514,7 +1550,9 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               bottom: bottomPanelHeight + 8,
               child: IgnorePointer(
                 ignoring: _isScreenLocked,
-                child: MapCredits(layer: _usePreparedMapSource ? 0 : _mapLayerIndex),
+                child: MapCredits(
+                  layer: _usePreparedMapSource ? 0 : _mapLayerIndex,
+                ),
               ),
             ),
             // Баннер входящего сообщения: тап — открыть чат с отправителем.
@@ -1591,7 +1629,9 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 setState(() => _isScreenLocked = false);
                 _showSnackBar('Экран разблокирован');
               },
-              mapLayerLabel: _usePreparedMapSource ? 'Офлайн-карта' : _mapLayerIndex == 3
+              mapLayerLabel: _usePreparedMapSource
+                  ? 'Офлайн-карта'
+                  : _mapLayerIndex == 3
                   ? 'Спутник'
                   : _MapScreenStateBase._mapLayerLabels[_mapLayerIndex],
               onMapLayerPressed: _chooseMapLayer,
@@ -1943,9 +1983,19 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                       finishPoint: _navigationController.finishPoint,
                       selectedActivity: _navigationController.selectedActivity,
                       activityTypes: ActivityType.values,
-                      hasOfflineInstructions: _navigationController.routeSteps.isNotEmpty,
-                      routeProgressMeters: ((_navigationController.routeDistanceKm ?? 0) * 1000 - _navigationController.remainingRouteMeters).clamp(0, double.infinity),
-                      onAddPlaceStop: !_navigationController.canEditWaypoints ? null : (point) => _navigationController.replanWithWaypoints([..._navigationController.routeWaypoints, point]),
+                      hasOfflineInstructions:
+                          _navigationController.routeSteps.isNotEmpty,
+                      routeProgressMeters:
+                          ((_navigationController.routeDistanceKm ?? 0) * 1000 -
+                                  _navigationController.remainingRouteMeters)
+                              .clamp(0, double.infinity),
+                      onAddPlaceStop: !_navigationController.canEditWaypoints
+                          ? null
+                          : (point) =>
+                                _navigationController.replanWithWaypoints([
+                                  ..._navigationController.routeWaypoints,
+                                  point,
+                                ]),
                       routePoints: _navigationController.routePoints,
                       routeDistanceKm: _navigationController.routeDistanceKm,
                       routeDurationMin: _navigationController.routeDurationMin,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pulsepath_logo.dart';
+import '../config/app_variant.dart';
 
 /// Фирменная шапка экранов авторизации PulsePath.
 class AuthHeader extends StatelessWidget {
@@ -18,10 +19,10 @@ class AuthHeader extends StatelessWidget {
         const PulsePathLogo(),
         const SizedBox(height: 20),
         Text(
-          'PulsePath',
+          AppVariant.name,
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.bold,
-            color: Colors.deepOrange.shade800,
+            color: theme.colorScheme.primary,
           ),
         ),
         const SizedBox(height: 6),
@@ -35,7 +36,9 @@ class AuthHeader extends StatelessWidget {
         Text(
           subtitle,
           textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );

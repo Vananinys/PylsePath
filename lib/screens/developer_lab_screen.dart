@@ -184,8 +184,10 @@ class _DeveloperLabScreenState extends State<DeveloperLabScreen>
                         rotate: true,
                         child: Column(
                           children: [
-                            const CircleAvatar(
-                              backgroundColor: Colors.white,
+                            CircleAvatar(
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .surface,
                               radius: 23,
                               child: Icon(
                                 Icons.person,
@@ -196,15 +198,17 @@ class _DeveloperLabScreenState extends State<DeveloperLabScreen>
                             Container(
                               padding: const EdgeInsets.all(4),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
                                 '${_gps && _playing ? _speed.round() : 0} км/ч',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.black,
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),

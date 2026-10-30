@@ -6,21 +6,21 @@ import '../services/satellite_map.dart';
 class MapCredits extends StatelessWidget {
   const MapCredits({super.key, this.layer = 0});
   final int layer;
-  Widget _link(String label, String url) => InkWell(
+  Widget _link(BuildContext context, String label, String url) => InkWell(
     onTap: () =>
         launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
     child: Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
-        color: Colors.black87,
+        color: Theme.of(context).colorScheme.onSurface,
         decoration: TextDecoration.underline,
       ),
     ),
   );
   @override
   Widget build(BuildContext context) => Material(
-    color: Colors.white.withValues(alpha: 0.9),
+    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
     borderRadius: BorderRadius.circular(5),
     child: Padding(
       padding: const EdgeInsets.all(4),
@@ -31,7 +31,8 @@ class MapCredits extends StatelessWidget {
           runSpacing: 3,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (layer == 4) _link('© CARTO', 'https://carto.com/attributions'),
+            if (layer == 4)
+              _link(context, '© CARTO', 'https://carto.com/attributions'),
             if (layer == 3)
               InkWell(
                 onTap: () => launchUrl(
@@ -48,13 +49,16 @@ class MapCredits extends StatelessWidget {
               ),
             if (layer == 3)
               _link(
+                context,
                 SatelliteMap.attribution,
                 'https://www.maptiler.com/copyright/',
               ),
             if (layer == 1)
-              _link('© OpenTopoMap', 'https://opentopomap.org/about'),
-            if (layer == 2) _link('© CyclOSM', 'https://www.cyclosm.org/'),
+              _link(context, '© OpenTopoMap', 'https://opentopomap.org/about'),
+            if (layer == 2)
+              _link(context, '© CyclOSM', 'https://www.cyclosm.org/'),
             _link(
+              context,
               '© OpenStreetMap contributors',
               'https://www.openstreetmap.org/copyright',
             ),

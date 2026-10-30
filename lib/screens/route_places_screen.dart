@@ -74,26 +74,32 @@ class _RoutePlacesScreenState extends State<RoutePlacesScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Места по пути')),
     body: SafeArea(
-      child: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Вода, кафе, велоремонт и отдых по данным OpenStreetMap. Полнота, доступность и часы работы не подтверждены. Расстояния — вдоль трека, съезд к месту указан по прямой, не как проверенный проезд.',
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Вода, кафе, велоремонт и отдых по данным OpenStreetMap. Полнота, доступность и часы работы не подтверждены. Расстояния — вдоль трека, съезд к месту указан по прямой, не как проверенный проезд.',
+                  ),
+                ),
+                FilledButton(
+                  onPressed: _busy || _loading ? null : _load,
+                  child: const Text('Найти места по маршруту'),
+                ),
+                if (widget.onStop == null)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text(
+                      'Добавление остановки доступно при редактировании построенного маршрута. Для сохранённого трека или активной навигации сначала выберите режим изменения пути.',
+                    ),
+                  ),
+              ],
             ),
           ),
-          FilledButton(
-            onPressed: _busy || _loading ? null : _load,
-            child: const Text('Найти через Overpass'),
-          ),
-          if (widget.onStop == null)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Text(
-                'Добавление остановки доступно при редактировании построенного маршрута. Для сохранённого трека или активной навигации сначала выберите режим изменения пути.',
-              ),
-            ),
-          Expanded(
+          SliverFillRemaining(
             child: _result == null
                 ? const Center(
                     child: Text(

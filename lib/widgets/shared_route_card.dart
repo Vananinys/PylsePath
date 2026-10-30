@@ -80,7 +80,7 @@ class SharedRouteCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      const Align(
+                      Align(
                         alignment: Alignment.bottomRight,
                         child: ColoredBox(
                           color: Colors.white70,
@@ -90,7 +90,7 @@ class SharedRouteCard extends StatelessWidget {
                               '© OpenStreetMap',
                               style: TextStyle(
                                 fontSize: 9,
-                                color: Colors.black87,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ),
