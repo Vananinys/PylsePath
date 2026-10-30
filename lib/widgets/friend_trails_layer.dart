@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../data/trail_appearance.dart';
 import '../models/activity_type.dart';
@@ -16,9 +17,11 @@ class FriendTrailsLayer extends StatefulWidget {
     super.key,
     required this.friends,
     this.idle = false,
+    this.displayPositions = const {},
   });
   final List<FriendProfile> friends;
   final bool idle;
+  final Map<String, LatLng> displayPositions;
 
   @override
   State<FriendTrailsLayer> createState() => _FriendTrailsLayerState();
@@ -103,7 +106,11 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
           opacity: (1 - age).clamp(0.0, 1.0),
           child: ActivityTrailLayer(
             segments: [
-              [for (final point in points) point.position],
+              [
+                for (final point in points.take(points.length - 1))
+                  point.position,
+                widget.displayPositions[friend.id] ?? points.last.position,
+              ],
             ],
             activity: activity ?? ActivityType.hiking,
             recorded: true,

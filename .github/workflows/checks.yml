@@ -23,7 +23,7 @@ jobs:
       - run: python3 tools/verify_publishable_sources.py
       - run: flutter pub get
       - name: Live trail stability and map layout
-        run: flutter test --no-pub test/map_trail_stability_test.dart test/owned_trail_style_test.dart
+        run: flutter test --no-pub test/friend_motion_test.dart test/map_trail_stability_test.dart test/owned_trail_style_test.dart
       - name: Offline route planning and navigation package
         run: flutter test --no-pub test/navigation_package_test.dart test/route_offline_readiness_test.dart test/navigator_upgrade_test.dart test/offline_sync_test.dart test/workout_draft_store_test.dart test/location_recovery_test.dart
       - name: Release channels, privacy and data integrity

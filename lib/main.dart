@@ -19,7 +19,7 @@ import 'screens/workout_detail_screen.dart';
 import 'widgets/map_sticker_flight.dart';
 import 'services/smooth_map_position.dart';
 import 'services/smooth_map_heading.dart';
-import 'widgets/friend_markers_layer.dart';
+import 'widgets/friend_motion_layer.dart';
 import 'widgets/friend_trails_layer.dart';
 import 'services/owned_trail_style_service.dart';
 
@@ -1281,14 +1281,11 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                             ],
                     ),
                   ),
-                FriendTrailsLayer(
-                  key: ValueKey('friend-trails-${UserScope.currentUserId()}'),
+                FriendMotionLayer(
+                  key: ValueKey('friend-motion-${UserScope.currentUserId()}'),
                   friends: !_navigationController.canDisplayFriendTrails
                       ? const []
                       : _navigationController.friendsOnMap,
-                ),
-                FriendMarkersLayer(
-                  friends: _navigationController.friendsOnMap,
                   markerBuilder: (friend) => _buildFriendMarker(
                     friend,
                     selected: _selectedMapFriend?.id == friend.id,

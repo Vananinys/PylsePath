@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -11,10 +13,12 @@ class FriendMarkersLayer extends StatelessWidget {
     required this.friends,
     required this.markerBuilder,
     required this.onSelect,
+    this.headings = const {},
   });
   final List<FriendProfile> friends;
   final Widget Function(FriendProfile) markerBuilder;
   final ValueChanged<FriendProfile> onSelect;
+  final Map<String, double> headings;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +113,29 @@ class FriendMarkersLayer extends StatelessWidget {
                   clipBehavior: Clip.none,
                   children: [
                     Center(child: markerBuilder(group.first)),
+                    if (group.length == 1 && headings[group.first.id] != null)
+                      Positioned(
+                        top: 4,
+                        left: 11,
+                        width: 54,
+                        height: 40,
+                        child: IgnorePointer(
+                          child: Transform.rotate(
+                            angle:
+                                (headings[group.first.id]! + camera.rotation) *
+                                math.pi /
+                                180,
+                            child: const Align(
+                              alignment: Alignment.topCenter,
+                              child: Icon(
+                                Icons.navigation_rounded,
+                                size: 14,
+                                color: Color(0xFF1E88E5),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (group.length > 1)
                       Positioned(
                         right: 0,

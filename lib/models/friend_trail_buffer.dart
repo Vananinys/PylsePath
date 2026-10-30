@@ -23,7 +23,7 @@ class _FriendTrail {
 /// Only positions already received by this viewer. Never saved or uploaded.
 class FriendTrailBuffer {
   static const lifetime = Duration(minutes: 2);
-  static const freshness = Duration(seconds: 30);
+  static const freshness = lifetime;
   static const maxMeters = 200.0;
   static const maxPoints = 32;
   final _trails = <String, _FriendTrail>{};
@@ -44,6 +44,7 @@ class FriendTrailBuffer {
           !lon.isFinite ||
           lat.abs() > 90 ||
           lon.abs() > 180 ||
+          friend.liveTrailStyle?.enabled == false ||
           now.difference(at) > freshness ||
           at.difference(now) > const Duration(seconds: 5)) {
         _trails.remove(friend.id);
@@ -51,9 +52,7 @@ class FriendTrailBuffer {
       }
       var trail = _trails[friend.id];
       if (trail != null && at.isBefore(trail.updatedAt)) continue;
-      if (trail == null ||
-          trail.activity != friend.liveActivity ||
-          at.difference(trail.updatedAt) > freshness) {
+      if (trail == null || at.difference(trail.updatedAt) > freshness) {
         trail = _FriendTrail(at, friend.liveActivity);
         _trails[friend.id] = trail;
       }
