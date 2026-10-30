@@ -26,6 +26,8 @@ jobs:
         run: flutter test --no-pub test/developer_lab_test.dart test/events_screen_test.dart test/motion_effects_stickers_test.dart test/friend_motion_test.dart test/map_trail_stability_test.dart test/owned_trail_style_test.dart
       - name: Offline route planning and navigation package
         run: flutter test --no-pub test/navigation_package_test.dart test/route_offline_readiness_test.dart test/navigator_upgrade_test.dart test/offline_sync_test.dart test/workout_draft_store_test.dart test/location_recovery_test.dart
+      - name: Screen-off recording and GPS recovery
+        run: flutter test --no-pub test/recording_reliability_test.dart test/background_location_test.dart
       - name: Release channels, privacy and data integrity
         # Offline planning, voice parameters and forward reconnection are checked separately.
         # Include bounded live-tail phase and independent appearance persistence.
