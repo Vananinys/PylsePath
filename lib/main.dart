@@ -20,6 +20,7 @@ import 'widgets/map_sticker_flight.dart';
 import 'services/smooth_map_position.dart';
 import 'services/smooth_map_heading.dart';
 import 'widgets/friend_motion_layer.dart';
+import 'screens/events_screen.dart';
 import 'widgets/friend_trails_layer.dart';
 import 'services/owned_trail_style_service.dart';
 

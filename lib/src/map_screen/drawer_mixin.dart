@@ -293,6 +293,15 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                   },
                 ),
                 // Модульные пункты — только включённые, в порядке реестра.
+                ListTile(
+                  leading: const Icon(Icons.event_available_outlined),
+                  title: const Text('События и челленджи'),
+                  subtitle: const Text('Бета-тест, опросы и награды'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+                  },
+                ),
                 for (final module in UiModules.drawerModules)
                   if (enabledModules.contains(module.id))
                     moduleTiles[module.id]!,

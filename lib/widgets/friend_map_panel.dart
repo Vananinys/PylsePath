@@ -1,4 +1,9 @@
 import 'package:flutter/services.dart';
+
+import 'dart:async';
+
+import '../data/recent_stickers.dart';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -63,6 +68,42 @@ class FriendMapPanel extends StatefulWidget {
 }
 
 class _FriendMapPanelState extends State<FriendMapPanel> {
+  final _recentStore = RecentStickers();
+  List<String> _recent = [];
+  int _recentRevision = 0;
+  @override
+  void initState() {
+    super.initState();
+    _loadRecent();
+  }
+
+  Future<void> _loadRecent() async {
+    final revision = ++_recentRevision;
+    final owner = widget.currentUserId;
+    final items = await _recentStore.load(owner);
+    if (mounted && revision == _recentRevision && owner == widget.currentUserId)
+      setState(() => _recent = items);
+  }
+
+  @override
+  void didUpdateWidget(covariant FriendMapPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentUserId != widget.currentUserId) {
+      _recent = [];
+      _loadRecent();
+    }
+  }
+
+  void _remember(String sticker) {
+    _recentRevision++;
+    setState(() => _recent = [sticker, ..._recent.where((s) => s != sticker)]);
+    unawaited(
+      _recentStore
+          .used(sticker, widget.currentUserId)
+          .catchError((Object _) {}),
+    );
+  }
+
   final ChatService _chatService = ChatService();
   final FriendService _friendService = FriendService();
   final CommunityService _communityService = CommunityService();
@@ -151,6 +192,7 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
   // ── Стикеры (плавающая полоса, прокручивается вправо) ─────────────────
 
   Widget _buildStickerStrip() {
+    final ordered = RecentStickers.order(_quickStickers, _recent);
     return SizedBox(
       height: 72,
       child: ListView.separated(
@@ -159,17 +201,19 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
         itemCount: _quickStickers.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final sticker = _quickStickers[index];
+          final sticker = ordered[index];
           var origin = Offset.zero;
           return GestureDetector(
             onTapDown: (details) => origin = details.globalPosition,
             onTap: () {
               HapticFeedback.selectionClick();
               widget.onSticker(sticker, origin);
+              _remember(sticker);
             },
             onLongPressStart: (details) {
               HapticFeedback.mediumImpact();
               widget.onStickerRain(sticker, details.globalPosition);
+              _remember(sticker);
             },
             child: Container(
               width: 68,

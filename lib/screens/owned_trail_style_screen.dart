@@ -132,6 +132,7 @@ class _OwnedTrailStyleScreenState extends State<OwnedTrailStyleScreen> {
                     TrailStylePreview(
                       appearance: _preview,
                       activity: ActivityType.hiking,
+                      effect: _choice.effect,
                     ),
                     Expanded(
                       child: ListView(
@@ -169,6 +170,22 @@ class _OwnedTrailStyleScreenState extends State<OwnedTrailStyleScreen> {
                                 ? null
                                 : (v) => _change(_choice.copyWith(enabled: v)),
                           ),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              for (final effect in MotionEffect.values)
+                                ChoiceChip(
+                                  label: Text(effect.label),
+                                  selected: effect == _choice.effect,
+                                  onSelected: _saving
+                                      ? null
+                                      : (_) => _change(
+                                          _choice.copyWith(effect: effect),
+                                        ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,
                             runSpacing: 4,

@@ -123,7 +123,10 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
       );
       if (widget.live && !enabled) return const SizedBox.shrink();
       final decorated =
-          enabled && style != TrailStyle.line && camera.zoom >= 12;
+          enabled &&
+          (style != TrailStyle.line ||
+              (widget.live && personal.effect != MotionEffect.none)) &&
+          camera.zoom >= 12;
       if (decorated && (_source != widget.segments || _zoom != 16)) {
         _source = widget.segments;
         _zoom = 16;
@@ -142,7 +145,10 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
       return IgnorePointer(
         child: Stack(
           children: [
-            if (!decorated || (prefs.guide && style == TrailStyle.line))
+            if (!decorated ||
+                (prefs.guide &&
+                    style == TrailStyle.line &&
+                    (!widget.live || personal.effect == MotionEffect.none)))
               PolylineLayer(
                 polylines: [
                   for (final segment in widget.segments)
@@ -180,6 +186,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                     origin: origin,
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
                     phaseOffset: widget.phaseOffset,
+                    effect: widget.live ? personal.effect : MotionEffect.none,
                   ),
                 ),
               ),
@@ -200,7 +207,9 @@ class TrailPainter extends CustomPainter {
     this.origin = Offset.zero,
     this.scale = 1,
     this.phaseOffset = 0,
+    this.effect = MotionEffect.none,
   });
+  final MotionEffect effect;
   final List<List<Offset>> segments;
   final Offset origin;
   final double scale;
@@ -210,7 +219,7 @@ class TrailPainter extends CustomPainter {
   final double markerSize, spacing;
   @override
   void paint(Canvas canvas, Size size) {
-    if (style == TrailStyle.line) {
+    if (style == TrailStyle.line && effect == MotionEffect.none) {
       final pen = Paint()
         ..color = color
         ..strokeWidth = 3
@@ -250,6 +259,47 @@ class TrailPainter extends CustomPainter {
       canvas.translate(stamp.position.dx * scale, stamp.position.dy * scale);
       canvas.rotate(stamp.angle + math.pi / 2);
       canvas.scale(markerSize / 12 * math.min(1.0, scale));
+      if (effect != MotionEffect.none) {
+        final palette = effect == MotionEffect.confetti
+            ? [Colors.cyan, Colors.pink, Colors.amber, Colors.greenAccent]
+            : effect == MotionEffect.ember
+            ? [Colors.orange, Colors.redAccent, Colors.amber, color]
+            : [color, Color.lerp(color, Colors.white, .55)!, color, color];
+        for (var j = 0; j < 4; j++) {
+          final pen = Paint()..color = palette[j].withValues(alpha: color.a);
+          final x = (j.isEven ? -1.0 : 1.0) * (3 + j);
+          final y = (j - 1.5) * 4;
+          if (effect == MotionEffect.pixel) {
+            canvas.drawRect(
+              Rect.fromCenter(center: Offset(x, y), width: 3, height: 3),
+              pen,
+            );
+          } else if (effect == MotionEffect.orbit) {
+            canvas.drawPath(
+              Path()
+                ..moveTo(x, y - 3)
+                ..lineTo(x + 1, y - 1)
+                ..lineTo(x + 3, y)
+                ..lineTo(x + 1, y + 1)
+                ..lineTo(x, y + 3)
+                ..lineTo(x - 1, y + 1)
+                ..lineTo(x - 3, y)
+                ..lineTo(x - 1, y - 1)
+                ..close(),
+              pen,
+            );
+          } else if (effect == MotionEffect.bloom) {
+            canvas.drawOval(
+              Rect.fromCenter(center: Offset(x, y), width: 3, height: 6),
+              pen,
+            );
+          } else {
+            canvas.drawCircle(Offset(x, y), 1.5 + j * .3, pen);
+          }
+        }
+        canvas.restore();
+        continue;
+      }
       switch (style) {
         case TrailStyle.footprints:
         case TrailStyle.boots:
@@ -341,6 +391,7 @@ class TrailPainter extends CustomPainter {
       old.scale != scale ||
       old.phaseOffset != phaseOffset ||
       old.style != style ||
+      old.effect != effect ||
       old.color != color ||
       old.markerSize != markerSize ||
       old.spacing != spacing;
@@ -352,7 +403,9 @@ class TrailStylePreview extends StatelessWidget {
     required this.appearance,
     required this.activity,
     this.transport,
+    this.effect = MotionEffect.none,
   });
+  final MotionEffect effect;
   final TrailAppearance appearance;
   final ActivityType activity;
   final String? transport;
@@ -380,6 +433,7 @@ class TrailStylePreview extends StatelessWidget {
               appearance.color.withValues(alpha: appearance.opacity),
               appearance.size,
               appearance.spacing,
+              effect: effect,
             ),
             size: Size.infinite,
           ),

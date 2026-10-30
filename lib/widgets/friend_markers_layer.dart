@@ -53,8 +53,8 @@ class FriendMarkersLayer extends StatelessWidget {
               group.first.liveLatitude!,
               group.first.liveLongitude!,
             ),
-            width: 76,
-            height: 82,
+            width: 118,
+            height: 100,
             rotate: true,
             child: Semantics(
               button: true,
@@ -116,7 +116,7 @@ class FriendMarkersLayer extends StatelessWidget {
                     if (group.length == 1 && headings[group.first.id] != null)
                       Positioned(
                         top: 4,
-                        left: 11,
+                        left: 32,
                         width: 54,
                         height: 40,
                         child: IgnorePointer(

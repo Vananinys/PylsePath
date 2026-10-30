@@ -1,5 +1,17 @@
 import '../data/trail_appearance.dart';
 
+enum MotionEffect {
+  none('Следы активности'),
+  ember('Искры'),
+  confetti('Конфетти'),
+  orbit('Созвездие'),
+  pixel('Пиксели'),
+  bloom('Лепестки');
+
+  const MotionEffect(this.label);
+  final String label;
+}
+
 /// An owner's cosmetic choice, never coordinates or a recorded route.
 class LiveTrailStyle {
   const LiveTrailStyle({
@@ -9,11 +21,13 @@ class LiveTrailStyle {
     this.spacing = 28,
     this.opacity = .85,
     this.enabled = true,
+    this.effect = MotionEffect.none,
   });
   final TrailStyle style;
   final int colorIndex;
   final double size, spacing, opacity;
   final bool enabled;
+  final MotionEffect effect;
 
   factory LiveTrailStyle.fromRow(Map<String, dynamic> row) {
     if (row['version'] != 1) return const LiveTrailStyle();
@@ -25,6 +39,11 @@ class LiveTrailStyle {
     }
 
     return LiveTrailStyle(
+      effect:
+          MotionEffect.values
+              .where((e) => e.name == row['effect'])
+              .firstOrNull ??
+          MotionEffect.none,
       style:
           TrailStyle.values.where((s) => s.name == row['style']).firstOrNull ??
           TrailStyle.automatic,
@@ -37,6 +56,7 @@ class LiveTrailStyle {
     );
   }
   Map<String, Object> toRow() => {
+    'effect': effect.name,
     'version': 1,
     'style': style.name,
     'color_index': colorIndex,
@@ -46,6 +66,7 @@ class LiveTrailStyle {
     'enabled': enabled,
   };
   LiveTrailStyle copyWith({
+    MotionEffect? effect,
     TrailStyle? style,
     int? colorIndex,
     double? size,
@@ -54,6 +75,7 @@ class LiveTrailStyle {
     bool? enabled,
   }) => LiveTrailStyle.fromRow({
     ...toRow(),
+    if (effect != null) 'effect': effect.name,
     if (style != null) 'style': style.name,
     if (colorIndex != null) 'color_index': colorIndex,
     if (size != null) 'marker_size': size,

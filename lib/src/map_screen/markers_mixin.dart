@@ -188,15 +188,31 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: markerColor),
               ),
-              child: Text(
-                friend.mapLabel,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  color: markerColor,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    friend.username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: markerColor,
+                    ),
+                  ),
+                  if (friend.hasFreshMotion)
+                    Text(
+                      friend.motionText,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: Color(0xFF455A64),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
