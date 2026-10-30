@@ -17,9 +17,11 @@ class SettingsHub extends StatefulWidget {
     super.key,
     required this.children,
     required this.summaries,
+    this.onDeveloper,
   });
   final List<Widget> children;
   final Map<String, String> summaries;
+  final VoidCallback? onDeveloper;
   @override
   State<SettingsHub> createState() => _SettingsHubState();
 }
@@ -27,6 +29,8 @@ class SettingsHub extends StatefulWidget {
 class _SettingsHubState extends State<SettingsHub> {
   String? _selected;
   String _query = '';
+  int _secretTaps = 0;
+  bool _developer = false;
   static const _icons = {
     'Внешний вид': Icons.palette_outlined,
     'Шагомер и активность': Icons.directions_walk,
@@ -61,7 +65,14 @@ class _SettingsHubState extends State<SettingsHub> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(selected ?? 'Настройки'),
+          title: GestureDetector(
+            onTap: widget.onDeveloper == null
+                ? null
+                : () {
+                    if (++_secretTaps >= 7) setState(() => _developer = true);
+                  },
+            child: Text(selected ?? 'Настройки'),
+          ),
           leading: BackButton(
             onPressed: () {
               if (selected == null) {
@@ -89,6 +100,17 @@ class _SettingsHubState extends State<SettingsHub> {
                       'Выберите задачу — внутри будут только связанные с ней параметры.',
                     ),
                     const SizedBox(height: 20),
+                    if (_developer && widget.onDeveloper != null)
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.science_outlined),
+                          title: const Text('Для разработчика'),
+                          subtitle: const Text(
+                            'Домашние сценарии и управление',
+                          ),
+                          onTap: widget.onDeveloper,
+                        ),
+                      ),
                     TextField(
                       onChanged: (v) =>
                           setState(() => _query = v.toLowerCase().trim()),
@@ -123,6 +145,19 @@ class _SettingsHubState extends State<SettingsHub> {
                                         (columns - 1) * 12) /
                                     columns,
                                 child: Card(
+                                  elevation: 0,
+                                  color: Theme.of(c)
+                                      .colorScheme
+                                      .surfaceContainerLow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    side: BorderSide(
+                                      color: Theme.of(c)
+                                          .colorScheme
+                                          .outlineVariant
+                                          .withValues(alpha: .45),
+                                    ),
+                                  ),
                                   margin: EdgeInsets.zero,
                                   child: InkWell(
                                     onTap: () =>
@@ -134,12 +169,24 @@ class _SettingsHubState extends State<SettingsHub> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Icon(
-                                            _icons[name] ??
-                                                Icons.settings_outlined,
-                                            color: Theme.of(c)
-                                                .colorScheme
-                                                .primary,
+                                          DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(c)
+                                                  .colorScheme
+                                                  .primaryContainer,
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(10),
+                                              child: Icon(
+                                                _icons[name] ??
+                                                    Icons.settings_outlined,
+                                                color: Theme.of(c)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                            ),
                                           ),
                                           const SizedBox(height: 16),
                                           Text(

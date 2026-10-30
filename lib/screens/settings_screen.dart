@@ -27,6 +27,8 @@ import 'progress_backup_screen.dart';
 import '../widgets/settings_hub.dart';
 import 'privacy_screen.dart';
 import 'customization_screen.dart';
+import 'developer_lab_screen.dart';
+import '../services/lab_access.dart';
 
 /// Экран настроек приложения: параметры заезда по умолчанию (автопауза,
 /// электропривод), интерфейс (пресет и модули), информация о синхронизации
@@ -83,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingUpdate = false;
   bool _gearLab = false;
   bool _isOwner = false;
+  bool _canLab = false;
   int _waterMinutes = 0;
   bool _savingWater = false;
   int _waterFieldRevision = 0;
@@ -94,6 +97,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadSettings();
     _loadOwner();
+    LabAccess.check()
+        .then((access) {
+          if (mounted) setState(() => _canLab = access['can_simulate'] == true);
+        })
+        .catchError((Object _) {});
   }
 
   Future<void> _loadOwner() async {
@@ -459,6 +467,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return SettingsHub(
+      onDeveloper: !(_isOwner || _canLab)
+          ? null
+          : () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DeveloperLabScreen()),
+            ),
       summaries: {
         'Внешний вид': 'Кастомизация: профиль, шлейфы, карта и набор разделов',
         'Шагомер и активность': 'Шаги, дневная цель и огонёк активности',

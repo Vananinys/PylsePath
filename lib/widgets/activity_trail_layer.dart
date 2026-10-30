@@ -87,6 +87,7 @@ class ActivityTrailLayer extends StatefulWidget {
     this.idle = false,
     this.phaseOffset = 0,
     this.liveAppearance,
+    this.preview = false,
   });
   final List<List<LatLng>> segments;
   final ActivityType activity;
@@ -97,6 +98,7 @@ class ActivityTrailLayer extends StatefulWidget {
   final bool live, idle;
   final double phaseOffset;
   final LiveTrailStyle? liveAppearance;
+  final bool preview;
   @override
   State<ActivityTrailLayer> createState() => _ActivityTrailLayerState();
 }
@@ -111,7 +113,9 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
     builder: (context, _) {
       final prefs = TrailAppearance.instance, camera = MapCamera.of(context);
       final personal = widget.liveAppearance ?? const LiveTrailStyle();
-      final enabled = widget.live
+      final enabled = widget.preview
+          ? personal.enabled
+          : widget.live
           ? (widget.idle ? prefs.onIdle : prefs.onFriends) && personal.enabled
           : widget.recorded
           ? prefs.onRecording
@@ -260,15 +264,42 @@ class TrailPainter extends CustomPainter {
       canvas.rotate(stamp.angle + math.pi / 2);
       canvas.scale(markerSize / 12 * math.min(1.0, scale));
       if (effect != MotionEffect.none) {
+        final seed = (stamp.position.dx * .13 + stamp.position.dy * .17);
+        final end = segments.last.last;
+        final fade = (1 - (stamp.position - end).distance / 320).clamp(
+          .12,
+          1.0,
+        );
         final palette = effect == MotionEffect.confetti
             ? [Colors.cyan, Colors.pink, Colors.amber, Colors.greenAccent]
             : effect == MotionEffect.ember
             ? [Colors.orange, Colors.redAccent, Colors.amber, color]
             : [color, Color.lerp(color, Colors.white, .55)!, color, color];
         for (var j = 0; j < 4; j++) {
-          final pen = Paint()..color = palette[j].withValues(alpha: color.a);
-          final x = (j.isEven ? -1.0 : 1.0) * (3 + j);
-          final y = (j - 1.5) * 4;
+          final radius = 1.2 + (math.sin(seed + j * 2.1) + 1) * 1.2;
+          final pen = Paint()
+            ..color = palette[j].withValues(alpha: color.a * fade);
+          final x = (j.isEven ? -1.0 : 1.0) * (3 + j + math.sin(seed + j) * 2);
+          final y = (j - 1.5) * 4 + math.cos(seed + j) * 2;
+          if (effect == MotionEffect.ember || effect == MotionEffect.orbit) {
+            canvas.drawCircle(
+              Offset(x, y),
+              radius * 2.4,
+              Paint()
+                ..shader =
+                    RadialGradient(
+                      colors: [
+                        palette[j].withValues(alpha: .32 * color.a * fade),
+                        palette[j].withValues(alpha: 0),
+                      ],
+                    ).createShader(
+                      Rect.fromCircle(
+                        center: Offset(x, y),
+                        radius: radius * 2.4,
+                      ),
+                    ),
+            );
+          }
           if (effect == MotionEffect.pixel) {
             canvas.drawRect(
               Rect.fromCenter(center: Offset(x, y), width: 3, height: 3),
@@ -294,7 +325,20 @@ class TrailPainter extends CustomPainter {
               pen,
             );
           } else {
-            canvas.drawCircle(Offset(x, y), 1.5 + j * .3, pen);
+            canvas.drawCircle(Offset(x, y), radius, pen);
+            if (effect == MotionEffect.confetti && j == 0) {
+              final star = Path();
+              for (var k = 0; k < 10; k++) {
+                final a = k * math.pi / 5, r = k.isEven ? 4.0 : 1.8;
+                final p = Offset(x + math.sin(a) * r, y + math.cos(a) * r);
+                if (k == 0) {
+                  star.moveTo(p.dx, p.dy);
+                } else {
+                  star.lineTo(p.dx, p.dy);
+                }
+              }
+              canvas.drawPath(star..close(), pen);
+            }
           }
         }
         canvas.restore();
