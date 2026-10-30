@@ -158,6 +158,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Внешний вид'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Кастомизация'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Модули приложения'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Модули приложения'));
       await tester.pumpAndSettle();
       expect(find.text('Соберите своё приложение'), findsOneWidget);
@@ -183,11 +190,11 @@ void main() {
       await tester.tap(find.text('Тренировки'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Фоновый режим'),
+        find.text('Подсказки и трансляция в фоне'),
         150,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('Фоновый режим'), findsOneWidget);
+      expect(find.text('Подсказки и трансляция в фоне'), findsOneWidget);
     });
   });
 }
