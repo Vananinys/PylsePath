@@ -40,6 +40,33 @@ Future<ChatMessage?> showGroupInvitationSheet(
     await service.restoreSession();
     if (!context.mounted) return null;
     if (service.error != null) throw GroupRideException(service.error!);
+    if (AppVariant.uiBeta &&
+        friend != null &&
+        service.members.any((m) => m.userId == friend.id)) {
+      final fresh =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+              title: const Text('Этот человек уже в прежней поездке'),
+              content: const Text(
+                'Чтобы поехать заново с новым подтверждением, создайте новую поездку. Прежняя комната организатора закроется; личные записи продолжатся. Никто не попадёт в новую поездку без принятия приглашения.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialog, true),
+                  child: const Text('Новая поездка'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!fresh || !context.mounted) return null;
+      await service.createRoom(replace: true);
+    }
     if (service.activeRoomId == null || !service.isHost) {
       if (service.activeRoomId != null && !await confirmGroupSwitch(context)) {
         return null;
@@ -131,7 +158,13 @@ class _InvitationSheetState extends State<_InvitationSheet> {
       final message = ChatMessage.fromRow(row);
       if (widget.friend != null) {
         Navigator.pop(context, message);
-        if (AppVariant.uiBeta) _prepare();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Приглашение отправлено. Ожидаем, пока человек сам его примет.',
+            ),
+          ),
+        );
         return;
       }
       setState(() => _sent.add(friend.id));
@@ -214,7 +247,11 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                           title: Text(friend.username),
                           subtitle: Text(
                             _sent.contains(friend.id)
-                                ? 'Приглашение отправлено'
+                                ? 'Ожидаем принятия приглашения'
+                                : _service.members.any(
+                                    (m) => m.userId == friend.id,
+                                  )
+                                ? 'Уже участвует в этой поездке'
                                 : 'Отправить в личный чат',
                           ),
                           trailing: _sending == friend.id
@@ -229,7 +266,11 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                                       : Icons.send,
                                 ),
                           enabled:
-                              _sending == null && !_sent.contains(friend.id),
+                              _sending == null &&
+                              !_sent.contains(friend.id) &&
+                              !_service.members.any(
+                                (m) => m.userId == friend.id,
+                              ),
                           onTap: () => _send(friend),
                         ),
                     ],
@@ -241,14 +282,20 @@ class _InvitationSheetState extends State<_InvitationSheet> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
-                  onPressed: _sending == null
+                  onPressed:
+                      _sending == null &&
+                          _service.members.any((m) => _sent.contains(m.userId))
                       ? () {
                           Navigator.pop(context);
                           _prepare();
                         }
                       : null,
                   icon: const Icon(Icons.tune),
-                  label: const Text('Настроить тренировку'),
+                  label: Text(
+                    _service.members.any((m) => _sent.contains(m.userId))
+                        ? 'Настроить тренировку'
+                        : 'Ожидаем принятия приглашения',
+                  ),
                 ),
               ),
           ],

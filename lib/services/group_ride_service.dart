@@ -484,6 +484,11 @@ class GroupRideService extends ChangeNotifier {
     String messageId,
   ) async {
     final room = activeRoomId;
+    if (members.any((m) => m.userId == receiver)) {
+      throw const GroupRideException(
+        'Этот человек уже участвует в прежней поездке. Для нового приглашения создайте новую поездку.',
+      );
+    }
     final result = Map<String, dynamic>.from(
       await _call('group_invite_send', {
         'p_receiver': receiver,
