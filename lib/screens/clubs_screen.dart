@@ -226,6 +226,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
   final chatScroll = ScrollController();
   String? pendingMessageId;
   String? pendingMessageBody;
+  Map<String, dynamic>? pendingEvent;
+  String? pendingRideRoom, pendingRideMessage;
   List<Map<String, dynamic>> older = [];
   bool historyEnd = false;
   ClubService get service => widget.service;
@@ -319,6 +321,9 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
         data = null;
         older = [];
         input.clear();
+        pendingEvent = null;
+        pendingRideRoom = null;
+        pendingRideMessage = null;
       }
     });
   }
@@ -542,11 +547,17 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
             replace: replace,
           );
         }
+        if (pendingRideRoom != group.activeRoomId ||
+            pendingRideMessage == null) {
+          pendingRideRoom = group.activeRoomId;
+          pendingRideMessage = newRideId();
+        }
         await service.action(
           'share_ride',
           club: widget.id,
-          data: {'id': newRideId()},
+          data: {'id': pendingRideMessage},
         );
+        pendingRideMessage = null;
       } else {
         bool replace = false;
         if (group.activeRoomId != null &&
@@ -580,9 +591,12 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
   Future<void> _event() async {
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => const _ClubEventEditor(),
+      builder: (_) => _ClubEventEditor(initial: pendingEvent),
     );
-    if (result != null) await _run('event_create', payload: result);
+    if (result != null) {
+      pendingEvent = result;
+      if (await _run('event_create', payload: result)) pendingEvent = null;
+    }
   }
 
   Future<void> _memberAction(Map<String, dynamic> person, String action) async {
@@ -1181,15 +1195,23 @@ class _ClubEditorState extends State<_ClubEditor> {
 }
 
 class _ClubEventEditor extends StatefulWidget {
-  const _ClubEventEditor();
+  const _ClubEventEditor({this.initial});
+  final Map<String, dynamic>? initial;
   @override
   State<_ClubEventEditor> createState() => _ClubEventEditorState();
 }
 
 class _ClubEventEditorState extends State<_ClubEventEditor> {
   final form = GlobalKey<FormState>();
-  final title = TextEditingController(), description = TextEditingController();
-  DateTime date = DateTime.now().add(const Duration(days: 1));
+  late final title = TextEditingController(
+    text: widget.initial?['title']?.toString(),
+  );
+  late final description = TextEditingController(
+    text: widget.initial?['description']?.toString(),
+  );
+  late DateTime date =
+      DateTime.tryParse('${widget.initial?['starts_at']}')?.toLocal() ??
+      DateTime.now().add(const Duration(days: 1));
   @override
   void dispose() {
     title.dispose();
@@ -1200,7 +1222,7 @@ class _ClubEventEditorState extends State<_ClubEventEditor> {
   Future<void> _pick() async {
     final day = await showDatePicker(
       context: context,
-      initialDate: date,
+      initialDate: date.isBefore(DateTime.now()) ? DateTime.now() : date,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 730)),
     );
@@ -1271,7 +1293,7 @@ class _ClubEventEditorState extends State<_ClubEventEditor> {
         onPressed: () {
           if (form.currentState!.validate() && date.isAfter(DateTime.now()))
             Navigator.pop(context, {
-              'id': newRideId(),
+              'id': widget.initial?['id'] ?? newRideId(),
               'title': title.text.trim(),
               'description': description.text.trim(),
               'starts_at': date.toUtc().toIso8601String(),

@@ -18,7 +18,8 @@ import 'package:pulsepath/config/app_variant.dart';
 import 'group_coordination_test.dart' show FakeCoordination, me, room;
 
 class TestClubs extends ClubService {
-  bool failSend = false, revokeAccess = false;
+  bool failSend = false, revokeAccess = false, failEvent = false;
+  final eventAttempts = <Map<String, dynamic>>[];
   final sent = <Map<String, dynamic>>[];
   final snapshotData = <String, dynamic>{
     'id': 'club',
@@ -60,6 +61,10 @@ class TestClubs extends ClubService {
     String? club,
     Map<String, dynamic> data = const {},
   }) async {
+    if (action == 'event_create') {
+      eventAttempts.add(Map.from(data));
+      if (failEvent) throw const ClubException('Проверьте интернет');
+    }
     if (action == 'message') {
       sent.add(Map.from(data));
       if (failSend) throw const ClubException('Проверьте интернет');
@@ -196,6 +201,41 @@ void main() {
     });
   }
   tearDown(() => GroupWorkoutNavigation.instance.consume());
+  testWidgets(
+    'event retry retains its form and identifier after a network failure',
+    (tester) async {
+      final service = TestClubs()..failEvent = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ClubDetailScreen(id: 'club', service: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('События'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Создать событие'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'Субботний заезд',
+      );
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Создать событие').last,
+      );
+      await tester.pumpAndSettle();
+      service.failEvent = false;
+      await tester.tap(find.text('Создать событие'));
+      await tester.pumpAndSettle();
+      expect(find.text('Субботний заезд'), findsOneWidget);
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Создать событие').last,
+      );
+      await tester.pumpAndSettle();
+      expect(service.eventAttempts.length, 2);
+      expect(service.eventAttempts[0]['id'], service.eventAttempts[1]['id']);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets(
     'club discovery keeps private membership distinct from open clubs',
     (tester) async {

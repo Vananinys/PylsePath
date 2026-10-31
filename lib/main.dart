@@ -857,6 +857,16 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
             message?.groupInvitation == null)
           return false;
         await showGroupInvitationDetails(context, id);
+        if (mounted && owner == _chatService.userId) {
+          await _chatService.markMessageRead(message!);
+          await PushService.instance.clearChatNotification(
+            owner,
+            message.senderId,
+            messageId: id,
+          );
+          unawaited(_chatService.refreshUnread());
+          unawaited(NotificationService.instance.refresh());
+        }
         return true;
       };
       PushService.instance.onGarageOpen = () async {
