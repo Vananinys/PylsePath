@@ -645,12 +645,32 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
           pendingRideRoom = group.activeRoomId;
           pendingRideMessage = newRideId();
         }
-        await service.action(
+        final invitedRoom = group.activeRoomId;
+        final participantsBefore = group.members.map((m) => m.userId).toList();
+        final shared = await service.action(
           'share_ride',
           club: widget.id,
           data: {'id': pendingRideMessage, 'room_id': group.activeRoomId},
         );
+        if (mounted)
+          setState(() => data = Map<String, dynamic>.from(shared as Map));
         pendingRideMessage = null;
+        group.waitForNewParticipant(
+          room: invitedRoom,
+          existing: participantsBefore,
+        );
+        if (mounted) {
+          tabs.animateTo(1);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Приглашение отправлено в чат клуба. Ожидаем, пока участник сам его примет.',
+              ),
+            ),
+          );
+        }
+        await group.refreshMembers();
+        return;
       } else {
         bool replace = false;
         if (group.activeRoomId != null &&

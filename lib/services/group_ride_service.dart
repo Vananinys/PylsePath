@@ -88,6 +88,17 @@ class GroupRideService extends ChangeNotifier {
   final bool uiFlow;
   List<Map<String, dynamic>> invitations = [];
   List<GroupMember> lastParticipants = [];
+  String? _awaitingRoom;
+  final Set<String> _participantsBeforeInvite = {};
+  void waitForNewParticipant({String? room, Iterable<String>? existing}) {
+    if (!uiFlow || activeRoomId == null || room != null && room != activeRoomId)
+      return;
+    _awaitingRoom = activeRoomId;
+    _participantsBeforeInvite
+      ..clear()
+      ..addAll(existing ?? members.map((m) => m.userId));
+  }
+
   String? _finishedRoom, _finishLoadedFor;
   String? _newRideIntent, _newRideRoom;
   bool get ownFinished =>
@@ -151,6 +162,8 @@ class GroupRideService extends ChangeNotifier {
     _awaitedInvitees.clear();
     invitations = [];
     lastParticipants = [];
+    _awaitingRoom = null;
+    _participantsBeforeInvite.clear();
     _newRideIntent = null;
     _newRideRoom = null;
     refreshing = false;
@@ -267,7 +280,17 @@ class GroupRideService extends ChangeNotifier {
     notifyListeners();
     final accepted =
         isHost &&
-        members.any((m) => _awaitedInvitees[m.userId] == activeRoomId);
+        (members.any((m) => _awaitedInvitees[m.userId] == activeRoomId) ||
+            _awaitingRoom == activeRoomId &&
+                members.any(
+                  (m) =>
+                      m.userId != userId &&
+                      !_participantsBeforeInvite.contains(m.userId),
+                ));
+    if (accepted || _awaitingRoom != activeRoomId) {
+      _awaitingRoom = null;
+      _participantsBeforeInvite.clear();
+    }
     _awaitedInvitees.removeWhere(
       (id, room) => room != activeRoomId || members.any((m) => m.userId == id),
     );

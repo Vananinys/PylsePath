@@ -298,6 +298,25 @@ void main() {
     expect(service.activeRoomId, isNull);
     expect(service.lastParticipants.length, 2);
   });
+  test('club invitation waits for a new peer and prepares only after that person joins', () async {
+    bool joined = false;
+    handle = (_) async {
+      final raw = envelope();
+      if (!joined)
+        (raw['room']['members'] as List).removeWhere((m) => m['user_id'] != me);
+      return json(raw);
+    };
+    await service.restoreSession();
+    service.waitForNewParticipant();
+    await service.refreshMembers();
+    expect(GroupWorkoutNavigation.instance.roomId, isNull);
+    joined = true;
+    await service.refreshMembers();
+    expect(GroupWorkoutNavigation.instance.roomId, room);
+    GroupWorkoutNavigation.instance.consume();
+    await service.refreshMembers();
+    expect(GroupWorkoutNavigation.instance.roomId, isNull);
+  });
   testWidgets(
     'pending invitation can be cancelled and is never shown as accepted',
     (tester) async {
