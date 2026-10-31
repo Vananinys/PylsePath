@@ -292,6 +292,19 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                   },
                 ),
                 // Модульные пункты — только включённые, в порядке реестра.
+                if (AppVariant.uiBeta)
+                  ListTile(
+                    leading: const Icon(Icons.diversity_3_outlined),
+                    title: const Text('Клубы'),
+                    subtitle: const Text('Участники, чат и клубные события'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ClubsScreen()),
+                      );
+                    },
+                  ),
                 ListTile(
                   leading: const Icon(Icons.event_available_outlined),
                   title: const Text('События и челленджи'),

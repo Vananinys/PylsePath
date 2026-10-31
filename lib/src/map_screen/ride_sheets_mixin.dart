@@ -3,6 +3,41 @@ part of '../../main.dart';
 /// Нижняя панель заезда, HUD предзапуска и действия с панелью друга
 /// на карте (профиль, удаление, стикеры).
 mixin _RideSheetsMixin on _MapScreenStateBase {
+  void _onGroupPreparationRequested() {
+    if (!mounted || !_isForeground) return;
+    final request = GroupWorkoutNavigation.instance;
+    final group = GroupRideService();
+    final room = request.roomId, owner = request.userId;
+    request.consume();
+    if (!mounted ||
+        owner == null ||
+        owner != group.userId ||
+        room == null ||
+        room != group.activeRoomId)
+      return;
+    if (_isScreenLocked || _navigationController.isSavingWorkout) {
+      _showSnackBar(
+        'Поездка подключена. Откройте подготовку после завершения текущего действия.',
+      );
+      return;
+    }
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    if (_navigationController.isWorkoutActive ||
+        _navigationController.isWorkoutPaused) {
+      _showSnackBar(
+        'Приглашение принято. Текущая запись продолжается; совместную тренировку можно настроить после её сохранения.',
+      );
+      return;
+    }
+    _searchFocusNode.unfocus();
+    setState(() {
+      _preRideGroupRoomId = room;
+      _isPreRideOpen = true;
+      _isChoosingRoute = false;
+    });
+    unawaited(_loadPreRideWeather());
+  }
+
   Future<void> _openGroupFromPreparation() async {
     if (_isScreenLocked) return;
     await Navigator.push(

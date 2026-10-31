@@ -8,6 +8,9 @@ import 'widgets/ride_preparation_panel.dart';
 import 'services/presence_service.dart';
 import 'models/shared_route.dart';
 import 'services/group_ride_service.dart';
+import 'services/group_workout_navigation.dart';
+import 'screens/clubs_screen.dart';
+import 'widgets/group_invitation_card.dart';
 import 'widgets/route_share_sheet.dart';
 import 'widgets/round_trip_planner.dart';
 import 'widgets/workout_finish_sheet.dart';
@@ -793,6 +796,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
     );
     // Подставляем технику по умолчанию (is_active == true) для HUD предзапуска.
     _navigationController.initPreRideVehicle();
+    GroupWorkoutNavigation.instance.addListener(_onGroupPreparationRequested);
     // Сообщество: друзья и их живые позиции на карте (Realtime).
     _navigationController.startFriendsTracking();
     // Чат: счётчик непрочитанных + живая доставка (бейдж в дровере).
@@ -843,6 +847,18 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
         },
       )..start();
       PushService.instance.onChatOpen = _openChatFromPush;
+      PushService.instance.onInvitationOpen = (id) async {
+        final owner = _chatService.userId;
+        if (!AppVariant.uiBeta || owner == null) return false;
+        final message = await _chatService.fetchMessage(id);
+        if (!mounted ||
+            owner != _chatService.userId ||
+            message?.receiverId != owner ||
+            message?.groupInvitation == null)
+          return false;
+        await showGroupInvitationDetails(context, id);
+        return true;
+      };
       PushService.instance.onGarageOpen = () async {
         if (!mounted) return;
         await Navigator.push(
@@ -928,6 +944,8 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
     DailyActivityService.instance.setForeground(_isForeground);
     _navigationController.setSharingForeground(_isForeground);
     if (_isForeground) {
+      if (GroupWorkoutNavigation.instance.roomId != null)
+        _onGroupPreparationRequested();
       unawaited(_navigationController.resumeLocationTracking());
       unawaited(
         BackgroundLocationService.instance.restore(
@@ -964,6 +982,9 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
     final listener = _chatListener;
     if (listener != null) _chatService.unsubscribe(listener);
     PushService.instance.detach();
+    GroupWorkoutNavigation.instance.removeListener(
+      _onGroupPreparationRequested,
+    );
     _incomingOverlay?.remove();
     _incomingOverlay = null;
     _incomingMessages.dispose();

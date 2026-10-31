@@ -12,6 +12,9 @@ import '../widgets/shared_route_card.dart';
 import '../widgets/group_coordination_panel.dart';
 import '../models/group_coordination.dart';
 import '../widgets/group_ride_dashboard.dart';
+import '../widgets/group_workout_lobby.dart';
+import '../services/group_workout_navigation.dart';
+import '../config/app_variant.dart';
 
 class GroupRideScreen extends StatefulWidget {
   const GroupRideScreen({
@@ -19,10 +22,12 @@ class GroupRideScreen extends StatefulWidget {
     this.navigationController,
     this.service,
     this.legacyLayout = false,
+    this.advanced = false,
   });
   final MapNavigationController? navigationController;
   final GroupRideService? service;
   final bool legacyLayout;
+  final bool advanced;
   @override
   State<GroupRideScreen> createState() => _GroupRideScreenState();
 }
@@ -95,7 +100,7 @@ class _GroupRideScreenState extends State<GroupRideScreen>
     }
   }
 
-  Future<void> _join() async {
+  Future<bool> _join() async {
     final input = TextEditingController();
     final code = await showDialog<String>(
       context: context,
@@ -122,10 +127,13 @@ class _GroupRideScreenState extends State<GroupRideScreen>
     );
     await Future<void>.delayed(const Duration(milliseconds: 300));
     input.dispose();
-    if (code == null || !mounted) return;
+    if (code == null || !mounted) return false;
+    bool joined = false;
     await _run((replace) async {
       await _service.joinRoom(code, replace: replace);
+      joined = true;
     });
+    return joined;
   }
 
   Future<void> _leave() async {
@@ -300,6 +308,31 @@ class _GroupRideScreenState extends State<GroupRideScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (AppVariant.uiBeta && !widget.legacyLayout && !widget.advanced) {
+      return GroupWorkoutLobby(
+        service: _service,
+        busy: _busy,
+        recording:
+            widget.navigationController?.isWorkoutActive == true ||
+            widget.navigationController?.isWorkoutPaused == true,
+        onInvite: () => showGroupInvitationSheet(context),
+        onJoin: () async {
+          if (await _join() && mounted) _prepare();
+        },
+        onPrepare: _prepare,
+        onDetails: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GroupRideScreen(
+              service: _service,
+              navigationController: widget.navigationController,
+              advanced: true,
+            ),
+          ),
+        ),
+        onLeave: _leave,
+      );
+    }
     if (!widget.legacyLayout) {
       return GroupRideDashboard(
         service: _service,
@@ -313,6 +346,10 @@ class _GroupRideScreenState extends State<GroupRideScreen>
         onLeave: _leave,
         onTransfer: () => _transferHost(),
         onReturn: () {
+          if (AppVariant.uiBeta) {
+            _prepare();
+            return;
+          }
           if (widget.navigationController == null) {
             Navigator.popUntil(context, (route) => route.isFirst);
             return;
@@ -523,6 +560,13 @@ class _GroupRideScreenState extends State<GroupRideScreen>
         ),
       ),
     );
+  }
+
+  void _prepare() {
+    final room = _service.activeRoomId, owner = _service.userId;
+    if (room != null && owner != null) {
+      GroupWorkoutNavigation.instance.prepare(room: room, owner: owner);
+    }
   }
 
   Widget _member(GroupMember member) {

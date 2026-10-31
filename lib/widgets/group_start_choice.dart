@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/group_ride_service.dart';
 import '../models/group_coordination.dart';
+import '../config/app_variant.dart';
 
 /// Membership is preparation; the choice below opts one workout into a room.
 class GroupStartChoice extends StatelessWidget {
@@ -30,6 +31,62 @@ class GroupStartChoice extends StatelessWidget {
       final selected = selectedRoomId != null;
       final valid = selected && selectedRoomId == room;
       final colors = Theme.of(context).colorScheme;
+      if (AppVariant.uiBeta && valid) {
+        return Card(
+          margin: EdgeInsets.zero,
+          color: colors.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Совместная тренировка · ${service.members.length} участников',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(service.title),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final person in service.members)
+                      Chip(
+                        label: Text(
+                          '${person.username}${person.userId == service.userId ? ' · вы' : ''}',
+                        ),
+                        avatar: const Icon(Icons.person_outline, size: 18),
+                      ),
+                  ],
+                ),
+                Text(
+                  sharesLocation
+                      ? 'Вы делитесь позицией согласно настройкам.'
+                      : 'Ваша позиция скрыта; видны статус и прогресс.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: disabled ? null : onManage,
+                      child: const Text('Участники и приглашения'),
+                    ),
+                    if (service.route != null && onUseRoute != null)
+                      TextButton(
+                        onPressed: disabled ? null : onUseRoute,
+                        child: const Text('Маршрут поездки'),
+                      ),
+                    TextButton(
+                      onPressed: disabled ? null : () => onChanged(null),
+                      child: const Text('Тренироваться самостоятельно'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       Widget option(bool group, IconData icon, String label) => Expanded(
         child: Padding(
           padding: const EdgeInsets.all(3),

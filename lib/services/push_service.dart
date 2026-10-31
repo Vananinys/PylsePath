@@ -103,6 +103,7 @@ class PushService {
   }
 
   Future<void> Function(String senderId)? onChatOpen;
+  Future<bool> Function(String messageId)? onInvitationOpen;
   Future<bool> Function(String messageId)? onChatPreview;
   Future<void> Function()? onUpdateOpen;
   Future<void> Function()? onGarageOpen;
@@ -112,6 +113,7 @@ class PushService {
   bool _openingUpdate = false;
   String? _pendingSender;
   String? _pendingReceiver;
+  String? _pendingMessage;
   bool _opening = false;
   String? lastError;
   bool get isReady => _ready;
@@ -446,6 +448,7 @@ class PushService {
       }
       _pendingSender = sender;
       _pendingReceiver = receiver;
+      _pendingMessage = payload['messageId']?.toString();
       unawaited(flushPendingTap());
     } catch (_) {
       /* Reject legacy sender-only payloads. */
@@ -848,6 +851,7 @@ class PushService {
     onGarageOpen = null;
     _pendingGarageOwner = null;
     onChatOpen = null;
+    onInvitationOpen = null;
     onChatPreview = null;
   }
 
@@ -872,6 +876,7 @@ class PushService {
     if (_seenTaps.length > 200) _seenTaps.remove(_seenTaps.first);
     _pendingSender = sender;
     _pendingReceiver = receiver;
+    _pendingMessage = message.data['messageId']?.toString();
     unawaited(flushPendingTap());
   }
 
@@ -917,8 +922,14 @@ class PushService {
     }
     _pendingSender = null;
     _pendingReceiver = null;
+    final messageId = _pendingMessage;
+    _pendingMessage = null;
     _opening = true;
     try {
+      if (messageId != null &&
+          onInvitationOpen != null &&
+          await onInvitationOpen!(messageId))
+        return;
       await callback(sender);
     } catch (error) {
       debugPrint('[Push] open chat failed: $error');

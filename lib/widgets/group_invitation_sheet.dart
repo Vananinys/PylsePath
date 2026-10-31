@@ -5,6 +5,8 @@ import '../models/friend_profile.dart';
 import '../services/friend_service.dart';
 import '../services/group_ride_service.dart';
 import '../utils/ride_id.dart';
+import '../config/app_variant.dart';
+import '../services/group_workout_navigation.dart';
 
 Future<bool> confirmGroupSwitch(BuildContext context) async =>
     await showDialog<bool>(
@@ -43,36 +45,40 @@ Future<ChatMessage?> showGroupInvitationSheet(
         return null;
       }
       if (!context.mounted) return null;
-      final input = TextEditingController(text: 'Совместная тренировка');
-      final title = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Создать совместный заезд'),
-          content: TextField(
-            controller: input,
-            maxLength: 120,
-            decoration: const InputDecoration(labelText: 'Название'),
+      if (AppVariant.uiBeta) {
+        await service.createRoom(replace: service.activeRoomId != null);
+      } else {
+        final input = TextEditingController(text: 'Совместная тренировка');
+        final title = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Создать совместный заезд'),
+            content: TextField(
+              controller: input,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'Название'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                child: const Text('Создать'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, input.text.trim()),
-              child: const Text('Создать'),
-            ),
-          ],
-        ),
-      );
-      // The dialog's exit animation can still reference its controller.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      input.dispose();
-      if (title == null || !context.mounted) return null;
-      await service.createRoom(
-        title: title,
-        replace: service.activeRoomId != null,
-      );
+        );
+        // The dialog's exit animation can still reference its controller.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        input.dispose();
+        if (title == null || !context.mounted) return null;
+        await service.createRoom(
+          title: title,
+          replace: service.activeRoomId != null,
+        );
+      }
     }
     if (!context.mounted) return null;
     return await showModalBottomSheet<ChatMessage>(
@@ -125,6 +131,7 @@ class _InvitationSheetState extends State<_InvitationSheet> {
       final message = ChatMessage.fromRow(row);
       if (widget.friend != null) {
         Navigator.pop(context, message);
+        if (AppVariant.uiBeta) _prepare();
         return;
       }
       setState(() => _sent.add(friend.id));
@@ -132,6 +139,13 @@ class _InvitationSheetState extends State<_InvitationSheet> {
       if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _sending = null);
+    }
+  }
+
+  void _prepare() {
+    final room = _service.activeRoomId, owner = _service.userId;
+    if (room != null && owner != null) {
+      GroupWorkoutNavigation.instance.prepare(room: room, owner: owner);
     }
   }
 
@@ -157,7 +171,7 @@ class _InvitationSheetState extends State<_InvitationSheet> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Приглашение придёт в личный чат и действует 24 часа. Друг сам решит, когда присоединиться.',
+                'Приглашение появится в чате и придёт уведомлением на телефон, если уведомления разрешены. После принятия друг выберет активность и транспорт. Приглашение действует 24 часа.',
               ),
             ),
             if (_error != null)
@@ -223,6 +237,20 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                 },
               ),
             ),
+            if (AppVariant.uiBeta && _sent.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton.icon(
+                  onPressed: _sending == null
+                      ? () {
+                          Navigator.pop(context);
+                          _prepare();
+                        }
+                      : null,
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Настроить тренировку'),
+                ),
+              ),
           ],
         ),
       ),

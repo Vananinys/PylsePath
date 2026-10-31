@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/shared_route.dart';
 import '../models/group_coordination.dart';
 import '../utils/ride_id.dart';
+import '../config/app_variant.dart';
+import 'group_workout_navigation.dart';
 
 class GroupRideException implements Exception {
   const GroupRideException(
@@ -105,6 +107,7 @@ class GroupRideService extends ChangeNotifier {
   Object? _coordinationToken;
   bool get coordinating => _coordinationToken != null;
   final Map<String, GroupPendingIntent> _pendingIntents = {};
+  final Map<String, String> _awaitedInvitees = {};
   String? error, notice;
   DateTime? lastSyncedAt;
   RealtimeChannel? _channel;
@@ -130,6 +133,7 @@ class GroupRideService extends ChangeNotifier {
     _coordinationPoll = null;
     _coordinationToken = null;
     _pendingIntents.clear();
+    _awaitedInvitees.clear();
     error = null;
     notice = null;
     refreshing = false;
@@ -233,6 +237,21 @@ class GroupRideService extends ChangeNotifier {
       }
     }
     notifyListeners();
+    final accepted =
+        isHost &&
+        members.any((m) => _awaitedInvitees[m.userId] == activeRoomId);
+    _awaitedInvitees.removeWhere(
+      (id, room) => room != activeRoomId || members.any((m) => m.userId == id),
+    );
+    if (AppVariant.uiBeta &&
+        accepted &&
+        activeRoomId != null &&
+        userId != null) {
+      GroupWorkoutNavigation.instance.prepare(
+        room: activeRoomId!,
+        owner: userId!,
+      );
+    }
   }
 
   void _scheduleRefresh() {
@@ -463,12 +482,23 @@ class GroupRideService extends ChangeNotifier {
   Future<Map<String, dynamic>> sendInvitation(
     String receiver,
     String messageId,
-  ) async => Map<String, dynamic>.from(
-    await _call('group_invite_send', {
-      'p_receiver': receiver,
-      'p_id': messageId,
-    }) as Map,
-  );
+  ) async {
+    final room = activeRoomId;
+    final result = Map<String, dynamic>.from(
+      await _call('group_invite_send', {
+        'p_receiver': receiver,
+        'p_id': messageId,
+      }) as Map,
+    );
+    if (AppVariant.uiBeta &&
+        room != null &&
+        room == activeRoomId &&
+        !members.any((m) => m.userId == receiver)) {
+      _awaitedInvitees[receiver] = room;
+    }
+    return result;
+  }
+
   Future<Map<String, dynamic>> invitation(
     String id, {
     String action = 'view',
