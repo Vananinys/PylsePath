@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/map_navigation_controller.dart';
 import '../models/workout_details.dart';
+import '../config/app_variant.dart';
 
 class WorkoutFinishRequest {
   const WorkoutFinishRequest({
@@ -11,11 +12,13 @@ class WorkoutFinishRequest {
     this.notes = '',
     this.effort,
     this.discard = false,
+    this.endGroupParticipation = false,
   });
   final String title;
   final String notes;
   final int? effort;
   final bool discard;
+  final bool endGroupParticipation;
 }
 
 class WorkoutFinishSheet extends StatefulWidget {
@@ -171,6 +174,24 @@ class _WorkoutFinishSheetState extends State<WorkoutFinishSheet> {
               icon: const Icon(Icons.check),
               label: const Text('Сохранить тренировку'),
             ),
+            if (AppVariant.uiBeta && c.groupWorkoutConnected) ...[
+              const Text(
+                'Сохранение завершит только вашу запись. Можно остаться и посмотреть результаты остальных.',
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(
+                  context,
+                  WorkoutFinishRequest(
+                    title: _title.text.trim(),
+                    notes: _notes.text.trim(),
+                    effort: _effort,
+                    endGroupParticipation: true,
+                  ),
+                ),
+                icon: const Icon(Icons.logout),
+                label: const Text('Сохранить и завершить участие в заезде'),
+              ),
+            ],
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Продолжить тренировку'),

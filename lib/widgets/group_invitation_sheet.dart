@@ -13,8 +13,10 @@ Future<bool> confirmGroupSwitch(BuildContext context) async =>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Перейти в другую комнату?'),
-        content: const Text(
-          'Вы покинете текущую комнату. Если вы организатор, она закроется для всех. Запись личной тренировки продолжится.',
+        content: Text(
+          AppVariant.uiBeta
+              ? 'Вы завершите участие в прежнем заезде. Остальные смогут продолжить, управление перейдёт участнику. Ваша личная запись продолжится.'
+              : 'Вы покинете текущую комнату. Если вы организатор, она закроется для всех. Запись личной тренировки продолжится.',
         ),
         actions: [
           TextButton(
@@ -41,15 +43,16 @@ Future<ChatMessage?> showGroupInvitationSheet(
     if (!context.mounted) return null;
     if (service.error != null) throw GroupRideException(service.error!);
     if (AppVariant.uiBeta &&
-        friend != null &&
-        service.members.any((m) => m.userId == friend.id)) {
+        (service.ownFinished ||
+            friend != null &&
+                service.members.any((m) => m.userId == friend.id))) {
       final fresh =
           await showDialog<bool>(
             context: context,
             builder: (dialog) => AlertDialog(
               title: const Text('Этот человек уже в прежней поездке'),
               content: const Text(
-                'Чтобы поехать заново с новым подтверждением, создайте новую поездку. Прежняя комната организатора закроется; личные записи продолжатся. Никто не попадёт в новую поездку без принятия приглашения.',
+                'Чтобы поехать заново с новым подтверждением, создайте новый заезд. Вы завершите участие в прежнем; остальные смогут продолжить. Никто не попадёт в новый заезд без принятия приглашения.',
               ),
               actions: [
                 TextButton(

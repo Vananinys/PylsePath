@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/club_service.dart';
+import '../services/push_service.dart';
 import '../services/chat_service.dart';
 import '../services/friend_service.dart';
 import '../services/group_ride_service.dart';
@@ -11,6 +12,7 @@ import '../services/group_workout_navigation.dart';
 import '../utils/ride_id.dart';
 import '../widgets/group_invitation_sheet.dart';
 import '../widgets/section_intro.dart';
+import '../widgets/club_overview.dart';
 
 String _role(dynamic role) => switch (role) {
   'owner' => 'Организатор',
@@ -32,6 +34,7 @@ class ClubsScreen extends StatefulWidget {
 }
 
 class _ClubsScreenState extends State<ClubsScreen> {
+  Timer? refreshTimer;
   late final service = widget.service ?? ClubService();
   List<Map<String, dynamic>>? clubs;
   String? error;
@@ -43,11 +46,28 @@ class _ClubsScreenState extends State<ClubsScreen> {
   void initState() {
     super.initState();
     _load();
+    refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted &&
+          !creating &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          ModalRoute.of(context)?.isCurrent == true)
+        _load(background: true);
+    });
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool background = false}) async {
     if (loading) return;
-    setState(() => loading = true);
+    if (background) {
+      loading = true;
+    } else {
+      setState(() => loading = true);
+    }
     try {
       final result = await service.home();
       if (mounted)
@@ -56,7 +76,11 @@ class _ClubsScreenState extends State<ClubsScreen> {
           error = null;
         });
     } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+      if (mounted)
+        setState(() {
+          error = e.toString();
+          if (e is ClubException && e.accessLost) clubs = null;
+        });
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -193,7 +217,7 @@ class _ClubsScreenState extends State<ClubsScreen> {
                   ),
                   title: Text('${c['name']}'),
                   subtitle: Text(
-                    '${c['members_count']} участников · ${c['member'] == true ? _role(c['role']) : 'Открытый клуб'}\n${c['description']}',
+                    '${c['members_count']} участников · ${c['member'] == true ? _role(c['role']) : 'Открытый клуб'}${(c['unread_count'] as num? ?? 0) > 0 ? ' · ${c['unread_count']} новых' : ''}\n${c['description']}',
                   ),
                   isThreeLine: true,
                   trailing: const Icon(Icons.chevron_right),
@@ -208,19 +232,84 @@ class _ClubsScreenState extends State<ClubsScreen> {
 }
 
 class ClubDetailScreen extends StatefulWidget {
-  const ClubDetailScreen({super.key, required this.id, required this.service});
+  const ClubDetailScreen({
+    super.key,
+    required this.id,
+    required this.service,
+    this.initialTab = 0,
+  });
   final String id;
   final ClubService service;
+  final int initialTab;
   @override
   State<ClubDetailScreen> createState() => _ClubDetailScreenState();
 }
 
 class _ClubDetailScreenState extends State<ClubDetailScreen>
-    with WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   Map<String, dynamic>? data;
   String? error;
   bool loading = false, busy = false;
   int revision = 0;
+  late final tabs = TabController(
+    length: 4,
+    vsync: this,
+    initialIndex: widget.initialTab,
+  )..addListener(_tabChanged);
+  bool markingRead = false;
+  void _tabChanged() {
+    if (tabs.index == 1 && !tabs.indexIsChanging) _markRead();
+  }
+
+  Future<void> _markRead() async {
+    if (markingRead || !member || busy) return;
+    markingRead = true;
+    final owner = service.userId;
+    try {
+      await service.action('read', club: widget.id);
+      if (mounted && owner == service.userId)
+        setState(() => data?['unread_count'] = 0);
+      if (mounted && owner == service.userId)
+        unawaited(PushService.instance.clearClubNotification(widget.id));
+    } catch (_) {
+    } finally {
+      markingRead = false;
+    }
+  }
+
+  Future<void> _notifications() async {
+    final mode = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheet) => ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(
+            title: Text('Уведомления этого клуба'),
+            subtitle: Text(
+              'Дополнительно разрешите уведомления в настройках телефона.',
+            ),
+          ),
+          for (final option in {
+            'all': 'Все сообщения и приглашения',
+            'invitations': 'Только приглашения на заезды и события',
+            'off': 'Выключены',
+          }.entries)
+            ListTile(
+              leading: Icon(
+                data?['notification_mode'] == option.key
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              title: Text(option.value),
+              onTap: () => Navigator.pop(sheet, option.key),
+            ),
+        ],
+      ),
+    );
+    if (mode != null) await _run('notifications', payload: {'mode': mode});
+  }
+
   Timer? timer;
   final input = TextEditingController();
   final chatScroll = ScrollController();
@@ -237,6 +326,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    tabs;
     _load();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)
@@ -247,6 +337,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
   @override
   void dispose() {
     timer?.cancel();
+    tabs.dispose();
     WidgetsBinding.instance.removeObserver(this);
     input.dispose();
     chatScroll.dispose();
@@ -272,6 +363,8 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
           error = null;
         });
       if (mounted && request == revision && follow) _scrollChat();
+      if (mounted && tabs.index == 1 && (row['unread_count'] as num? ?? 0) > 0)
+        unawaited(_markRead());
     } catch (e) {
       if (mounted && request == revision) _handleError(e);
     } finally {
@@ -536,7 +629,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
         throw const ClubException('Аккаунт изменился.');
       if (group.error != null) throw ClubException(group.error!);
       if (invite == null) {
-        if (group.activeRoomId == null || !group.isHost) {
+        if (group.activeRoomId == null || !group.isHost || group.ownFinished) {
           final replace = group.activeRoomId != null;
           if (replace && (!mounted || !await confirmGroupSwitch(context)))
             return;
@@ -555,7 +648,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
         await service.action(
           'share_ride',
           club: widget.id,
-          data: {'id': pendingRideMessage},
+          data: {'id': pendingRideMessage, 'room_id': group.activeRoomId},
         );
         pendingRideMessage = null;
       } else {
@@ -633,7 +726,7 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
           : '${a['starts_at']}'.compareTo('${b['starts_at']}');
     });
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(data?['name']?.toString() ?? 'Клуб'),
@@ -651,8 +744,12 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
             ),
           ],
           bottom: member
-              ? const TabBar(
-                  tabs: [
+              ? TabBar(
+                  controller: tabs,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  tabs: const [
+                    Tab(text: 'Главная'),
                     Tab(text: 'Чат'),
                     Tab(text: 'События'),
                     Tab(text: 'Участники'),
@@ -688,7 +785,17 @@ class _ClubDetailScreenState extends State<ClubDetailScreen>
                   else
                     Expanded(
                       child: TabBarView(
+                        controller: tabs,
                         children: [
+                          ClubOverview(
+                            data: data!,
+                            busy: busy,
+                            onChat: () => tabs.animateTo(1),
+                            onEvents: () => tabs.animateTo(2),
+                            onPeople: () => tabs.animateTo(3),
+                            onNotifications: _notifications,
+                            onRide: () => _ride(),
+                          ),
                           Column(
                             children: [
                               Expanded(

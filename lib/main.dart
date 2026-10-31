@@ -10,6 +10,8 @@ import 'models/shared_route.dart';
 import 'services/group_ride_service.dart';
 import 'services/group_workout_navigation.dart';
 import 'screens/clubs_screen.dart';
+import 'services/club_service.dart';
+import 'widgets/group_ride_result_sheet.dart';
 import 'widgets/group_invitation_card.dart';
 import 'widgets/route_share_sheet.dart';
 import 'widgets/round_trip_planner.dart';
@@ -847,6 +849,33 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
         },
       )..start();
       PushService.instance.onChatOpen = _openChatFromPush;
+      PushService.instance.onClubOpen = (club, kind) async {
+        final service = ClubService(), owner = _chatService.userId;
+        if (!mounted || !AppVariant.uiBeta || owner == null) return;
+        try {
+          final row = await service.snapshot(club);
+          if (!mounted || owner != _chatService.userId) return;
+          if (row['member'] != true) {
+            _showSnackBar('Клуб больше недоступен.');
+            return;
+          }
+          unawaited(
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ClubDetailScreen(
+                  id: club,
+                  service: service,
+                  initialTab: kind == 'event' || kind == 'event_cancel' ? 2 : 1,
+                ),
+              ),
+            ),
+          );
+        } catch (_) {
+          if (mounted)
+            _showSnackBar('Не удалось открыть клуб. Проверьте подключение.');
+        }
+      };
       PushService.instance.onInvitationOpen = (id) async {
         final owner = _chatService.userId;
         if (!AppVariant.uiBeta || owner == null) return false;
@@ -1802,8 +1831,10 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                                 : 'НАЧАТЬ В ГРУППЕ',
                             startEnabled:
                                 _preRideGroupRoomId == null ||
-                                _preRideGroupRoomId ==
-                                    GroupRideService().activeRoomId,
+                                !(AppVariant.uiBeta &&
+                                        GroupRideService().ownFinished) &&
+                                    _preRideGroupRoomId ==
+                                        GroupRideService().activeRoomId,
                             groupChoice: GroupStartChoice(
                               service: GroupRideService(),
                               selectedRoomId: _preRideGroupRoomId,

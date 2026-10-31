@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/group_ride_service.dart';
 import 'section_intro.dart';
+import 'group_journey_panel.dart';
 
 /// The everyday invitation flow; advanced coordination remains available separately.
 class GroupWorkoutLobby extends StatelessWidget {
@@ -15,9 +16,11 @@ class GroupWorkoutLobby extends StatelessWidget {
     required this.onDetails,
     required this.onLeave,
     this.recording = false,
+    this.onNewRide,
   });
   final GroupRideService service;
   final bool busy, recording;
+  final VoidCallback? onNewRide;
   final VoidCallback onInvite, onPrepare, onJoin, onDetails, onLeave;
   @override
   Widget build(BuildContext context) {
@@ -61,7 +64,24 @@ class GroupWorkoutLobby extends StatelessWidget {
                 child: Text(service.notice!),
               ),
             const SizedBox(height: 12),
+            if (service.uiFlow) GroupJourneyPanel(service: service, busy: busy),
             if (!joined) ...[
+              if (service.lastParticipants.isNotEmpty)
+                ExpansionTile(
+                  title: const Text('Последний заезд'),
+                  subtitle: const Text(
+                    'Результаты на момент завершения участия',
+                  ),
+                  children: [
+                    for (final person in service.lastParticipants)
+                      ListTile(
+                        title: Text(person.username),
+                        subtitle: Text(
+                          '${(person.distanceMeters / 1000).toStringAsFixed(2)} км · ${Duration(seconds: person.durationSeconds).inMinutes} мин',
+                        ),
+                      ),
+                  ],
+                ),
               FilledButton.icon(
                 onPressed: busy ? null : onInvite,
                 icon: const Icon(Icons.person_add_outlined),
@@ -95,31 +115,33 @@ class GroupWorkoutLobby extends StatelessWidget {
                   label: const Text('Пригласить ещё'),
                 ),
               const SizedBox(height: 12),
-              Text(
-                'Участники · ${service.members.length}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              for (final member in service.members)
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      child: Icon(
-                        member.workoutState == 'recording'
-                            ? Icons.directions_bike
-                            : Icons.person_outline,
-                      ),
-                    ),
-                    title: Text(
-                      '${member.username}${member.userId == service.userId ? ' · вы' : ''}',
-                    ),
-                    subtitle: Text(switch (member.workoutState) {
-                      'recording' => 'Записывает тренировку',
-                      'paused' => 'Тренировка на паузе',
-                      'finished' => 'Завершил тренировку',
-                      _ => 'Настраивает тренировку',
-                    }),
-                  ),
+              if (!service.uiFlow)
+                Text(
+                  'Участники · ${service.members.length}',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+              if (!service.uiFlow)
+                for (final member in service.members)
+                  Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        child: Icon(
+                          member.workoutState == 'recording'
+                              ? Icons.directions_bike
+                              : Icons.person_outline,
+                        ),
+                      ),
+                      title: Text(
+                        '${member.username}${member.userId == service.userId ? ' · вы' : ''}',
+                      ),
+                      subtitle: Text(switch (member.workoutState) {
+                        'recording' => 'Записывает тренировку',
+                        'paused' => 'Тренировка на паузе',
+                        'finished' => 'Завершил тренировку',
+                        _ => 'Настраивает тренировку',
+                      }),
+                    ),
+                  ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Text(
@@ -128,18 +150,20 @@ class GroupWorkoutLobby extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.tune),
-                title: const Text('Маршрут, место встречи и координация'),
+                title: const Text('Маршрут и где встречаемся'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: onDetails,
               ),
               TextButton(
                 onPressed: busy ? null : onLeave,
-                child: Text(
-                  service.isHost
-                      ? 'Завершить совместную поездку'
-                      : 'Выйти из совместной поездки',
-                ),
+                child: Text('Завершить участие в заезде'),
               ),
+              if (onNewRide != null)
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onNewRide,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Новый заезд с новыми приглашениями'),
+                ),
             ],
           ],
         ),
@@ -149,10 +173,16 @@ class GroupWorkoutLobby extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton.icon(
-                  onPressed: busy ? null : onPrepare,
+                  onPressed: busy
+                      ? null
+                      : service.ownFinished && !recording
+                      ? onNewRide
+                      : onPrepare,
                   icon: Icon(recording ? Icons.map_outlined : Icons.tune),
                   label: Text(
-                    recording
+                    service.ownFinished && !recording
+                        ? 'Создать новый заезд'
+                        : recording
                         ? 'Вернуться к своей тренировке'
                         : 'Настроить тренировку',
                   ),

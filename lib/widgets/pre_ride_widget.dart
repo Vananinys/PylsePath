@@ -97,10 +97,6 @@ class PreRideWidget extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (groupChoice != null) ...[
-                      groupChoice!,
-                      const SizedBox(height: 12),
-                    ],
                     if (routeLabel != null) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -141,6 +137,10 @@ class PreRideWidget extends StatelessWidget {
                         icon: const Icon(Icons.route_outlined, size: 18),
                         label: const Text('Добавить маршрут'),
                       ),
+                    if (groupChoice != null) ...[
+                      const SizedBox(height: 12),
+                      groupChoice!,
+                    ],
                     const SizedBox(height: 8),
                     ExpansionTile(
                       key: const PageStorageKey('pre-ride-options'),

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show WidgetsBinding, AppLifecycleState;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/shared_route.dart';
 import '../models/group_coordination.dart';
@@ -74,13 +75,27 @@ class GroupMember {
 /// Failed reads retain the last snapshot. Mutations are atomic on the server.
 class GroupRideService extends ChangeNotifier {
   factory GroupRideService() => _instance;
-  GroupRideService._() : _testClient = null, _realtimeEnabled = true;
+  GroupRideService._()
+    : _testClient = null,
+      _realtimeEnabled = true,
+      uiFlow = AppVariant.uiBeta;
   @visibleForTesting
-  GroupRideService.forTesting({SupabaseClient? client})
+  GroupRideService.forTesting({SupabaseClient? client, this.uiFlow = false})
     : _testClient = client,
       _realtimeEnabled = false;
   final SupabaseClient? _testClient;
   final bool _realtimeEnabled;
+  final bool uiFlow;
+  List<Map<String, dynamic>> invitations = [];
+  List<GroupMember> lastParticipants = [];
+  String? _finishedRoom, _finishLoadedFor;
+  String? _newRideIntent, _newRideRoom;
+  bool get ownFinished =>
+      activeRoomId != null &&
+      (_finishedRoom == activeRoomId ||
+          members.any(
+            (m) => m.userId == userId && m.workoutState == 'finished',
+          ));
   static final _instance = GroupRideService._();
   SupabaseClient? get _client {
     if (_testClient != null) return _testClient;
@@ -134,6 +149,13 @@ class GroupRideService extends ChangeNotifier {
     _coordinationToken = null;
     _pendingIntents.clear();
     _awaitedInvitees.clear();
+    invitations = [];
+    lastParticipants = [];
+    _newRideIntent = null;
+    _newRideRoom = null;
+    refreshing = false;
+    _finishedRoom = null;
+    _finishLoadedFor = null;
     error = null;
     notice = null;
     refreshing = false;
@@ -157,11 +179,17 @@ class GroupRideService extends ChangeNotifier {
     refreshing = true;
     notifyListeners();
     try {
+      if (uiFlow && _finishLoadedFor != owner) {
+        final prefs = await SharedPreferences.getInstance();
+        if (owner != userId || generation != _generation) return;
+        _finishedRoom = prefs.getString('group_finished_room_$owner');
+        _finishLoadedFor = owner;
+      }
       final raw = await _client!
-          .rpc('group_room_snapshot_v2')
+          .rpc(uiFlow ? 'group_ui_snapshot' : 'group_room_snapshot_v2')
           .timeout(const Duration(seconds: 15));
       if (owner != userId || generation != _generation) return;
-      await _apply(raw);
+      await _applyUi(raw);
       error = null;
       lastSyncedAt = DateTime.now();
     } catch (_) {
@@ -254,6 +282,126 @@ class GroupRideService extends ChangeNotifier {
     }
   }
 
+  Future<void> _applyUi(dynamic raw) async {
+    if (uiFlow && raw is Map && raw.containsKey('room')) {
+      invitations = (raw['invitations'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      await _apply(raw['room']);
+    } else {
+      await _apply(raw);
+    }
+  }
+
+  Future<void> newRide({
+    String title = 'Совместная тренировка',
+    bool replace = false,
+  }) async {
+    if (!uiFlow) {
+      await createRoom(title: title, replace: replace);
+      return;
+    }
+    bindToUser(userId);
+    if (_newRideIntent == null) {
+      _newRideIntent = newRideId();
+      _newRideRoom = activeRoomId;
+    }
+    dynamic raw;
+    try {
+      raw = await _call('group_ui_action', {
+        'p_action': 'fresh',
+        'p_data': {
+          'title': title,
+          'replace': replace,
+          'room_id': _newRideRoom,
+          'request_id': _newRideIntent,
+        },
+      });
+    } on GroupRideException catch (error) {
+      if (error.intentRejected) {
+        _newRideIntent = null;
+        _newRideRoom = null;
+      }
+      rethrow;
+    }
+    _generation++;
+    _refreshFuture = null;
+    refreshing = false;
+    await _applyUi(raw);
+    _newRideIntent = null;
+    _newRideRoom = null;
+    error = null;
+    notice = 'Новый заезд создан. Пригласите участников.';
+    lastSyncedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  Future<void> endParticipation() async {
+    if (activeRoomId == null) return;
+    if (!uiFlow) {
+      await leaveRoom(activeRoomId!, isHost: isHost);
+      return;
+    }
+    final raw = await _call('group_ui_action', {
+      'p_action': 'depart',
+      'p_data': {'room_id': activeRoomId},
+    });
+    if (raw is Map && raw['previous'] is Map) {
+      lastParticipants = ((raw['previous'] as Map)['members'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => GroupMember.fromRow(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    _generation++;
+    _refreshFuture = null;
+    refreshing = false;
+    await _applyUi(raw);
+    error = null;
+    notice = 'Вы завершили участие. Следующий заезд начинается с нового приглашения.';
+    lastSyncedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  Future<void> finishPersonalWorkout(
+    String room,
+    double distance,
+    int seconds,
+  ) async {
+    final owner = userId;
+    if (owner == null || room != activeRoomId) return;
+    _finishedRoom = room;
+    members = members
+        .map(
+          (m) => m.userId != owner
+              ? m
+              : GroupMember(
+                  userId: m.userId,
+                  username: m.username,
+                  avatarUrl: m.avatarUrl,
+                  distanceMeters: distance,
+                  durationSeconds: seconds,
+                  updatedAt: DateTime.now(),
+                  workoutState: 'finished',
+                ),
+        )
+        .toList();
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (owner == userId)
+        await prefs.setString('group_finished_room_$owner', room);
+    } catch (_) {}
+    if (owner != userId || room != activeRoomId) return;
+    error = null;
+    await updateProgress(
+      room,
+      distanceMeters: distance,
+      durationSeconds: seconds,
+      workoutState: 'finished',
+    );
+  }
+
   void _scheduleRefresh() {
     if (_debounce?.isActive ?? false) return;
     final elapsed = lastSyncedAt == null
@@ -281,6 +429,10 @@ class GroupRideService extends ChangeNotifier {
       rethrow;
     } catch (cause) {
       final text = cause is PostgrestException ? cause.message : '';
+      if (text.contains('ALREADY_JOINED'))
+        throw const GroupRideException(
+          'Этот человек уже участвует. Для следующего заезда создайте новый.',
+        );
       if (text.contains('SIGNAL_EXPIRED')) {
         throw const GroupRideException(
           'Срок команды истёк. Обновите комнату и отправьте новую.',
@@ -363,6 +515,10 @@ class GroupRideService extends ChangeNotifier {
     String title = 'Совместная тренировка',
     bool replace = false,
   }) async {
+    if (uiFlow) {
+      await newRide(title: title, replace: replace);
+      return activeCode!;
+    }
     await _action({
       'p_action': 'create',
       'p_title': title,
@@ -490,10 +646,15 @@ class GroupRideService extends ChangeNotifier {
       );
     }
     final result = Map<String, dynamic>.from(
-      await _call('group_invite_send', {
-        'p_receiver': receiver,
-        'p_id': messageId,
-      }) as Map,
+      await _call(
+        uiFlow ? 'group_ui_action' : 'group_invite_send',
+        uiFlow
+            ? {
+                'p_action': 'invite',
+                'p_data': {'receiver_id': receiver, 'id': messageId},
+              }
+            : {'p_receiver': receiver, 'p_id': messageId},
+      ) as Map,
     );
     if (AppVariant.uiBeta &&
         room != null &&
@@ -501,6 +662,7 @@ class GroupRideService extends ChangeNotifier {
         !members.any((m) => m.userId == receiver)) {
       _awaitedInvitees[receiver] = room;
     }
+    if (uiFlow) await refreshMembers();
     return result;
   }
 
@@ -510,13 +672,18 @@ class GroupRideService extends ChangeNotifier {
     bool replace = false,
   }) async {
     final result = Map<String, dynamic>.from(
-      await _call('group_invite_action', {
-        'p_id': id,
-        'p_action': action,
-        'p_replace': replace,
-      }) as Map,
+      await _call(
+        uiFlow ? 'group_ui_action' : 'group_invite_action',
+        uiFlow
+            ? {
+                'p_action': action,
+                'p_data': {'id': id, 'replace': replace},
+              }
+            : {'p_id': id, 'p_action': action, 'p_replace': replace},
+      ) as Map,
     );
-    if (action == 'accept') {
+    if (action == 'accept' ||
+        uiFlow && (action == 'decline' || action == 'revoke')) {
       _generation++;
       _refreshFuture = null;
       await refreshMembers();

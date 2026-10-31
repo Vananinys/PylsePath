@@ -9,12 +9,15 @@ import 'shared_route_card.dart';
 import '../config/app_variant.dart';
 import '../services/group_workout_navigation.dart';
 
-Future<void> showGroupInvitationDetails(BuildContext context, String id) =>
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => GroupInvitationDetails(id: id),
-    );
+Future<void> showGroupInvitationDetails(
+  BuildContext context,
+  String id, {
+  GroupRideService? service,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  builder: (_) => GroupInvitationDetails(id: id, service: service),
+);
 
 class GroupInvitationCard extends StatelessWidget {
   const GroupInvitationCard({super.key, required this.message});
@@ -141,9 +144,17 @@ class _InviteDetailsState extends State<GroupInvitationDetails>
         _data?['sender_id'] == _service.userId;
     final route = SharedRoute.tryParse(_data?['route_attachment']);
     final label = switch (state) {
-      'active' => 'Приглашение активно',
-      'joined' => isSender ? 'Вы организатор' : 'Вы уже в этой комнате',
-      'closed' => 'Комната закрыта',
+      'active' =>
+        isSender ? 'Ожидаем ответа получателя' : 'Вас приглашают на заезд',
+      'declined' =>
+        isSender
+            ? 'Получатель отказался от приглашения'
+            : 'Вы отказались от приглашения',
+      'joined' =>
+        isSender
+            ? 'Получатель присоединился к заезду'
+            : 'Вы присоединились к заезду',
+      'closed' => 'Заезд завершён',
       'revoked' => 'Приглашение отозвано',
       'expired' => 'Срок приглашения истёк',
       'blocked' => 'Переписка недоступна',
@@ -199,6 +210,11 @@ class _InviteDetailsState extends State<GroupInvitationDetails>
                     onPressed: _busy ? null : () => _load(action: 'accept'),
                     child: const Text('Принять и настроить тренировку'),
                   ),
+                if (state == 'active' && !isSender && _service.uiFlow)
+                  TextButton(
+                    onPressed: _busy ? null : () => _load(action: 'decline'),
+                    child: const Text('Отказаться от приглашения'),
+                  ),
                 if (state == 'joined')
                   FilledButton(
                     onPressed: _busy
@@ -217,7 +233,7 @@ class _InviteDetailsState extends State<GroupInvitationDetails>
                               ),
                             );
                           },
-                    child: const Text('Открыть комнату'),
+                    child: const Text('Открыть заезд'),
                   ),
                 if (isSender && state != 'revoked' && state != 'closed')
                   TextButton(

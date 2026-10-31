@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/group_ride_service.dart';
 import '../models/group_coordination.dart';
 import '../config/app_variant.dart';
+import 'group_journey_panel.dart';
 
 /// Membership is preparation; the choice below opts one workout into a room.
 class GroupStartChoice extends StatelessWidget {
@@ -45,19 +46,54 @@ class GroupStartChoice extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(service.title),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Участники и приглашения'),
+                  subtitle: Text(
+                    '${service.members.length} присоединились · каждый запускает свою запись',
+                  ),
                   children: [
-                    for (final person in service.members)
-                      Chip(
-                        label: Text(
-                          '${person.username}${person.userId == service.userId ? ' · вы' : ''}',
-                        ),
-                        avatar: const Icon(Icons.person_outline, size: 18),
-                      ),
+                    GroupJourneyPanel(service: service, busy: disabled),
                   ],
                 ),
+                if (service.ownFinished)
+                  Text(
+                    'Ваша тренировка в этом заезде завершена. Для следующей создайте новый заезд.',
+                    style: TextStyle(color: colors.error),
+                  ),
+                if (service.uiFlow && !service.ownFinished)
+                  TextButton.icon(
+                    onPressed: disabled || service.coordinating
+                        ? null
+                        : () async {
+                            try {
+                              await service.setReadiness(
+                                service.coordination.readiness[service
+                                            .userId] ==
+                                        GroupReadiness.ready
+                                    ? GroupReadiness.waiting
+                                    : GroupReadiness.ready,
+                              );
+                            } catch (e) {
+                              if (context.mounted)
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).showSnackBar(SnackBar(content: Text('$e')));
+                            }
+                          },
+                    icon: Icon(
+                      service.coordination.readiness[service.userId] ==
+                              GroupReadiness.ready
+                          ? Icons.check_circle
+                          : Icons.check_circle_outline,
+                    ),
+                    label: Text(
+                      service.coordination.readiness[service.userId] ==
+                              GroupReadiness.ready
+                          ? 'Готов к старту · изменить'
+                          : 'Настройки готовы',
+                    ),
+                  ),
                 Text(
                   sharesLocation
                       ? 'Вы делитесь позицией согласно настройкам.'
@@ -69,7 +105,7 @@ class GroupStartChoice extends StatelessWidget {
                   children: [
                     TextButton(
                       onPressed: disabled ? null : onManage,
-                      child: const Text('Участники и приглашения'),
+                      child: const Text('Пригласить и управлять заездом'),
                     ),
                     if (service.route != null && onUseRoute != null)
                       TextButton(

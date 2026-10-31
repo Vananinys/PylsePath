@@ -157,7 +157,7 @@ void main() {
         });
         for (final page in {
           'clubs': ClubsScreen(service: service),
-          'club': ClubDetailScreen(id: 'club', service: service),
+          'club': ClubDetailScreen(initialTab: 1, id: 'club', service: service),
           'lobby': GroupRideScreen(service: FakeCoordination()),
         }.entries) {
           final key = GlobalKey();
@@ -190,6 +190,8 @@ void main() {
 
           await capture(page.key);
           if (page.key == 'club') {
+            await tester.ensureVisible(find.text('События'));
+            await tester.pumpAndSettle();
             await tester.tap(find.text('События'));
             await tester.pumpAndSettle();
             await capture('club-events');
@@ -207,7 +209,7 @@ void main() {
       final service = TestClubs()..failEvent = true;
       await tester.pumpWidget(
         MaterialApp(
-          home: ClubDetailScreen(id: 'club', service: service),
+          home: ClubDetailScreen(initialTab: 1, id: 'club', service: service),
         ),
       );
       await tester.pumpAndSettle();
@@ -259,7 +261,7 @@ void main() {
       final service = TestClubs()..failSend = true;
       await tester.pumpWidget(
         MaterialApp(
-          home: ClubDetailScreen(id: 'club', service: service),
+          home: ClubDetailScreen(initialTab: 1, id: 'club', service: service),
         ),
       );
       await tester.pumpAndSettle();
@@ -292,7 +294,7 @@ void main() {
     });
     await tester.pumpWidget(
       MaterialApp(
-        home: ClubDetailScreen(id: 'club', service: service),
+        home: ClubDetailScreen(initialTab: 1, id: 'club', service: service),
       ),
     );
     await tester.pumpAndSettle();
@@ -322,13 +324,20 @@ void main() {
           home: child,
         );
         await tester.pumpWidget(
-          app(ClubDetailScreen(id: 'club', service: TestClubs())),
+          app(
+            ClubDetailScreen(initialTab: 1, id: 'club', service: TestClubs()),
+          ),
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('События'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('События'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+        expect(find.text('Создать событие'), findsOneWidget);
+        await tester.ensureVisible(find.text('Участники'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Участники'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

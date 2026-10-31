@@ -139,6 +139,30 @@ class _GroupRideScreenState extends State<GroupRideScreen>
   Future<void> _leave() async {
     final room = _service.activeRoomId;
     if (room == null) return;
+    if (_service.uiFlow) {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          title: const Text('Завершить участие в заезде?'),
+          content: const Text(
+            'Личная запись продолжится, если она ещё идёт. Остальные останутся в заезде; управление перейдёт участнику. Для следующего заезда понадобится новое приглашение.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Остаться'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Завершить участие'),
+            ),
+          ],
+        ),
+      );
+      if (yes == true && mounted)
+        await _run((_) => _service.endParticipation());
+      return;
+    }
     if (_service.isHost &&
         _service.members.any((m) => m.userId != _service.userId)) {
       final action = await showDialog<String>(
@@ -320,6 +344,29 @@ class _GroupRideScreenState extends State<GroupRideScreen>
           if (await _join() && mounted) _prepare();
         },
         onPrepare: _prepare,
+        onNewRide: () async {
+          final yes = await showDialog<bool>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+              title: const Text('Новый заезд?'),
+              content: const Text(
+                'Вы завершите участие в прежнем заезде и создадите новый. Друзья смогут присоединиться только после принятия новых приглашений.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialog, true),
+                  child: const Text('Создать новый заезд'),
+                ),
+              ],
+            ),
+          );
+          if (yes == true && mounted)
+            await _run((_) => _service.newRide(replace: true));
+        },
         onDetails: () => Navigator.push(
           context,
           MaterialPageRoute(
