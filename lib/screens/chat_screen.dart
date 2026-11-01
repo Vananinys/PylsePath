@@ -1319,7 +1319,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.only(right: 16, bottom: 4),
                 child: FloatingActionButton.small(
                   heroTag: 'chat_scroll_down',
-                  backgroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
                   foregroundColor: Colors.deepOrange,
                   elevation: 3,
                   onPressed: _scrollToBottom,
@@ -1377,15 +1377,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             Icon(
               Icons.chat_bubble_outline,
               size: 56,
-              color: Colors.grey.shade400,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
             Text(
               _query.isEmpty ? 'Начните переписку' : 'Ничего не найдено',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 6),
@@ -1394,7 +1394,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ? 'Скажите «поехали кататься» — или отправьте стикер 🚴'
                   : 'Попробуйте другое слово',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -2026,8 +2029,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       height: 230,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
       ),
       child: Column(
         children: [
@@ -2050,7 +2055,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         labelStyle: TextStyle(
                           color: _stickerCategory == category
                               ? Colors.deepOrange
-                              : Colors.black54,
+                              : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         onSelected: (_) =>
                             setState(() => _stickerCategory = category),
@@ -2092,7 +2097,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          border: Border(top: BorderSide(color: Colors.grey.shade300)),
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2170,7 +2179,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       Icons.emoji_emotions_outlined,
                       color: _stickerPanelOpen
                           ? Colors.deepOrange
-                          : Colors.grey,
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                     onPressed: () {
                       _inputFocus.unfocus();
@@ -2284,7 +2293,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                         ),
                       ),
                     ),

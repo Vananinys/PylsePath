@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
@@ -40,7 +43,8 @@ class RideMediaScreen extends StatefulWidget {
 class _RideMediaScreenState extends State<RideMediaScreen> {
   late final _repo = RideMediaRepository(widget.rideId);
   final _picker = ImagePicker();
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   List<RideMedia> _items = [];
   late int _point = widget.points.isEmpty
       ? 0
@@ -109,7 +113,7 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
 
   @override
   void dispose() {
-    _map.dispose();
+    _localMap.dispose();
     super.dispose();
   }
 
@@ -401,106 +405,145 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
                   if (points.isNotEmpty)
                     Expanded(
                       flex: 3,
-                      child: FlutterMap(
-                        mapController: _map,
-                        options: MapOptions(
-                          initialCenter: points[_point],
-                          initialZoom: 15,
-                          onMapReady: () => _mapReady = true,
-                          onPositionChanged: (camera, _) {
-                            if ((camera.zoom - _zoom).abs() > .25 && mounted) {
-                              setState(() => _zoom = camera.zoom);
-                            }
-                          },
-                          initialCameraFit: points.length < 2
-                              ? null
-                              : CameraFit.bounds(
-                                  bounds: LatLngBounds.fromPoints(points),
-                                  padding: const EdgeInsets.all(48),
-                                  maxZoom: 16,
-                                ),
-                          onTap: (_, point) {
-                            if (_busy) return;
-                            const measure = Distance();
-                            var best = double.infinity, index = 0;
-                            for (var i = 0; i < points.length; i++) {
-                              final distance = measure(point, points[i]);
-                              if (distance < best) {
-                                best = distance;
-                                index = i;
-                              }
-                            }
-                            setState(() => _point = index);
-                          },
-                        ),
-                        children: [
-                          if (!NavigationPreferences.instance.cachedMapOnly ||
-                              OfflineMapsService.isAvailable)
-                            TileLayer(
-                              urlTemplate: OfflineMapsService.routeTileUrl,
-                              tileProvider: OfflineMapsService.tileProvider(
-                                offlineOnly: NavigationPreferences
-                                    .instance
-                                    .cachedMapOnly,
-                              ),
-                              userAgentPackageName: 'com.pulsepath.app',
+                      child: MainMapGateway(
+                        controls: (_) => Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Точка ${_point + 1} / ${widget.points.length}',
                             ),
-                          PolylineLayer(
-                            polylines: [
-                              for (final segment in WorkoutDetails.splitTrack(
-                                points,
-                                widget.segmentStarts,
-                              ))
-                                Polyline(
-                                  points: segment,
-                                  color: Colors.deepOrange,
-                                  strokeWidth: 4,
-                                ),
-                            ],
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              for (final group in groupTrackMedia(
-                                _items,
-                                points,
-                                (item) => item.pointIndex,
-                                _zoom,
-                              ))
-                                Marker(
-                                  point: points[group.first.pointIndex],
-                                  width: 24,
-                                  height: 24,
-                                  rotate: true,
-                                  child: TrackMediaThumbnail(
-                                    local: group.first,
-                                    count: group.length,
-                                    selected: group.any(
-                                      (m) => m.id == _selectedId,
-                                    ),
-                                    onTap: () => _group(group),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: _busy ? null : () => _add(false),
+                                  icon: const Icon(
+                                    Icons.photo_library_outlined,
                                   ),
+                                  label: const Text('Фото'),
                                 ),
-                              if (!_items.any((m) => m.pointIndex == _point))
-                                Marker(
-                                  point: points[_point],
-                                  width: 40,
-                                  height: 40,
-                                  child: const Icon(
-                                    Icons.location_on,
-                                    color: Colors.blue,
-                                    size: 40,
+                                OutlinedButton.icon(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _add(false, camera: true),
+                                  icon: const Icon(Icons.camera_alt_outlined),
+                                  label: const Text('Камера'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : () => _add(true),
+                                  icon: const Icon(
+                                    Icons.video_library_outlined,
                                   ),
+                                  label: const Text('Видео'),
                                 ),
-                            ],
+                              ],
+                            ),
+                          ],
+                        ),
+                        title: 'Фото и видео на треке',
+                        autoOpen: true,
+                        map: FlutterMap(
+                          mapController: _map,
+                          options: MapOptions(
+                            initialCenter: points[_point],
+                            initialZoom: 15,
+                            onMapReady: () => _mapReady = true,
+                            onPositionChanged: (camera, _) {
+                              if ((camera.zoom - _zoom).abs() > .25 &&
+                                  mounted) {
+                                setState(() => _zoom = camera.zoom);
+                              }
+                            },
+                            initialCameraFit: points.length < 2
+                                ? null
+                                : CameraFit.bounds(
+                                    bounds: LatLngBounds.fromPoints(points),
+                                    padding: const EdgeInsets.all(48),
+                                    maxZoom: 16,
+                                  ),
+                            onTap: (_, point) {
+                              if (_busy) return;
+                              const measure = Distance();
+                              var best = double.infinity, index = 0;
+                              for (var i = 0; i < points.length; i++) {
+                                final distance = measure(point, points[i]);
+                                if (distance < best) {
+                                  best = distance;
+                                  index = i;
+                                }
+                              }
+                              setState(() => _point = index);
+                            },
                           ),
-                          const RichAttributionWidget(
-                            attributions: [
-                              TextSourceAttribution(
-                                '© OpenStreetMap contributors',
+                          children: [
+                            if (!NavigationPreferences.instance.cachedMapOnly ||
+                                OfflineMapsService.isAvailable)
+                              if (!AppVariant.modernInterface) TileLayer(
+                                urlTemplate: OfflineMapsService.routeTileUrl,
+                                tileProvider: OfflineMapsService.tileProvider(
+                                  offlineOnly: NavigationPreferences
+                                      .instance
+                                      .cachedMapOnly,
+                                ),
+                                userAgentPackageName: 'com.pulsepath.app',
                               ),
-                            ],
-                          ),
-                        ],
+                            PolylineLayer(
+                              polylines: [
+                                for (final segment in WorkoutDetails.splitTrack(
+                                  points,
+                                  widget.segmentStarts,
+                                ))
+                                  Polyline(
+                                    points: segment,
+                                    color: Colors.deepOrange,
+                                    strokeWidth: 4,
+                                  ),
+                              ],
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                for (final group in groupTrackMedia(
+                                  _items,
+                                  points,
+                                  (item) => item.pointIndex,
+                                  _zoom,
+                                ))
+                                  Marker(
+                                    point: points[group.first.pointIndex],
+                                    width: 24,
+                                    height: 24,
+                                    rotate: true,
+                                    child: TrackMediaThumbnail(
+                                      local: group.first,
+                                      count: group.length,
+                                      selected: group.any(
+                                        (m) => m.id == _selectedId,
+                                      ),
+                                      onTap: () => _group(group),
+                                    ),
+                                  ),
+                                if (!_items.any((m) => m.pointIndex == _point))
+                                  Marker(
+                                    point: points[_point],
+                                    width: 40,
+                                    height: 40,
+                                    child: const Icon(
+                                      Icons.location_on,
+                                      color: Colors.blue,
+                                      size: 40,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const RichAttributionWidget(
+                              attributions: [
+                                TextSourceAttribution(
+                                  '© OpenStreetMap contributors',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   if (_items.isNotEmpty) ...[
@@ -559,6 +602,7 @@ class _RideMediaScreenState extends State<RideMediaScreen> {
                           ListTile(
                             title: Text(_error!),
                             trailing: IconButton(
+                              tooltip: 'Обновить',
                               onPressed: _load,
                               icon: const Icon(Icons.refresh),
                             ),

@@ -458,7 +458,7 @@ void main() {
     final service = FakeCoordination();
     addTearDown(service.dispose);
     await tester.pumpWidget(
-      MaterialApp(home: GroupRideScreen(service: service)),
+      MaterialApp(home: GroupRideScreen(service: service, advanced: true)),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Настройки группы'));

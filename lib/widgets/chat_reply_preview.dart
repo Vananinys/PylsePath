@@ -94,6 +94,7 @@ class ChatReplyPreview extends StatelessWidget {
           ),
           if (onCancel != null)
             IconButton(
+              tooltip: 'Отменить ответ',
               visualDensity: VisualDensity.compact,
               onPressed: onCancel,
               icon: const Icon(Icons.close, size: 18),

@@ -7,7 +7,7 @@ import '../services/workout_reminder_clock.dart';
 ///
 /// Живые тумблеры заезда — в HUD предзапуска и активной панели; здесь
 /// хранятся значения по умолчанию, которые контроллер подхватывает при старте
-/// приложения. Тёмная тема отключена и в настройках не живёт.
+/// приложения. Оформление хранится отдельно в AppAppearance.
 class AppSettings {
   static const String _autoPauseKey = 'ride_auto_pause_enabled';
   static const String _sportModeKey = 'ride_sport_mode';

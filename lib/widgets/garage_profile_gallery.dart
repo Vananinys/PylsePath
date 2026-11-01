@@ -46,6 +46,7 @@ class _GarageProfileGalleryState extends State<GarageProfileGallery> {
         return ListTile(
           title: const Text('Не удалось загрузить велосипеды'),
           trailing: IconButton(
+            tooltip: 'Обновить',
             icon: const Icon(Icons.refresh),
             onPressed: () => setState(_load),
           ),

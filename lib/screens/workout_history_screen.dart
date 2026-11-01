@@ -53,7 +53,11 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось загрузить историю: $error')),
+          const SnackBar(
+            content: Text(
+              'Не удалось обновить историю. Сохранённые на телефоне тренировки доступны. Проверьте соединение и повторите.',
+            ),
+          ),
         );
       }
     }
@@ -108,12 +112,15 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                   ),
                 _buildSummaryHeader(),
                 if (_hasUnsynced)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Некоторые заезды ещё не отправлены в облако — '
                       'они уедут при следующем открытии истории с интернетом.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 Expanded(
@@ -151,7 +158,11 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
             '${_totalKm.toStringAsFixed(2)} км',
             Icons.straighten,
           ),
-          Container(width: 1, height: 40, color: Colors.grey.shade300),
+          Container(
+            width: 1,
+            height: 40,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
           _buildStatColumn(
             'Всего заездов',
             '${_routes.length}',
@@ -171,7 +182,10 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -220,7 +234,10 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
               // Дата заезда: без неё карточки с одинаковым названием неразличимы.
               Text(
                 _formatDate(route.dateTime),
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 4),
               if (route.workoutDetails.rideMoments.isNotEmpty)
@@ -233,14 +250,22 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
                 ),
               Row(
                 children: [
-                  const Icon(Icons.route, size: 14, color: Colors.grey),
+                  Icon(
+                    Icons.route,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     route.distance,
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(width: 12),
-                  const Icon(Icons.timer, size: 14, color: Colors.grey),
+                  Icon(
+                    Icons.timer,
+                    size: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 4),
                   Text(route.displayDuration),
                 ],
@@ -249,6 +274,7 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
           ),
         ),
         trailing: IconButton(
+          tooltip: 'Удалить тренировку',
           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
           onPressed: () => _confirmRemove(route),
         ),
@@ -298,7 +324,9 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось удалить заезд: $error')),
+          const SnackBar(
+            content: Text('Не удалось удалить тренировку. Повторите попытку.'),
+          ),
         );
       }
       return;
@@ -315,24 +343,31 @@ class _WorkoutHistoryScreenState extends State<WorkoutHistoryScreen> {
   }
 
   Widget _buildEmptyState() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history, size: 64, color: Colors.grey),
+          Icon(
+            Icons.history,
+            size: 64,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           SizedBox(height: 16),
           Text(
             'История заездов пуста',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.grey,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           SizedBox(height: 8),
           Text(
             'Завершите свободный заезд, чтобы сохранить результаты',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

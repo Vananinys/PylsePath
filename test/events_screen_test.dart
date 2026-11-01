@@ -52,7 +52,10 @@ void main() {
     expect(find.text('Тестируем PulsePath'), findsOneWidget);
     expect(find.text('Создать'), findsNothing);
     expect(find.text('Ответы'), findsNothing);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Участвовать'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Участвовать'));
     await tester.pumpAndSettle();
     expect(service.calls, contains('join'));

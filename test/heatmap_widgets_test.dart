@@ -1,3 +1,5 @@
+import 'support/main_map_test_host.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -119,9 +121,11 @@ void main() {
           theme: ThemeData(fontFamily: 'Roboto'),
           home: RepaintBoundary(
             key: boundaryKey,
-            child: RideHeatmapScreen(
-              previewRides: DeveloperScenarios.heatmap(),
-              tileProvider: EmptyTiles(tile),
+            child: MainMapTestHost(
+              child: RideHeatmapScreen(
+                previewRides: DeveloperScenarios.heatmap(),
+                tileProvider: EmptyTiles(tile),
+              ),
             ),
           ),
         ),
@@ -134,7 +138,9 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.runAsync(() async {
         final boundary =
-            boundaryKey.currentContext!.findRenderObject()
+            tester
+                    .element(find.byType(Scaffold).last)
+                    .findAncestorRenderObjectOfType<RenderRepaintBoundary>()!
                 as RenderRepaintBoundary;
         final image = await boundary.toImage(pixelRatio: 2);
         final data = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -142,6 +148,8 @@ void main() {
             .writeAsBytes(data!.buffer.asUint8List());
         image.dispose();
       });
+      await tester.tap(find.text('Готово'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Фильтры и оформление'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ChoiceChip, 'Бег'));
@@ -150,6 +158,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('На основной карте'));
+      await tester.pumpAndSettle();
       final layer = tester.widget<HeatmapPathLayer>(
         find.byType(HeatmapPathLayer),
       );

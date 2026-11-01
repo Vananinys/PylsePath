@@ -12,22 +12,35 @@ abstract final class AppMotion {
       : const Duration(milliseconds: 280);
 }
 
-ThemeData pulsePathTheme() {
+ThemeData pulsePathTheme({Brightness brightness = Brightness.light}) {
+  final dark = brightness == Brightness.dark;
   final colors = ColorScheme.fromSeed(
     seedColor: const Color(0xFFE86532),
-    brightness: Brightness.light,
+    brightness: brightness,
   );
   const radius = BorderRadius.all(Radius.circular(22));
   return ThemeData(
     useMaterial3: true,
     colorScheme: colors,
-    scaffoldBackgroundColor: const Color(0xFFFAF8F5),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFFFAF8F5),
+    scaffoldBackgroundColor: dark
+        ? const Color(0xFF141311)
+        : const Color(0xFFFAF8F5),
+    appBarTheme: AppBarTheme(
+      backgroundColor: dark ? const Color(0xFF141311) : const Color(0xFFFAF8F5),
+      foregroundColor: colors.onSurface,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
       elevation: 0,
     ),
+    tooltipTheme: const TooltipThemeData(
+      waitDuration: Duration(milliseconds: 500),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: colors.inverseSurface,
+      contentTextStyle: TextStyle(color: colors.onInverseSurface),
+    ),
+    dividerTheme: DividerThemeData(color: colors.outlineVariant, space: 24),
     cardTheme: CardThemeData(
       elevation: 0,
       color: colors.surfaceContainerLow,

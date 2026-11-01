@@ -1,3 +1,7 @@
+import 'package:latlong2/latlong.dart';
+
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
 import '../widgets/activity_trail_layer.dart';
 import '../widgets/workout_analytics.dart';
 import '../widgets/workout_comparison.dart';
@@ -137,7 +141,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             // Дополнительная информация
             WorkoutAnalytics(route: workout.route),
             WorkoutComparison(route: workout.route),
-            _buildAdditionalInfo(),
+            _buildAdditionalInfo(context),
           ],
         ),
       ),
@@ -170,32 +174,49 @@ class WorkoutDetailScreen extends StatelessWidget {
     ),
   );
 
-  Future<void> _openMap(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (dialogContext) => Dialog(
-      insetPadding: const EdgeInsets.all(12),
-      child: SizedBox(
-        width: double.maxFinite,
-        height: MediaQuery.sizeOf(dialogContext).height * .8,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const SizedBox(width: 16),
-                const Expanded(child: Text('Карта заезда')),
-                IconButton(
-                  tooltip: 'Закрыть карту',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(dialogContext),
-                ),
-              ],
-            ),
-            Expanded(child: _buildMapPreview(context)),
-          ],
+  Future<void> _openMap(BuildContext context) async {
+    if (AppVariant.modernInterface) {
+      final points = workout.route.routePoints;
+      if (points.isEmpty) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Трек недоступен')));
+        return;
+      }
+      await PrimaryMapNavigation.instance.open(
+        context,
+        title: 'Трек тренировки',
+        config: () =>
+            _mapConfiguration(context, points, LatLngBounds.fromPoints(points)),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: double.maxFinite,
+          height: MediaQuery.sizeOf(dialogContext).height * .8,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: 16),
+                  const Expanded(child: Text('Карта заезда')),
+                  IconButton(
+                    tooltip: 'Закрыть карту',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(dialogContext),
+                  ),
+                ],
+              ),
+              Expanded(child: _buildMapPreview(context)),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Future<void> _exportGpx(BuildContext context) async {
     try {
@@ -214,7 +235,7 @@ class WorkoutDetailScreen extends StatelessWidget {
     if (points.isEmpty) {
       return Container(
         height: 200,
-        color: Colors.grey[200],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: const Center(child: Text('Трек недоступен')),
       );
     }
@@ -237,81 +258,92 @@ class WorkoutDetailScreen extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: points.first,
-            initialZoom: 16,
-            initialCameraFit: points.length > 1
-                ? CameraFit.bounds(
-                    bounds: bounds,
-                    padding: const EdgeInsets.all(24),
-                    maxZoom: 17,
-                  )
-                : null,
-          ),
-          children: [
-            if (!NavigationPreferences.instance.cachedMapOnly ||
-                OfflineMapsService.isAvailable)
-              TileLayer(
-                urlTemplate: OfflineMapsService.routeTileUrl,
-                tileProvider: OfflineMapsService.tileProvider(
-                  offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-                ),
-                userAgentPackageName: 'com.pulsepath.app',
-              ),
-            ActivityTrailLayer(
-              segments: WorkoutDetails.splitTrack(
-                points,
-                workout.route.workoutDetails.segmentStarts,
-              ),
-              activity: workout.route.activityType,
-              transport: workout.route.transportType,
-            ),
-            MarkerLayer(
-              markers: [
-                if (points.isNotEmpty)
-                  Marker(
-                    point: points.first,
-                    width: 20,
-                    height: 20,
-                    child: const Icon(
-                      Icons.location_on,
-                      color: Colors.green,
-                      size: 20,
-                    ),
-                  ),
-                if (points.length > 1)
-                  Marker(
-                    point: points.last,
-                    width: 20,
-                    height: 20,
-                    child: const Icon(Icons.flag, color: Colors.red, size: 20),
-                  ),
-              ],
-            ),
-            LocalTrackMediaLayer(
-              rideId: workout.route.localId,
-              points: points,
-              onOpen: (item) async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => RideMediaScreen(
-                      rideId: workout.route.localId,
-                      points: points,
-                      segmentStarts: workout.route.workoutDetails.segmentStarts,
-                      initialMediaId: item.id,
-                      initialIndex: item.pointIndex,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
+        child: MainMapGateway(
+          title: 'Трек тренировки',
+          autoOpen: false,
+          map: _mapConfiguration(context, points, bounds),
         ),
       ),
     );
   }
+
+  FlutterMap _mapConfiguration(
+    BuildContext context,
+    List<LatLng> points,
+    LatLngBounds bounds,
+  ) => FlutterMap(
+    options: MapOptions(
+      initialCenter: points.first,
+      initialZoom: 16,
+      initialCameraFit: points.length > 1
+          ? CameraFit.bounds(
+              bounds: bounds,
+              padding: const EdgeInsets.all(24),
+              maxZoom: 17,
+            )
+          : null,
+    ),
+    children: [
+      if (!NavigationPreferences.instance.cachedMapOnly ||
+          OfflineMapsService.isAvailable)
+        if (!AppVariant.modernInterface)
+          TileLayer(
+            urlTemplate: OfflineMapsService.routeTileUrl,
+            tileProvider: OfflineMapsService.tileProvider(
+              offlineOnly: NavigationPreferences.instance.cachedMapOnly,
+            ),
+            userAgentPackageName: 'com.pulsepath.app',
+          ),
+      ActivityTrailLayer(
+        segments: WorkoutDetails.splitTrack(
+          points,
+          workout.route.workoutDetails.segmentStarts,
+        ),
+        activity: workout.route.activityType,
+        transport: workout.route.transportType,
+      ),
+      MarkerLayer(
+        markers: [
+          if (points.isNotEmpty)
+            Marker(
+              point: points.first,
+              width: 20,
+              height: 20,
+              child: const Icon(
+                Icons.location_on,
+                color: Colors.green,
+                size: 20,
+              ),
+            ),
+          if (points.length > 1)
+            Marker(
+              point: points.last,
+              width: 20,
+              height: 20,
+              child: const Icon(Icons.flag, color: Colors.red, size: 20),
+            ),
+        ],
+      ),
+      LocalTrackMediaLayer(
+        rideId: workout.route.localId,
+        points: points,
+        onOpen: (item) async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RideMediaScreen(
+                rideId: workout.route.localId,
+                points: points,
+                segmentStarts: workout.route.workoutDetails.segmentStarts,
+                initialMediaId: item.id,
+                initialIndex: item.pointIndex,
+              ),
+            ),
+          );
+        },
+      ),
+    ],
+  );
 
   Widget _buildMetricsGrid(BuildContext context) {
     return Container(
@@ -325,24 +357,28 @@ class WorkoutDetailScreen extends StatelessWidget {
         crossAxisSpacing: 12,
         children: [
           _buildMetricCard(
+            context,
             title: 'Дистанция',
             value: workout.route.distance,
             icon: Icons.straighten,
             color: Colors.blue,
           ),
           _buildMetricCard(
+            context,
             title: 'Время движения',
             value: workout.route.displayDuration,
             icon: Icons.timer,
             color: Colors.orange,
           ),
           _buildMetricCard(
+            context,
             title: 'Средняя скорость',
             value: '${workout.averageSpeed.toStringAsFixed(1)} км/ч',
             icon: Icons.speed,
             color: Colors.green,
           ),
           _buildMetricCard(
+            context,
             title: 'Максимальная скорость',
             value:
                 workout.maxSpeed > 0 ||
@@ -355,6 +391,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             color: Colors.red,
           ),
           _buildMetricCard(
+            context,
             title: 'Набор высоты',
             value: workout.elevationGain > 0
                 ? '${workout.elevationGain.toStringAsFixed(0)} м'
@@ -363,6 +400,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             color: Colors.purple,
           ),
           _buildMetricCard(
+            context,
             title: 'Энергия · оценка',
             value: workout.route.calories > 0
                 ? '${workout.route.calories.round()} ккал'
@@ -371,6 +409,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             color: Colors.orange,
           ),
           _buildMetricCard(
+            context,
             title: 'Средняя с остановками',
             value: workout.route.workoutDetails.elapsedSeconds > 0
                 ? '${(workout.route.distanceKm * 3600 / workout.route.workoutDetails.elapsedSeconds).toStringAsFixed(1)} км/ч'
@@ -379,6 +418,7 @@ class WorkoutDetailScreen extends StatelessWidget {
             color: Colors.blueGrey,
           ),
           _buildMetricCard(
+            context,
             title: 'Тип активности',
             value: workout.route.activityType.label,
             icon: Icons.directions_bike,
@@ -389,7 +429,8 @@ class WorkoutDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricCard({
+  Widget _buildMetricCard(
+    BuildContext context, {
     required String title,
     required String value,
     required IconData icon,
@@ -413,7 +454,10 @@ class WorkoutDetailScreen extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               title,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -422,14 +466,14 @@ class WorkoutDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAdditionalInfo() {
+  Widget _buildAdditionalInfo(BuildContext context) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,7 +485,11 @@ class WorkoutDetailScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.date_range, size: 18, color: Colors.grey),
+              Icon(
+                Icons.date_range,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Дата: ${_formatDate(workout.timestamp)}',
@@ -452,7 +500,11 @@ class WorkoutDetailScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.landscape, size: 18, color: Colors.grey),
+              Icon(
+                Icons.landscape,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Покрытие: ${workout.route.surfaceSummary}',
@@ -463,7 +515,11 @@ class WorkoutDetailScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.location_on, size: 18, color: Colors.grey),
+              Icon(
+                Icons.location_on,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

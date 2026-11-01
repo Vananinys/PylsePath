@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -81,44 +84,51 @@ class _GroupMeetingEditorState extends State<GroupMeetingEditor> {
         children: [
           Expanded(
             flex: 3,
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter:
-                    _point ?? widget.center ?? const LatLng(55.75, 37.61),
-                initialZoom: 14,
-                onTap: (_, point) => setState(() => _point = point),
-              ),
-              children: [
-                if (!NavigationPreferences.instance.cachedMapOnly ||
-                    OfflineMapsService.isAvailable)
-                  TileLayer(
-                    urlTemplate: OfflineMapsService.routeTileUrl,
-                    tileProvider: OfflineMapsService.tileProvider(
-                      offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-                    ),
-                    userAgentPackageName: 'com.pulsepath.app',
-                  ),
-                if (_point != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: _point!,
-                        width: 42,
-                        height: 42,
-                        child: const Icon(
-                          Icons.location_on,
-                          color: Colors.teal,
-                          size: 42,
+            child: MainMapGateway(
+              title: widget.stopProposal ? 'Где остановимся?' : 'Место встречи',
+              keepCamera: _point == null,
+              autoOpen: true,
+              map: FlutterMap(
+                options: MapOptions(
+                  initialCenter:
+                      _point ?? widget.center ?? const LatLng(55.75, 37.61),
+                  initialZoom: 14,
+                  onTap: (_, point) => setState(() => _point = point),
+                ),
+                children: [
+                  if (!NavigationPreferences.instance.cachedMapOnly ||
+                      OfflineMapsService.isAvailable)
+                    if (!AppVariant.modernInterface)
+                      TileLayer(
+                        urlTemplate: OfflineMapsService.routeTileUrl,
+                        tileProvider: OfflineMapsService.tileProvider(
+                          offlineOnly:
+                              NavigationPreferences.instance.cachedMapOnly,
                         ),
+                        userAgentPackageName: 'com.pulsepath.app',
                       ),
+                  if (_point != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _point!,
+                          width: 42,
+                          height: 42,
+                          child: const Icon(
+                            Icons.location_on,
+                            color: Colors.teal,
+                            size: 42,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('© OpenStreetMap contributors'),
                     ],
                   ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('© OpenStreetMap contributors'),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -239,38 +249,50 @@ class GroupPointPreview extends StatelessWidget {
       child: Column(
         children: [
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(initialCenter: point, initialZoom: 16),
-              children: [
-                if (!NavigationPreferences.instance.cachedMapOnly ||
-                    OfflineMapsService.isAvailable)
-                  TileLayer(
-                    urlTemplate: OfflineMapsService.routeTileUrl,
-                    tileProvider: OfflineMapsService.tileProvider(
-                      offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-                    ),
-                    userAgentPackageName: 'com.pulsepath.app',
-                  ),
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: point,
-                      width: 44,
-                      height: 44,
-                      child: const Icon(
-                        Icons.location_on,
-                        size: 44,
-                        color: Colors.teal,
+            child: MainMapGateway(
+              title: label,
+              onClosed: () {
+                if (context.mounted &&
+                    ModalRoute.of(context)?.isCurrent == true &&
+                    Navigator.canPop(context))
+                  Navigator.pop(context);
+              },
+              autoOpen: true,
+              map: FlutterMap(
+                options: MapOptions(initialCenter: point, initialZoom: 16),
+                children: [
+                  if (!NavigationPreferences.instance.cachedMapOnly ||
+                      OfflineMapsService.isAvailable)
+                    if (!AppVariant.modernInterface)
+                      TileLayer(
+                        urlTemplate: OfflineMapsService.routeTileUrl,
+                        tileProvider: OfflineMapsService.tileProvider(
+                          offlineOnly:
+                              NavigationPreferences.instance.cachedMapOnly,
+                        ),
+                        userAgentPackageName: 'com.pulsepath.app',
                       ),
-                    ),
-                  ],
-                ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('© OpenStreetMap contributors'),
-                  ],
-                ),
-              ],
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: point,
+                        width: 44,
+                        height: 44,
+                        child: const Icon(
+                          Icons.location_on,
+                          size: 44,
+                          color: Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('© OpenStreetMap contributors'),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(

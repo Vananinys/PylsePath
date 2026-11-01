@@ -1,3 +1,7 @@
+import 'support/main_map_test_host.dart';
+
+import 'package:pulsepath/services/group_workout_navigation.dart';
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -231,6 +235,14 @@ void main() {
       final group = FlowGroup()..activeRoomId = null;
       final controller = MapNavigationController(groupRideService: group);
       String? result;
+      String? preparation;
+      final navigation = GroupWorkoutNavigation.instance;
+      void onPreparation() => preparation = navigation.roomId;
+      navigation.addListener(onPreparation);
+      addTearDown(() {
+        navigation.removeListener(onPreparation);
+        navigation.consume();
+      });
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -242,6 +254,7 @@ void main() {
                     MaterialPageRoute(
                       builder: (_) => GroupRideScreen(
                         service: group,
+                        advanced: true,
                         navigationController: controller,
                       ),
                     ),
@@ -262,9 +275,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(group.title, 'Вечерняя поездка');
       expect(controller.isWorkoutActive, false);
-      await tester.tap(find.text('На главную — к старту'));
+      await tester.tap(find.text('Перейти к старту тренировки'));
       await tester.pumpAndSettle();
-      expect(result, 'prepare_group');
+      expect(preparation, room);
+      expect(result, isNull);
       expect(controller.isWorkoutActive, false);
       await tester.pumpWidget(const SizedBox());
       controller.dispose();
@@ -320,27 +334,48 @@ void main() {
                 .copyWith(textScaler: const TextScaler.linear(1.6)),
             child: child!,
           ),
-          home: GroupRideScreen(service: group),
+          home: MainMapTestHost(
+            child: GroupRideScreen(service: group, advanced: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.text('В пути'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('В пути'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Предложить остановку'));
+      await tester.scrollUntilVisible(
+        find.text('Предложить остановку').hitTestable(),
+        120,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Предложить остановку'));
       await tester.pumpAndSettle();
-      expect(find.byType(GroupMeetingEditor), findsOneWidget);
+      expect(
+        find.byType(GroupMeetingEditor, skipOffstage: false),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Предложить группе'),
+              find.ancestor(
+                of: find.text('Предложить группе', skipOffstage: false),
+                matching: find.byType(FilledButton, skipOffstage: false),
+              ),
             )
             .onPressed,
         isNull,
       );
       await tester.tapAt(tester.getRect(find.byType(FlutterMap)).center);
       await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Готово'));
       await tester.pumpAndSettle();
       expect(
         tester
@@ -435,4 +470,3 @@ void main() {
     },
   );
 }
-

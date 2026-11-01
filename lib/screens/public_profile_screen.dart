@@ -2,6 +2,9 @@ import '../services/profile_presentation_service.dart';
 import '../widgets/profile_identity_card.dart';
 import '../services/activity_service.dart';
 import '../widgets/activity_panel.dart';
+import '../config/app_variant.dart';
+import '../widgets/public_profile_dashboard.dart';
+import '../widgets/group_invitation_sheet.dart';
 
 import 'package:flutter/material.dart';
 
@@ -61,6 +64,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   ProfilePresentation _presentation = const ProfilePresentation();
   ActivitySummary? _activity;
   bool _activityFailed = false;
+  String? _loadError;
+  Future<List<CommunityPost>>? _posts;
 
   /// Состояние отношений: друзья / заявка отправлена / можно добавить.
   _Relation _relation = _Relation.none;
@@ -73,6 +78,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   }
 
   Future<void> _load() async {
+    if (!AppVariant.modernInterface) return _loadData();
+    try {
+      await _loadData();
+      if (mounted) setState(() => _loadError = null);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadError = 'Не удалось обновить профиль. Проверьте подключение.';
+        });
+      }
+    }
+  }
+
+  Future<void> _loadData() async {
     try {
       _activity = await ActivityService().load(widget.userId);
       _activityFailed = false;
@@ -111,11 +131,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       if (requested) relation = _Relation.requested;
     }
 
-    if (!mounted) return;
+    if (!mounted || UserScope.currentUserId() != _viewer) return;
     setState(() {
       _profile = profile;
       _relation = relation;
       _isLoading = false;
+      if (AppVariant.modernInterface) _reloadPosts();
     });
   }
 
@@ -140,6 +161,70 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
+    if (AppVariant.modernInterface && !_isLoading && profile != null) {
+      return PublicProfileDashboard(
+        onRefresh: _load,
+        identity: ProfileIdentityCard(
+          name: profile.username,
+          avatar: _buildAvatar(profile),
+          style: _presentation,
+          status: profile.status ?? '',
+          city: profile.city ?? '',
+          sport: _ridingTypeLabel(profile),
+          title:
+              _presentation.selectedRank?.name ??
+              _presentation.title?.label ??
+              _titleLabel,
+          titleIcon:
+              _presentation.selectedRank?.icon ??
+              _presentation.title?.icon ??
+              _titleIcon,
+        ),
+        actions: _buildPublicActions(),
+        awards: ProfileAwardsShowcase(style: _presentation),
+        activity: _activity != null
+            ? ActivityPanel(summary: _activity!)
+            : _retry('Активность не загрузилась', _load),
+        details: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_loadError != null) _retry(_loadError!, _load),
+            _buildInfoTile(Icons.location_on_outlined, 'Город', profile.city),
+            _buildInfoTile(
+              Icons.directions_bike_outlined,
+              'Предпочитаемая активность',
+              _ridingTypeLabel(profile),
+            ),
+            if (profile.weightKg != null)
+              _buildInfoTile(
+                Icons.fitness_center_outlined,
+                'Вес',
+                '${profile.weightKg!.toStringAsFixed(0)} кг',
+              ),
+            if (profile.age != null)
+              _buildInfoTile(
+                Icons.cake_outlined,
+                'Возраст',
+                '${profile.age} лет',
+              ),
+            if (_genderLabel(profile.gender) != null)
+              _buildInfoTile(
+                Icons.person_outline,
+                'Пол',
+                _genderLabel(profile.gender),
+              ),
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Здесь показаны только сведения, которыми участник поделился.',
+              ),
+            ),
+          ],
+        ),
+        garage: GarageProfileGallery(userId: widget.userId),
+        posts: _buildPostsList(),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(profile?.username ?? 'Профиль'),
@@ -155,12 +240,21 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : profile == null
-          ? const Center(
-              child: Text(
-                'Профиль не найден',
-                style: TextStyle(color: Colors.grey),
-              ),
-            )
+          ? AppVariant.modernInterface && _loadError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: _retry(_loadError!, _load),
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      'Профиль не найден',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  )
           : ListView(
               padding: const EdgeInsets.all(24),
               children: [
@@ -171,10 +265,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   status: profile.status ?? '',
                   city: profile.city ?? '',
                   sport: _ridingTypeLabel(profile),
-                  title: _presentation.selectedRank?.name ??
+                  title:
+                      _presentation.selectedRank?.name ??
                       _presentation.title?.label ??
                       _titleLabel,
-                  titleIcon: _presentation.selectedRank?.icon ??
+                  titleIcon:
+                      _presentation.selectedRank?.icon ??
                       _presentation.title?.icon ??
                       _titleIcon,
                 ),
@@ -250,7 +346,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
   Widget _buildPostsList() {
     return FutureBuilder<List<CommunityPost>>(
-      future: _communityService.fetchUserPosts(widget.userId),
+      future: AppVariant.modernInterface
+          ? _posts
+          : _communityService.fetchUserPosts(widget.userId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
@@ -258,11 +356,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             child: Center(child: CircularProgressIndicator()),
           );
         }
+        if (AppVariant.modernInterface && snapshot.hasError) {
+          return _retry('Публикации не загрузились', () async {
+            setState(_reloadPosts);
+          });
+        }
         final posts = snapshot.data ?? const <CommunityPost>[];
         if (posts.isEmpty) {
           return Text(
             'Постов пока нет',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           );
         }
         return Column(
@@ -318,6 +424,76 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     await _chatService.refreshUnread();
   }
 
+  void _reloadPosts() {
+    _posts = _communityService.fetchUserPosts(widget.userId, strict: true);
+    // The posts tab can be opened later; keep its error available to the
+    // FutureBuilder without an unhandled error while another tab is visible.
+    _posts!.ignore();
+  }
+
+  Widget _retry(String message, Future<void> Function() retry) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(message),
+      TextButton.icon(
+        onPressed: retry,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Повторить'),
+      ),
+    ],
+  );
+
+  Widget _buildPublicActions() {
+    if (_viewer == widget.userId) {
+      return const Text('Так ваш профиль видят другие участники');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_relation == _Relation.friends) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text('Вы друзья', textAlign: TextAlign.center),
+          ),
+          FilledButton.icon(
+            onPressed: _openChat,
+            icon: const Icon(Icons.chat_bubble_outline),
+            label: const Text('Написать сообщение'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy
+                ? null
+                : () async {
+                    setState(() => _busy = true);
+                    try {
+                      await showGroupInvitationSheet(context, friend: _profile);
+                    } finally {
+                      if (mounted) setState(() => _busy = false);
+                    }
+                  },
+            icon: const Icon(Icons.group_outlined),
+            label: const Text('Пригласить в совместный заезд'),
+          ),
+        ] else if (_relation == _Relation.requested)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Заявка в друзья отправлена. Ожидаем подтверждения участника.',
+              ),
+            ),
+          )
+        else
+          FilledButton.icon(
+            onPressed: _busy ? null : _sendRequest,
+            icon: const Icon(Icons.person_add_alt_1),
+            label: Text(_busy ? 'Отправляем заявку…' : 'Добавить в друзья'),
+          ),
+      ],
+    );
+  }
+
   Widget _buildAvatar(FriendProfile profile) {
     final url = profile.avatarUrl;
     final hasUrl =
@@ -350,7 +526,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         leading: Icon(icon, color: Colors.deepOrange),
         title: Text(
           label,
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         subtitle: Text(
           (value == null || value.isEmpty) ? 'Не указано' : value,
@@ -396,15 +575,20 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     }
 
     if (_relation == _Relation.requested) {
-      return const Center(
+      return Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.hourglass_top, color: Colors.grey),
+            Icon(
+              Icons.hourglass_top,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             SizedBox(width: 8),
             Text(
               'Заявка отправлена — ожидаем подтверждения',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

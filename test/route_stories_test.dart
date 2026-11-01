@@ -1,3 +1,7 @@
+import 'support/main_map_test_host.dart';
+
+import 'package:flutter_map/flutter_map.dart';
+
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -324,11 +328,14 @@ void main() {
                 .copyWith(textScaler: const TextScaler.linear(1.6)),
             child: child!,
           ),
-          home: const RouteBuilderScreen(),
+          home: const MainMapTestHost(child: RouteBuilderScreen()),
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tapAt(const Offset(100, 150));
+      await tester.tapAt(
+        tester.getRect(find.byType(FlutterMap)).topLeft +
+            const Offset(80, 220),
+      );
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
       expect(find.textContaining('1 точек'), findsOneWidget);

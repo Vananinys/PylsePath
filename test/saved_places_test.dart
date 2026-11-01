@@ -272,6 +272,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.textContaining('Очень длинное'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.textContaining('Очень длинное'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

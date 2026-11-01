@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/group_ride_service.dart';
 import '../models/group_coordination.dart';
+import '../config/app_variant.dart';
+import 'group_journey_panel.dart';
 
 /// Membership is preparation; the choice below opts one workout into a room.
 class GroupStartChoice extends StatelessWidget {
@@ -30,6 +32,97 @@ class GroupStartChoice extends StatelessWidget {
       final selected = selectedRoomId != null;
       final valid = selected && selectedRoomId == room;
       final colors = Theme.of(context).colorScheme;
+      if (AppVariant.modernInterface && valid) {
+        return Card(
+          margin: EdgeInsets.zero,
+          color: colors.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Совместная тренировка · ${service.members.length} участников',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(service.title),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Участники и приглашения'),
+                  subtitle: Text(
+                    '${service.members.length} присоединились · каждый запускает свою запись',
+                  ),
+                  children: [
+                    GroupJourneyPanel(service: service, busy: disabled),
+                  ],
+                ),
+                if (service.ownFinished)
+                  Text(
+                    'Ваша тренировка в этом заезде завершена. Для следующей создайте новый заезд.',
+                    style: TextStyle(color: colors.error),
+                  ),
+                if (service.uiFlow && !service.ownFinished)
+                  TextButton.icon(
+                    onPressed: disabled || service.coordinating
+                        ? null
+                        : () async {
+                            try {
+                              await service.setReadiness(
+                                service.coordination.readiness[service
+                                            .userId] ==
+                                        GroupReadiness.ready
+                                    ? GroupReadiness.waiting
+                                    : GroupReadiness.ready,
+                              );
+                            } catch (e) {
+                              if (context.mounted)
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).showSnackBar(SnackBar(content: Text('$e')));
+                            }
+                          },
+                    icon: Icon(
+                      service.coordination.readiness[service.userId] ==
+                              GroupReadiness.ready
+                          ? Icons.check_circle
+                          : Icons.check_circle_outline,
+                    ),
+                    label: Text(
+                      service.coordination.readiness[service.userId] ==
+                              GroupReadiness.ready
+                          ? 'Готов к старту · изменить'
+                          : 'Настройки готовы',
+                    ),
+                  ),
+                Text(
+                  sharesLocation
+                      ? 'Вы делитесь позицией согласно настройкам.'
+                      : 'Ваша позиция скрыта; видны статус и прогресс.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: disabled ? null : onManage,
+                      child: const Text('Пригласить и управлять заездом'),
+                    ),
+                    if (service.route != null && onUseRoute != null)
+                      TextButton(
+                        onPressed: disabled ? null : onUseRoute,
+                        child: const Text('Маршрут поездки'),
+                      ),
+                    TextButton(
+                      onPressed: disabled ? null : () => onChanged(null),
+                      child: const Text('Тренироваться самостоятельно'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       Widget option(bool group, IconData icon, String label) => Expanded(
         child: Padding(
           padding: const EdgeInsets.all(3),

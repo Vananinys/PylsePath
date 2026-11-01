@@ -6,6 +6,18 @@ import '../services/group_ride_service.dart';
 import '../screens/group_ride_screen.dart';
 import 'group_invitation_sheet.dart';
 import 'shared_route_card.dart';
+import '../config/app_variant.dart';
+import '../services/group_workout_navigation.dart';
+
+Future<void> showGroupInvitationDetails(
+  BuildContext context,
+  String id, {
+  GroupRideService? service,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  builder: (_) => GroupInvitationDetails(id: id, service: service),
+);
 
 class GroupInvitationCard extends StatelessWidget {
   const GroupInvitationCard({super.key, required this.message});
@@ -28,30 +40,27 @@ class GroupInvitationCard extends StatelessWidget {
         const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: message.delivery == MessageDelivery.sent
-              ? () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  builder: (_) => _InviteDetails(id: message.id),
-                )
+              ? () => showGroupInvitationDetails(context, message.id)
               : null,
           icon: const Icon(Icons.login),
-          label: const Text('Посмотреть приглашение'),
+          label: const Text('Открыть приглашение'),
         ),
       ],
     ),
   );
 }
 
-class _InviteDetails extends StatefulWidget {
-  const _InviteDetails({required this.id});
+class GroupInvitationDetails extends StatefulWidget {
+  const GroupInvitationDetails({super.key, required this.id, this.service});
   final String id;
+  final GroupRideService? service;
   @override
-  State<_InviteDetails> createState() => _InviteDetailsState();
+  State<GroupInvitationDetails> createState() => _InviteDetailsState();
 }
 
-class _InviteDetailsState extends State<_InviteDetails>
+class _InviteDetailsState extends State<GroupInvitationDetails>
     with WidgetsBindingObserver {
-  final _service = GroupRideService();
+  late final _service = widget.service ?? GroupRideService();
   Map<String, dynamic>? _data;
   bool _busy = false;
   String? _error;
@@ -86,6 +95,12 @@ class _InviteDetailsState extends State<_InviteDetails>
         replace: replace,
       );
       if (mounted) setState(() => _data = data);
+      if (mounted &&
+          AppVariant.modernInterface &&
+          action == 'accept' &&
+          data['status'] == 'joined') {
+        _prepare();
+      }
     } on GroupRideException catch (error) {
       if (!mounted) return;
       if (error.replaceRequired && await confirmGroupSwitch(context)) {
@@ -104,6 +119,22 @@ class _InviteDetailsState extends State<_InviteDetails>
     }
   }
 
+  void _prepare() {
+    final room = _service.activeRoomId, owner = _service.userId;
+    if (room == null ||
+        owner == null ||
+        _service.error != null ||
+        _service.coordinating) {
+      setState(
+        () => _error =
+            'Не удалось загрузить поездку. Обновите приглашение и повторите.',
+      );
+      return;
+    }
+    Navigator.pop(context);
+    GroupWorkoutNavigation.instance.prepare(room: room, owner: owner);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = _data?['status'];
@@ -113,9 +144,17 @@ class _InviteDetailsState extends State<_InviteDetails>
         _data?['sender_id'] == _service.userId;
     final route = SharedRoute.tryParse(_data?['route_attachment']);
     final label = switch (state) {
-      'active' => 'Приглашение активно',
-      'joined' => isSender ? 'Вы организатор' : 'Вы уже в этой комнате',
-      'closed' => 'Комната закрыта',
+      'active' =>
+        isSender ? 'Ожидаем ответа получателя' : 'Вас приглашают на заезд',
+      'declined' =>
+        isSender
+            ? 'Получатель отказался от приглашения'
+            : 'Вы отказались от приглашения',
+      'joined' =>
+        isSender
+            ? 'Получатель присоединился к заезду'
+            : 'Вы присоединились к заезду',
+      'closed' => 'Заезд завершён',
       'revoked' => 'Приглашение отозвано',
       'expired' => 'Срок приглашения истёк',
       'blocked' => 'Переписка недоступна',
@@ -155,7 +194,7 @@ class _InviteDetailsState extends State<_InviteDetails>
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: Text(
-                    'У каждого своя запись тренировки. Присоединение не запускает запись; положение передаётся согласно настройкам геопозиции.',
+                    'После принятия выберите активность и транспорт в обычной подготовке. Запись начнётся только по вашей кнопке. Геопозиция передаётся согласно вашим настройкам.',
                   ),
                 ),
                 if (_busy) const LinearProgressIndicator(),
@@ -169,13 +208,23 @@ class _InviteDetailsState extends State<_InviteDetails>
                 if (state == 'active' && !isSender)
                   FilledButton(
                     onPressed: _busy ? null : () => _load(action: 'accept'),
-                    child: const Text('Присоединиться'),
+                    child: const Text('Принять и настроить тренировку'),
+                  ),
+                if (state == 'active' && !isSender && _service.uiFlow)
+                  TextButton(
+                    onPressed: _busy ? null : () => _load(action: 'decline'),
+                    child: const Text('Отказаться от приглашения'),
                   ),
                 if (state == 'joined')
                   FilledButton(
                     onPressed: _busy
                         ? null
                         : () async {
+                            if (AppVariant.modernInterface) {
+                              await _service.restoreSession();
+                              if (mounted) _prepare();
+                              return;
+                            }
                             final navigator = Navigator.of(context);
                             navigator.pop();
                             await navigator.push(
@@ -184,7 +233,7 @@ class _InviteDetailsState extends State<_InviteDetails>
                               ),
                             );
                           },
-                    child: const Text('Открыть комнату'),
+                    child: const Text('Открыть заезд'),
                   ),
                 if (isSender && state != 'revoked' && state != 'closed')
                   TextButton(

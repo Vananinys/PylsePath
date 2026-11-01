@@ -116,7 +116,9 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
       }
     } catch (error) {
       if (!mounted) return;
-      _showMessage('Ошибка загрузки: $error');
+      _showMessage(
+        'Не удалось загрузить карту. Проверьте соединение и свободное место на телефоне, затем повторите.',
+      );
     } finally {
       if (mounted) setState(() => _downloading = false);
       await _refresh();
@@ -236,7 +238,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                         ? 'Кэш пуст'
                         : '$_tileCount тайлов · '
                               '${(_sizeMb ?? 0).toStringAsFixed(1)} МБ',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -265,7 +270,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
               AppConfig.offlineTileUrl.isEmpty
                   ? 'Загрузка районов недоступна: не подключён источник карт с разрешением на офлайн-скачивание. Доступен кэш просмотренных тайлов.'
                   : 'Область радиусом ${_radiusKm.round()} км вокруг текущей позиции, масштабы 13–16.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 12),
             if (AppConfig.offlineTileUrl.isNotEmpty && !_downloading)
@@ -291,7 +299,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                           '${_cachedSizeMb.toStringAsFixed(1)} МБ'
                           ' · ошибок: $_failedTiles'
                     : 'Подготовка...',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ] else
               SizedBox(
@@ -340,11 +351,15 @@ class _UnavailableCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: const Padding(
+      child: Padding(
         padding: EdgeInsets.all(16),
         child: Column(
           children: [
-            Icon(Icons.cloud_off, size: 40, color: Colors.grey),
+            Icon(
+              Icons.cloud_off,
+              size: 40,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             SizedBox(height: 8),
             Text(
               'Офлайн-карты недоступны на этом устройстве',
@@ -355,7 +370,10 @@ class _UnavailableCard extends StatelessWidget {
             Text(
               'Карта продолжит работать через интернет.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

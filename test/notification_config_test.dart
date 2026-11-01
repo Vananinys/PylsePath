@@ -73,13 +73,19 @@ void main() {
       File('android/app/google-services.json').readAsStringSync(),
     ) as Map<String, dynamic>;
     final gradle = File('android/app/build.gradle.kts').readAsStringSync();
-    final applicationId = RegExp(r'applicationId\s*=\s*"([^"]+)"')
-        .firstMatch(gradle)!
-        .group(1);
+    final identity = RegExp(
+      r'applicationId\s*=\s*if \(uiBeta\) "([^"]+)" else "([^"]+)"',
+    ).firstMatch(gradle);
+    expect(
+      identity,
+      isNotNull,
+      reason: 'Regular and UI beta identities must both be declared',
+    );
     final packages = (config['client'] as List).map(
       (client) => client['client_info']['android_client_info']['package_name'],
     );
-    expect(packages, contains(applicationId));
+    expect(packages, containsAll([identity!.group(1), identity.group(2)]));
+    expect(identity.group(1), isNot(identity.group(2)));
   });
   test('iOS declares microphone/location usage and remote notifications', () {
     final document = XmlDocument.parse(

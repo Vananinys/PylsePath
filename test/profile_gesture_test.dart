@@ -1,4 +1,4 @@
-// Проверки интерактивности плитки «Всего заездов» на экране профиля:
+// Проверки интерактивности плитки «История тренировок» на экране профиля:
 // тап открывает историю заездов, остальные плитки остаются некликабельными,
 // а InkWell лежит внутри Card (иначе ripple был бы не виден).
 import 'package:flutter/material.dart';
@@ -12,7 +12,7 @@ import 'package:pulsepath/data/workout_history_repository.dart';
 
 void main() {
   setUp(WorkoutHistoryRepository.resetInstancesForTesting);
-  testWidgets('тап по «Всего заездов» открывает историю заездов', (
+  testWidgets('тап по «История тренировок» открывает историю заездов', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -24,11 +24,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Всего заездов'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('История тренировок'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('История тренировок'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Всего заездов'));
+    await tester.ensureVisible(find.text('История тренировок'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Всего заездов'));
+    await tester.tap(find.text('История тренировок'));
     await tester.pumpAndSettle();
 
     expect(find.byType(WorkoutHistoryScreen), findsOneWidget);
@@ -44,15 +49,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Общий пробег'));
+    await tester.scrollUntilVisible(
+      find.text('Дистанция'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Общий пробег'));
+    await tester.tap(find.text('Дистанция'));
     await tester.pumpAndSettle();
 
     expect(find.byType(WorkoutHistoryScreen), findsNothing);
   });
 
-  testWidgets('плитка «Всего заездов» содержит InkWell (ripple)', (
+  testWidgets('плитка «История тренировок» содержит InkWell (ripple)', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -64,10 +73,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('История тренировок'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     // InkWell должен быть ПРЕДКОМ текста (то есть внутри Card), иначе
     // ripple рисовался бы под карточкой и был бы не виден.
     final inkWell = find.ancestor(
-      of: find.text('Всего заездов'),
+      of: find.text('История тренировок'),
       matching: find.byType(InkWell),
     );
     expect(inkWell, findsOneWidget);

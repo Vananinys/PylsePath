@@ -5,14 +5,18 @@ import '../models/friend_profile.dart';
 import '../services/friend_service.dart';
 import '../services/group_ride_service.dart';
 import '../utils/ride_id.dart';
+import '../config/app_variant.dart';
+import '../services/group_workout_navigation.dart';
 
 Future<bool> confirmGroupSwitch(BuildContext context) async =>
     await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Перейти в другую комнату?'),
-        content: const Text(
-          'Вы покинете текущую комнату. Если вы организатор, она закроется для всех. Запись личной тренировки продолжится.',
+        content: Text(
+          AppVariant.modernInterface
+              ? 'Вы завершите участие в прежнем заезде. Остальные смогут продолжить, управление перейдёт участнику. Ваша личная запись продолжится.'
+              : 'Вы покинете текущую комнату. Если вы организатор, она закроется для всех. Запись личной тренировки продолжится.',
         ),
         actions: [
           TextButton(
@@ -38,41 +42,73 @@ Future<ChatMessage?> showGroupInvitationSheet(
     await service.restoreSession();
     if (!context.mounted) return null;
     if (service.error != null) throw GroupRideException(service.error!);
+    if (AppVariant.modernInterface &&
+        (service.ownFinished ||
+            friend != null &&
+                service.members.any((m) => m.userId == friend.id))) {
+      final fresh =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+              title: const Text('Этот человек уже в прежней поездке'),
+              content: const Text(
+                'Чтобы поехать заново с новым подтверждением, создайте новый заезд. Вы завершите участие в прежнем; остальные смогут продолжить. Никто не попадёт в новый заезд без принятия приглашения.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialog, true),
+                  child: const Text('Новая поездка'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!fresh || !context.mounted) return null;
+      await service.createRoom(replace: true);
+    }
     if (service.activeRoomId == null || !service.isHost) {
       if (service.activeRoomId != null && !await confirmGroupSwitch(context)) {
         return null;
       }
       if (!context.mounted) return null;
-      final input = TextEditingController(text: 'Совместная тренировка');
-      final title = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Создать совместный заезд'),
-          content: TextField(
-            controller: input,
-            maxLength: 120,
-            decoration: const InputDecoration(labelText: 'Название'),
+      if (AppVariant.modernInterface) {
+        await service.createRoom(replace: service.activeRoomId != null);
+      } else {
+        final input = TextEditingController(text: 'Совместная тренировка');
+        final title = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Создать совместный заезд'),
+            content: TextField(
+              controller: input,
+              maxLength: 120,
+              decoration: const InputDecoration(labelText: 'Название'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Отмена'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, input.text.trim()),
+                child: const Text('Создать'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, input.text.trim()),
-              child: const Text('Создать'),
-            ),
-          ],
-        ),
-      );
-      // The dialog's exit animation can still reference its controller.
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      input.dispose();
-      if (title == null || !context.mounted) return null;
-      await service.createRoom(
-        title: title,
-        replace: service.activeRoomId != null,
-      );
+        );
+        // The dialog's exit animation can still reference its controller.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        input.dispose();
+        if (title == null || !context.mounted) return null;
+        await service.createRoom(
+          title: title,
+          replace: service.activeRoomId != null,
+        );
+      }
     }
     if (!context.mounted) return null;
     return await showModalBottomSheet<ChatMessage>(
@@ -125,6 +161,13 @@ class _InvitationSheetState extends State<_InvitationSheet> {
       final message = ChatMessage.fromRow(row);
       if (widget.friend != null) {
         Navigator.pop(context, message);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Приглашение отправлено. Ожидаем, пока человек сам его примет.',
+            ),
+          ),
+        );
         return;
       }
       setState(() => _sent.add(friend.id));
@@ -132,6 +175,13 @@ class _InvitationSheetState extends State<_InvitationSheet> {
       if (mounted) setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _sending = null);
+    }
+  }
+
+  void _prepare() {
+    final room = _service.activeRoomId, owner = _service.userId;
+    if (room != null && owner != null) {
+      GroupWorkoutNavigation.instance.prepare(room: room, owner: owner);
     }
   }
 
@@ -147,6 +197,7 @@ class _InvitationSheetState extends State<_InvitationSheet> {
               title: const Text('Пригласить в заезд'),
               subtitle: Text(_service.title),
               trailing: IconButton(
+                tooltip: 'Закрыть',
                 onPressed: _sending == null
                     ? () => Navigator.pop(context)
                     : null,
@@ -156,7 +207,7 @@ class _InvitationSheetState extends State<_InvitationSheet> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Приглашение придёт в личный чат и действует 24 часа. Друг сам решит, когда присоединиться.',
+                'Приглашение появится в чате и придёт уведомлением на телефон, если уведомления разрешены. После принятия друг выберет активность и транспорт. Приглашение действует 24 часа.',
               ),
             ),
             if (_error != null)
@@ -199,7 +250,11 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                           title: Text(friend.username),
                           subtitle: Text(
                             _sent.contains(friend.id)
-                                ? 'Приглашение отправлено'
+                                ? 'Ожидаем принятия приглашения'
+                                : _service.members.any(
+                                    (m) => m.userId == friend.id,
+                                  )
+                                ? 'Уже участвует в этой поездке'
                                 : 'Отправить в личный чат',
                           ),
                           trailing: _sending == friend.id
@@ -214,7 +269,11 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                                       : Icons.send,
                                 ),
                           enabled:
-                              _sending == null && !_sent.contains(friend.id),
+                              _sending == null &&
+                              !_sent.contains(friend.id) &&
+                              !_service.members.any(
+                                (m) => m.userId == friend.id,
+                              ),
                           onTap: () => _send(friend),
                         ),
                     ],
@@ -222,6 +281,26 @@ class _InvitationSheetState extends State<_InvitationSheet> {
                 },
               ),
             ),
+            if (AppVariant.modernInterface && _sent.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton.icon(
+                  onPressed:
+                      _sending == null &&
+                          _service.members.any((m) => _sent.contains(m.userId))
+                      ? () {
+                          Navigator.pop(context);
+                          _prepare();
+                        }
+                      : null,
+                  icon: const Icon(Icons.tune),
+                  label: Text(
+                    _service.members.any((m) => _sent.contains(m.userId))
+                        ? 'Настроить тренировку'
+                        : 'Ожидаем принятия приглашения',
+                  ),
+                ),
+              ),
           ],
         ),
       ),

@@ -3,6 +3,41 @@ part of '../../main.dart';
 /// Нижняя панель заезда, HUD предзапуска и действия с панелью друга
 /// на карте (профиль, удаление, стикеры).
 mixin _RideSheetsMixin on _MapScreenStateBase {
+  void _onGroupPreparationRequested() {
+    if (!mounted || !_isForeground) return;
+    final request = GroupWorkoutNavigation.instance;
+    final group = GroupRideService();
+    final room = request.roomId, owner = request.userId;
+    request.consume();
+    if (!mounted ||
+        owner == null ||
+        owner != group.userId ||
+        room == null ||
+        room != group.activeRoomId)
+      return;
+    if (_isScreenLocked || _navigationController.isSavingWorkout) {
+      _showSnackBar(
+        'Поездка подключена. Откройте подготовку после завершения текущего действия.',
+      );
+      return;
+    }
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    if (_navigationController.isWorkoutActive ||
+        _navigationController.isWorkoutPaused) {
+      _showSnackBar(
+        'Приглашение принято. Текущая запись продолжается; совместную тренировку можно настроить после её сохранения.',
+      );
+      return;
+    }
+    _searchFocusNode.unfocus();
+    setState(() {
+      _preRideGroupRoomId = room;
+      _isPreRideOpen = true;
+      _isChoosingRoute = false;
+    });
+    unawaited(_loadPreRideWeather());
+  }
+
   Future<void> _openGroupFromPreparation() async {
     if (_isScreenLocked) return;
     await Navigator.push(
@@ -134,6 +169,7 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
   Future<void> _startRide() async {
     if (_isScreenLocked ||
         _startingRide ||
+        _finishingRide ||
         _navigationController.isWorkoutActive ||
         _navigationController.isWorkoutPaused) {
       return;
@@ -141,6 +177,13 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
     _startingRide = true;
     final group = GroupRideService();
     final selectedRoom = _preRideGroupRoomId;
+    if (AppVariant.modernInterface && selectedRoom != null && group.ownFinished) {
+      _startingRide = false;
+      _showSnackBar(
+        'Этот заезд уже завершён для вас. Создайте новый заезд с новыми приглашениями.',
+      );
+      return;
+    }
     final selectedOwner = group.userId;
     final selectedRevision = group.membershipRevision;
     bool selectionValid() =>
@@ -248,6 +291,15 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
       return;
     }
     _finishingRide = true;
+    final group = GroupRideService();
+    final groupedRoom =
+        AppVariant.modernInterface && _navigationController.groupWorkoutConnected
+        ? group.activeRoomId
+        : null;
+    final participantsAtFinish = List<GroupMember>.of(group.members);
+    final ownerAtFinish = group.userId;
+    final groupDistance = _navigationController.totalDistanceMeters;
+    final groupSeconds = _navigationController.activeWorkoutDuration.inSeconds;
     final wasActive = _navigationController.isWorkoutActive;
     if (wasActive) _navigationController.pauseWorkout();
     try {
@@ -312,6 +364,74 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
               'Рекордов: ${records.length}, достижений: ${newBadges.length}.',
         );
       }
+      if (groupedRoom != null) {
+        String? warning;
+        bool left = groupedRoom != group.activeRoomId;
+        await group.finishPersonalWorkout(
+          groupedRoom,
+          groupDistance,
+          groupSeconds,
+        );
+        if (group.error != null) warning = 'Тренировка сохранена на устройстве. Статус заезда пока не подтверждён сервером; откройте участников и обновите данные.';
+        final stillSameRide = groupedRoom == group.activeRoomId;
+        if (!stillSameRide) {
+          left = true;
+          warning = 'Заезд изменился на другом устройстве. Показаны данные участников при открытии завершения; ваша тренировка сохранена.';
+        }
+        final participants =
+            (stillSameRide
+                    ? List<GroupMember>.of(group.members)
+                    : participantsAtFinish)
+                .map(
+                  (m) => m.userId != ownerAtFinish
+                      ? m
+                      : GroupMember(
+                          userId: m.userId,
+                          username: m.username,
+                          avatarUrl: m.avatarUrl,
+                          distanceMeters: groupDistance,
+                          durationSeconds: groupSeconds,
+                          updatedAt: DateTime.now(),
+                          workoutState: 'finished',
+                        ),
+                )
+                .toList();
+        if (request.endGroupParticipation &&
+            groupedRoom == group.activeRoomId) {
+          try {
+            await group.endParticipation();
+            left = true;
+          } catch (_) {
+            warning = 'Тренировка сохранена. Завершить участие на сервере не удалось; повторите из списка участников.';
+          }
+        }
+        if (!mounted) return;
+        setState(() => _preRideGroupRoomId = null);
+        final action = await showModalBottomSheet<String>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => GroupRideResultSheet(
+            members: participants,
+            service: group,
+            distanceKm: saved.distanceKm,
+            minutes: Duration(seconds: groupSeconds).inMinutes,
+            left: left,
+            warning: warning,
+          ),
+        );
+        if (!mounted) return;
+        if (action == 'group') {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  GroupRideScreen(navigationController: _navigationController),
+            ),
+          );
+          return;
+        }
+        if (action != 'workout') return;
+      }
       await Navigator.push(
         context,
         MaterialPageRoute(
@@ -327,7 +447,10 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
     } catch (error) {
       if (mounted) {
         _showSnackBar(
-          'Не удалось завершить: $error. Запись осталась на паузе.',
+          _navigationController.isWorkoutPaused ||
+                  _navigationController.isWorkoutActive
+              ? 'Не удалось завершить: $error. Запись осталась на паузе.'
+              : 'Тренировка сохранена. Не удалось открыть или обновить результат: $error',
         );
       }
     } finally {

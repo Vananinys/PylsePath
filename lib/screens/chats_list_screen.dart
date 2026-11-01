@@ -310,15 +310,23 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 13,
-            color: entry.unread > 0 ? Colors.black87 : Colors.grey,
+            color: entry.unread > 0
+                ? Theme.of(context).colorScheme.onSurface
+                : Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: entry.unread > 0 ? FontWeight.w600 : FontWeight.normal,
           ),
         ),
         trailing: last == null
-            ? const Icon(Icons.chat_bubble_outline, color: Colors.grey)
+            ? Icon(
+                Icons.chat_bubble_outline,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              )
             : Text(
                 _formatTime(last.createdAt),
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
         onTap: () => _openChat(entry),
       ),
@@ -344,21 +352,28 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.forum_outlined, size: 56, color: Colors.grey.shade400),
+            Icon(
+              Icons.forum_outlined,
+              size: 56,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Диалогов пока нет',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Добавьте друзей и напишите им —\nдиалог появится здесь',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

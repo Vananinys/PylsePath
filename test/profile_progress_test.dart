@@ -44,12 +44,20 @@ Future<void> _pumpProfile(WidgetTester tester) async {
     MaterialApp(home: ProfileScreen(provider: ProfileProvider())),
   );
   await tester.pumpAndSettle();
+  if (find.byType(NestedScrollView).evaluate().isNotEmpty &&
+      find.text('История прочитана не полностью').evaluate().isEmpty) {
+    await tester.drag(find.byType(NestedScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(Tab, 'Прогресс'));
+    await tester.tap(find.widgetWithText(Tab, 'Прогресс'));
+    await tester.pumpAndSettle();
+  }
 }
 
 /// Тап с прокруткой к цели: блок «Прогресс» находится ниже первого экрана,
 /// и без `ensureVisible` тап уходит мимо (Flutter предупреждает warnIfMissed).
 Future<void> _tap(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
+  await Scrollable.ensureVisible(tester.element(finder), alignment: .4);
   await tester.pumpAndSettle();
   await tester.tap(finder);
   await tester.pumpAndSettle();
@@ -82,10 +90,7 @@ void main() {
         'workout_history_guest': '{broken',
       });
       await _pumpProfile(tester);
-      expect(
-        find.text('Не удалось загрузить профиль и историю. Данные не удалены.'),
-        findsOneWidget,
-      );
+      expect(find.text('История прочитана не полностью'), findsOneWidget);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('workout_history_guest'), '{broken');
       expect(
@@ -98,7 +103,7 @@ void main() {
       await prefs.setString('workout_history_guest', '[]');
       await tester.tap(find.text('Повторить'));
       await tester.pumpAndSettle();
-      expect(find.text('Всего заездов'), findsOneWidget);
+      expect(find.text('Мой профиль'), findsOneWidget);
     },
   );
 

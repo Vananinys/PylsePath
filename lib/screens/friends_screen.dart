@@ -296,7 +296,9 @@ class _FriendsScreenState extends State<FriendsScreen>
                 : (friend.city != null && friend.city!.isNotEmpty ? friend.city! : 'Позиция пока недоступна')}',
             style: TextStyle(
               fontSize: 12,
-              color: friend.isLive ? Colors.green : Colors.grey,
+              color: friend.isLive
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -314,9 +316,9 @@ class _FriendsScreenState extends State<FriendsScreen>
             ),
             IconButton(
               tooltip: 'Удалить из друзей',
-              icon: const Icon(
+              icon: Icon(
                 Icons.person_remove_outlined,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               onPressed: () => _removeFriend(friend),
             ),
@@ -344,12 +346,12 @@ class _FriendsScreenState extends State<FriendsScreen>
         padding: const EdgeInsets.all(16),
         children: [
           if (_incoming.isNotEmpty) ...[
-            const Text(
+            Text(
               'Входящие',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 8),
@@ -357,12 +359,12 @@ class _FriendsScreenState extends State<FriendsScreen>
           ],
           if (_outgoing.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Отправленные',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 8),
@@ -401,7 +403,10 @@ class _FriendsScreenState extends State<FriendsScreen>
             ),
             IconButton(
               tooltip: 'Отклонить',
-              icon: const Icon(Icons.delete_outline, color: Colors.grey),
+              icon: Icon(
+                Icons.delete_outline,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               onPressed: busy ? null : () => _decline(request),
             ),
           ],
@@ -428,7 +433,10 @@ class _FriendsScreenState extends State<FriendsScreen>
         subtitle: const Text('Ожидает подтверждения'),
         trailing: IconButton(
           tooltip: 'Отозвать',
-          icon: const Icon(Icons.close, color: Colors.grey),
+          icon: Icon(
+            Icons.close,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           onPressed: () => _decline(request),
         ),
         onTap: () => _openPublicProfileById(
@@ -462,6 +470,7 @@ class _FriendsScreenState extends State<FriendsScreen>
                     )
                   : (_searchController.text.isNotEmpty
                         ? IconButton(
+                            tooltip: 'Очистить поиск',
                             icon: const Icon(Icons.clear),
                             onPressed: () {
                               _searchController.clear();
@@ -526,10 +535,13 @@ class _FriendsScreenState extends State<FriendsScreen>
                 child: Icon(Icons.check_circle, color: Colors.deepOrange),
               )
             : alreadyRequested
-            ? const Text(
+            ? Text(
                 'Заявка\nотправлена',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               )
             : ElevatedButton.icon(
                 onPressed: busy ? null : () => _addFriend(user),
@@ -606,21 +618,28 @@ class _FriendsScreenState extends State<FriendsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 56, color: Colors.grey.shade400),
+            Icon(
+              icon,
+              size: 56,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 12),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

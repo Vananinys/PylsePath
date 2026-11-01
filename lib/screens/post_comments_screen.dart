@@ -239,23 +239,29 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                               Icon(
                                 Icons.chat_bubble_outline,
                                 size: 56,
-                                color: Colors.grey.shade400,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                               const SizedBox(height: 12),
-                              const Text(
+                              Text(
                                 'Комментариев пока нет',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 'Будьте первым — напишите что-нибудь',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -348,7 +354,9 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: isReply ? Colors.grey.shade50 : Colors.grey.shade100,
+                  color: isReply
+                      ? Theme.of(context).colorScheme.surfaceContainerLow
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -385,7 +393,10 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                 children: [
                   Text(
                     _formatTime(comment.createdAt),
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   // Ответить — только на верхний уровень (одна ветка).
@@ -491,6 +502,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
             ),
           ),
           IconButton(
+            tooltip: 'Отменить ответ',
             icon: const Icon(Icons.close, size: 16),
             onPressed: () => setState(() => _replyTo = null),
           ),
@@ -502,18 +514,26 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   Widget _buildPendingPhotoBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: Colors.grey.shade100,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Row(
         children: [
-          const Icon(Icons.image_outlined, size: 16, color: Colors.grey),
+          Icon(
+            Icons.image_outlined,
+            size: 16,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 6),
-          const Expanded(
+          Expanded(
             child: Text(
               'Фото прикреплено',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           IconButton(
+            tooltip: 'Убрать вложение',
             icon: const Icon(Icons.close, size: 16),
             onPressed: () => setState(() => _pendingPhotoPath = null),
           ),
@@ -529,13 +549,20 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          border: Border(top: BorderSide(color: Colors.grey.shade300)),
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
         ),
         child: Row(
           children: [
             IconButton(
               tooltip: 'Прикрепить фото',
-              icon: const Icon(Icons.image_outlined, color: Colors.grey),
+              icon: Icon(
+                Icons.image_outlined,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               onPressed: _pickPhoto,
             ),
             Expanded(
@@ -556,7 +583,9 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                 ),
               ),
@@ -565,6 +594,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
             CircleAvatar(
               backgroundColor: Colors.deepOrange,
               child: IconButton(
+                tooltip: 'Отправить комментарий',
                 icon: const Icon(Icons.send, color: Colors.white, size: 20),
                 onPressed: _sending ? null : _send,
               ),

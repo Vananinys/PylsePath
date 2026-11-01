@@ -371,6 +371,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(ride.title), findsOneWidget);
     await _capture(tester, libraryPreview, 'route-library');
+    await Scrollable.ensureVisible(
+      tester.element(find.byTooltip('В избранное')),
+      alignment: .2,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('В избранное'));
     await tester.pumpAndSettle();
     expect(

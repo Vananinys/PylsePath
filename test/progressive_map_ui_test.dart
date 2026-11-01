@@ -223,7 +223,14 @@ void main() {
         final height = tester
             .getSize(find.byType(WorkoutStatsBottomSheet))
             .height;
-        expect(height, lessThan(310));
+        // CI uses Ahem, whose glyphs are wider than the platform font. Keep
+        // the map visible over most of the screen without shrinking text.
+        expect(
+          height,
+          lessThan(
+            tester.view.physicalSize.height / tester.view.devicePixelRatio / 2,
+          ),
+        );
         if (scale == 1) await snapshot(tester, key, 'recording');
         await tester.tap(find.text('Пауза'));
         expect(pauses, 1);

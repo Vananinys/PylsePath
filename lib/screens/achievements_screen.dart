@@ -200,7 +200,10 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -283,7 +286,10 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -326,12 +332,12 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
       decoration: BoxDecoration(
         color: badge.earned
             ? Colors.deepOrange.withValues(alpha: 0.08)
-            : Colors.grey.shade100,
+            : Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: badge.earned
               ? Colors.deepOrange.withValues(alpha: 0.5)
-              : Colors.grey.shade300,
+              : Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -341,7 +347,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             badge.icon,
             style: TextStyle(
               fontSize: 28,
-              color: badge.earned ? null : Colors.grey,
+              color: badge.earned
+                  ? null
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -353,7 +361,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: badge.earned ? Colors.black87 : Colors.grey,
+              color: badge.earned
+                  ? Theme.of(context).colorScheme.onSurface
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 2),
@@ -364,7 +374,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 10,
-              color: badge.earned ? Colors.grey : Colors.grey.shade600,
+              color: badge.earned
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],

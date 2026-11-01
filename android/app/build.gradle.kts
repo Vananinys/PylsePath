@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.util.zip.ZipFile
+import java.util.Base64
 import com.flutter.gradle.tasks.FlutterTask
 
 plugins {
@@ -10,6 +11,10 @@ plugins {
 }
 
 val releaseKeysFile = rootProject.file("key.properties")
+// Reuse the second Android app already registered in google-services.json.
+// Dart and Android identity are derived from the same build flag.
+val uiBeta = providers.gradleProperty("dart-defines").orNull
+    ?.split(",")?.any { String(Base64.getDecoder().decode(it)) == "UI_BETA=true" } == true
 val releaseKeys = Properties().apply {
     if (releaseKeysFile.isFile) {
         releaseKeysFile.inputStream().use { load(it) }
@@ -50,7 +55,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.pulsepath"
+        applicationId = if (uiBeta) "com.pulsepath.app" else "com.example.pulsepath"
+        manifestPlaceholders["pulsepathLabel"] = if (uiBeta) "PulsePath UI Beta" else "PulsePath"
         minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = flutter.versionCode

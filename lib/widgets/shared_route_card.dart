@@ -1,3 +1,5 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
 import 'activity_trail_layer.dart';
 
 import 'package:flutter/material.dart';
@@ -42,7 +44,8 @@ class SharedRouteCard extends StatelessWidget {
                   top: Radius.circular(14),
                 ),
                 child: IgnorePointer(
-                  child: FlutterMap(
+                  ignoring: !AppVariant.modernInterface,
+                  child: MainMapGateway(title: 'Маршрут из чата', autoOpen: false, map: FlutterMap(
                     options: MapOptions(
                       initialCameraFit: CameraFit.bounds(
                         bounds: LatLngBounds.fromPoints(route.points),
@@ -57,7 +60,7 @@ class SharedRouteCard extends StatelessWidget {
                       if (tileProvider != null ||
                           !NavigationPreferences.instance.cachedMapOnly ||
                           OfflineMapsService.isAvailable)
-                        TileLayer(
+                        if (!AppVariant.modernInterface) TileLayer(
                           tileProvider:
                               tileProvider ??
                               OfflineMapsService.tileProvider(
@@ -80,7 +83,7 @@ class SharedRouteCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      const Align(
+                      Align(
                         alignment: Alignment.bottomRight,
                         child: ColoredBox(
                           color: Colors.white70,
@@ -90,14 +93,14 @@ class SharedRouteCard extends StatelessWidget {
                               '© OpenStreetMap',
                               style: TextStyle(
                                 fontSize: 9,
-                                color: Colors.black87,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ),
                         ),
                       ),
                     ],
-                  ),
+                  )),
                 ),
               ),
             ),
@@ -145,7 +148,8 @@ class SharedRouteScreen extends StatefulWidget {
 
 class _SharedRouteScreenState extends State<SharedRouteScreen> {
   SharedRoute get route => widget.route;
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   bool _ready = false;
   double _zoom = 15;
   String? _selectedId;
@@ -192,7 +196,7 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
 
   @override
   void dispose() {
-    _map.dispose();
+    _localMap.dispose();
     super.dispose();
   }
 
@@ -212,7 +216,7 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
               ? const Center(
                   child: Text('Статистика заезда · трек не прикреплён'),
                 )
-              : FlutterMap(
+              : MainMapGateway(title: 'Маршрут из чата', autoOpen: false, map: FlutterMap(
                   mapController: _map,
                   options: MapOptions(
                     onMapReady: () => _ready = true,
@@ -229,7 +233,7 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
                   children: [
                     if (!NavigationPreferences.instance.cachedMapOnly ||
                         OfflineMapsService.isAvailable)
-                      TileLayer(
+                      if (!AppVariant.modernInterface) TileLayer(
                         tileProvider: OfflineMapsService.tileProvider(
                           offlineOnly:
                               NavigationPreferences.instance.cachedMapOnly,
@@ -270,7 +274,7 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
                       ],
                     ),
                   ],
-                ),
+                )),
         ),
         if (route.media.isNotEmpty) ...[
           Padding(

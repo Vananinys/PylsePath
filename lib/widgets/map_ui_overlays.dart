@@ -127,7 +127,7 @@ class _SearchPanelState extends State<SearchPanel> {
             children: [
               Card(
                 elevation: 4,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
                 ),
@@ -144,6 +144,7 @@ class _SearchPanelState extends State<SearchPanel> {
                         hintText: 'Куда направимся?',
                         prefixIcon: Builder(
                           builder: (context) => IconButton(
+                            tooltip: 'Открыть меню',
                             icon: const Icon(Icons.menu),
                             onPressed: openDrawer,
                           ),
@@ -157,6 +158,7 @@ class _SearchPanelState extends State<SearchPanel> {
                               )
                             : (searchController.text.isNotEmpty
                                   ? IconButton(
+                                      tooltip: 'Очистить поиск',
                                       icon: const Icon(Icons.clear),
                                       onPressed: onClearSearch,
                                     )
@@ -189,9 +191,11 @@ class _SearchPanelState extends State<SearchPanel> {
                                     : 'Поиск в любом городе',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.black54,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ),

@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -25,7 +28,8 @@ class RidePulseView extends StatefulWidget {
 class _RidePulseViewState extends State<RidePulseView> {
   late SavedRoute _route = widget.route;
   late RidePulse _pulse = RidePulse(_route);
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   Timer? _playback;
   double _progress = 0;
   bool _altitude = false, _saving = false, _mapReady = false;
@@ -72,7 +76,7 @@ class _RidePulseViewState extends State<RidePulseView> {
   @override
   void dispose() {
     _playback?.cancel();
-    _map.dispose();
+    _localMap.dispose();
     super.dispose();
   }
 
@@ -169,129 +173,170 @@ class _RidePulseViewState extends State<RidePulseView> {
       );
     return SizedBox(
       height: 270,
-      child: FlutterMap(
-        mapController: _map,
-        options: MapOptions(
-          initialCenter: points.first,
-          initialZoom: 15,
-          initialCameraFit: points.length > 1
-              ? CameraFit.bounds(
-                  bounds: LatLngBounds.fromPoints(points),
-                  padding: const EdgeInsets.all(30),
-                  maxZoom: 17,
-                )
-              : null,
-          onMapReady: () => _mapReady = true,
-        ),
-        children: [
-          ColoredBox(color: Theme.of(context).colorScheme.surfaceContainerLow),
-          if (!NavigationPreferences.instance.cachedMapOnly ||
-              OfflineMapsService.isAvailable)
-            TileLayer(
-              urlTemplate: OfflineMapsService.routeTileUrl,
-              tileProvider: OfflineMapsService.tileProvider(
-                offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-              ),
-              userAgentPackageName: 'com.example.pulsepath',
-            ),
-          PolylineLayer(
-            polylines: [
-              for (final segment in WorkoutDetails.splitTrack(
-                points,
-                _route.workoutDetails.segmentStarts,
-              ))
-                if (segment.length > 1)
-                  Polyline(
-                    points: segment,
-                    color: _pulseColor,
-                    strokeWidth: 4.5,
+      child: MainMapGateway(
+        controls: (_) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Повтор сохранённой тренировки'),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _pulse.canReplay ? _togglePlayback : null,
+                  tooltip: _playback?.isActive == true
+                      ? 'Пауза повтора'
+                      : 'Повторить маршрут',
+                  icon: Icon(
+                    _playback?.isActive == true
+                        ? Icons.pause
+                        : Icons.play_arrow,
                   ),
-            ],
+                ),
+                Expanded(
+                  child: Slider(
+                    value: _progress,
+                    onChanged: _pulse.canReplay ? _seek : null,
+                  ),
+                ),
+              ],
+            ),
+            TextButton.icon(
+              onPressed: _pulse.canReplay && !_saving ? _addMoment : null,
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Запомнить место'),
+            ),
+          ],
+        ),
+        title: 'Разбор тренировки',
+        autoOpen: false,
+        map: FlutterMap(
+          mapController: _map,
+          options: MapOptions(
+            initialCenter: points.first,
+            initialZoom: 15,
+            initialCameraFit: points.length > 1
+                ? CameraFit.bounds(
+                    bounds: LatLngBounds.fromPoints(points),
+                    padding: const EdgeInsets.all(30),
+                    maxZoom: 17,
+                  )
+                : null,
+            onMapReady: () => _mapReady = true,
           ),
-          MarkerLayer(
-            markers: [
-              Marker(
-                point: points.first,
-                width: 26,
-                height: 26,
-                child: const Icon(
-                  Icons.trip_origin,
-                  color: _pulseColor,
-                  size: 23,
+          children: [
+            ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+            ),
+            if (!NavigationPreferences.instance.cachedMapOnly ||
+                OfflineMapsService.isAvailable)
+              if (!AppVariant.modernInterface)
+                TileLayer(
+                  urlTemplate: OfflineMapsService.routeTileUrl,
+                  tileProvider: OfflineMapsService.tileProvider(
+                    offlineOnly: NavigationPreferences.instance.cachedMapOnly,
+                  ),
+                  userAgentPackageName: 'com.example.pulsepath',
                 ),
-              ),
-              Marker(
-                point: points.last,
-                width: 26,
-                height: 26,
-                child: const Icon(
-                  Icons.flag_rounded,
-                  color: Color(0xff34465b),
-                  size: 24,
+            PolylineLayer(
+              polylines: [
+                for (final segment in WorkoutDetails.splitTrack(
+                  points,
+                  _route.workoutDetails.segmentStarts,
+                ))
+                  if (segment.length > 1)
+                    Polyline(
+                      points: segment,
+                      color: _pulseColor,
+                      strokeWidth: 4.5,
+                    ),
+              ],
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: points.first,
+                  width: 26,
+                  height: 26,
+                  child: const Icon(
+                    Icons.trip_origin,
+                    color: _pulseColor,
+                    size: 23,
+                  ),
                 ),
-              ),
-              for (final moment in _route.workoutDetails.rideMoments)
-                if (moment.pointIndex < points.length)
-                  Marker(
-                    point: points[moment.pointIndex],
-                    width: 38,
-                    height: 38,
-                    child: GestureDetector(
-                      onTap: () => _showPlace(moment.pointIndex),
-                      child: Tooltip(
-                        message: '${moment.kind.label} · ${moment.note}',
-                        child: CircleAvatar(
-                          backgroundColor: Colors.white,
-                          child: Icon(
-                            _icon(moment.kind),
-                            color: _pulseColor,
-                            size: 20,
+                Marker(
+                  point: points.last,
+                  width: 26,
+                  height: 26,
+                  child: const Icon(
+                    Icons.flag_rounded,
+                    color: Color(0xff34465b),
+                    size: 24,
+                  ),
+                ),
+                for (final moment in _route.workoutDetails.rideMoments)
+                  if (moment.pointIndex < points.length)
+                    Marker(
+                      point: points[moment.pointIndex],
+                      width: 38,
+                      height: 38,
+                      child: GestureDetector(
+                        onTap: () => _showPlace(moment.pointIndex),
+                        child: Tooltip(
+                          message: '${moment.kind.label} · ${moment.note}',
+                          child: CircleAvatar(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .surface,
+                            child: Icon(
+                              _icon(moment.kind),
+                              color: _pulseColor,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              if (frame.point case final point?)
-                Marker(
-                  point: point,
-                  width: 24,
-                  height: 24,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: _pulseColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
-                      boxShadow: const [
-                        BoxShadow(blurRadius: 8, color: Colors.black26),
-                      ],
+                if (frame.point case final point?)
+                  Marker(
+                    point: point,
+                    width: 24,
+                    height: 24,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _pulseColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 4),
+                        boxShadow: const [
+                          BoxShadow(blurRadius: 8, color: Colors.black26),
+                        ],
+                      ),
                     ),
                   ),
+              ],
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  tooltip: 'Показать весь маршрут',
+                  icon: const Icon(Icons.fit_screen),
+                  onPressed: () {
+                    if (_mapReady && points.length > 1)
+                      _map.fitCamera(
+                        CameraFit.bounds(
+                          bounds: LatLngBounds.fromPoints(points),
+                          padding: const EdgeInsets.all(30),
+                          maxZoom: 17,
+                        ),
+                      );
+                  },
                 ),
-            ],
-          ),
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Material(
-              color: Colors.white,
-              shape: const CircleBorder(),
-              child: IconButton(
-                tooltip: 'Показать весь маршрут',
-                icon: const Icon(Icons.fit_screen),
-                onPressed: () {
-                  if (_mapReady && points.length > 1)
-                    _map.fitCamera(
-                      CameraFit.bounds(
-                        bounds: LatLngBounds.fromPoints(points),
-                        padding: const EdgeInsets.all(30),
-                        maxZoom: 17,
-                      ),
-                    );
-                },
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -309,21 +354,25 @@ class _RidePulseViewState extends State<RidePulseView> {
           margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xffedf5f1),
+            color: Theme.of(context).colorScheme.secondaryContainer,
             borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.route_outlined, color: _pulseColor, size: 18),
+                  Icon(
+                    Icons.route_outlined,
+                    color: theme.colorScheme.onSecondaryContainer,
+                    size: 18,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'ВАШ ПУЛЬС МАРШРУТА',
                       style: TextStyle(
-                        color: _pulseColor,
+                        color: theme.colorScheme.onSecondaryContainer,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.1,
@@ -337,7 +386,7 @@ class _RidePulseViewState extends State<RidePulseView> {
                 '${_route.distanceKm.toStringAsFixed(2)} км',
                 style: theme.textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xff193d38),
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
                 ),
               ),
               const SizedBox(height: 4),

@@ -47,7 +47,9 @@ void main() {
     final store = ChatLocalStore('owner', 'friend', currentOwner: () => owner);
     await store.saveMessages([invite()]);
     owner = 'other';
-    expect(await store.readMessages(), isEmpty);
+    await expectLater(store.readMessages(), throwsStateError);
+    owner = 'owner';
+    expect(await store.readMessages(), hasLength(1));
   });
   test(
     'missing timestamps are stale instead of showing a live participant',

@@ -290,7 +290,7 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
                       fontSize: 12,
                       color: PresenceService.instance.isOnline(friend.id)
                           ? Colors.green
-                          : Colors.grey,
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -412,7 +412,7 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
             child: Container(
               height: 48,
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(Icons.more_horiz),
@@ -434,17 +434,24 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: Colors.black87),
+            Icon(
+              icon,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(fontSize: 11, color: Colors.black87),
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
             ),
           ],
         ),
@@ -476,7 +483,9 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
       selected: selected,
       selectedColor: Colors.deepOrange.withValues(alpha: 0.2),
       labelStyle: TextStyle(
-        color: selected ? Colors.deepOrange : Colors.black54,
+        color: selected
+            ? Colors.deepOrange
+            : Theme.of(context).colorScheme.onSurfaceVariant,
         fontWeight: selected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (_) => setState(() => _tab = tab),
@@ -570,29 +579,37 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
                               size: 14,
                               color: post.likedByMe
                                   ? Colors.deepOrange
-                                  : Colors.grey,
+                                  : Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                             ),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${post.likeCount}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Icon(
+                          Icon(
                             Icons.chat_bubble_outline,
                             size: 14,
-                            color: Colors.grey,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${post.commentsCount}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -765,7 +782,10 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
                 ),
                 subtitle: Text(
                   dateText,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             );
@@ -804,7 +824,10 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
       child: Center(
         child: Text(
           text,
-          style: const TextStyle(fontSize: 13, color: Colors.grey),
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

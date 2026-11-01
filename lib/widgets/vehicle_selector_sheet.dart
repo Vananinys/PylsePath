@@ -94,8 +94,8 @@ class _VehicleSelectorSheetState extends State<VehicleSelectorSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(24),
           topRight: Radius.circular(24),
@@ -115,7 +115,9 @@ class _VehicleSelectorSheetState extends State<VehicleSelectorSheet> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -146,13 +148,19 @@ class _VehicleSelectorSheetState extends State<VehicleSelectorSheet> {
                             Icon(
                               Icons.cloud_off,
                               size: 40,
-                              color: Colors.grey.shade400,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Не удалось загрузить гараж.\nПопробуйте ещё раз.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey.shade600),
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             TextButton(
@@ -174,7 +182,9 @@ class _VehicleSelectorSheetState extends State<VehicleSelectorSheet> {
                             Icon(
                               Icons.pedal_bike,
                               size: 44,
-                              color: Colors.grey.shade400,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                             const SizedBox(height: 8),
                             const Text('Гараж пуст — добавьте первую технику'),
@@ -253,7 +263,9 @@ class _VehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: isSelected ? accent.withValues(alpha: 0.08) : Colors.grey.shade50,
+      color: isSelected
+          ? accent.withValues(alpha: 0.08)
+          : Theme.of(context).colorScheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -263,7 +275,9 @@ class _VehicleCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isSelected ? accent : Colors.grey.shade200,
+              color: isSelected
+                  ? accent
+                  : Theme.of(context).colorScheme.outlineVariant,
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -276,14 +290,16 @@ class _VehicleCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isSelected
                       ? accent.withValues(alpha: 0.15)
-                      : Colors.grey.shade200,
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                   shape: BoxShape.circle,
                   image: _photoProvider(vehicle),
                 ),
                 child: _photoProvider(vehicle) == null
                     ? Icon(
                         vehicleIconFor(vehicle.transportType),
-                        color: isSelected ? accent : Colors.grey.shade700,
+                        color: isSelected
+                            ? accent
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         size: 24,
                       )
                     : null,
@@ -300,7 +316,9 @@ class _VehicleCard extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
-                        color: isSelected ? accent : Colors.black87,
+                        color: isSelected
+                            ? accent
+                            : Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -310,7 +328,7 @@ class _VehicleCard extends StatelessWidget {
                       ' • пробег ${vehicle.totalDistance.toStringAsFixed(0)} км',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -326,10 +344,10 @@ class _VehicleCard extends StatelessWidget {
                         color: Color(0xFFFF6D1F),
                         size: 24,
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.radio_button_unchecked,
                         key: ValueKey(false),
-                        color: Colors.grey,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         size: 22,
                       ),
               ),

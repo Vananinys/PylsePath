@@ -1,6 +1,11 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
 import '../widgets/activity_trail_layer.dart';
 
 import 'package:flutter/material.dart';
+
+import '../widgets/section_intro.dart';
+
 import 'package:flutter_map/flutter_map.dart';
 
 import '../data/navigation_preferences.dart';
@@ -134,10 +139,26 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          SectionIntro(
+                            icon: Icons.route_outlined,
+                            eyebrow: 'ВАША КОЛЛЕКЦИЯ',
+                            title: 'Ваши маршруты',
+                            description: 'Откройте маршрут, чтобы посмотреть детали и начать подготовку. Новый путь создаётся кнопкой внизу.',
+                            children: [
+                              Text(
+                                'Сохранено маршрутов: ${_routes.length}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
                           if (_error != null)
                             ListTile(
                               title: Text(_error!),
                               trailing: IconButton(
+                                tooltip: 'Обновить',
                                 onPressed: _load,
                                 icon: const Icon(Icons.refresh),
                               ),
@@ -448,7 +469,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                       ? const Center(
                           child: Text('В этом маршруте нет линии трека'),
                         )
-                      : FlutterMap(
+                      : MainMapGateway(title: 'Сохранённый маршрут', autoOpen: false, map: FlutterMap(
                           options: MapOptions(
                             initialCameraFit: CameraFit.bounds(
                               bounds: LatLngBounds.fromPoints(
@@ -461,7 +482,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                           children: [
                             if (!NavigationPreferences.instance.cachedMapOnly ||
                                 OfflineMapsService.isAvailable)
-                              TileLayer(
+                              if (!AppVariant.modernInterface) TileLayer(
                                 urlTemplate: OfflineMapsService.routeTileUrl,
                                 tileProvider: OfflineMapsService.tileProvider(
                                   offlineOnly: NavigationPreferences
@@ -478,7 +499,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                               activity: route.activityType,
                               transport: route.transportType,
                             ),
-                            const Align(
+                            Align(
                               alignment: Alignment.bottomRight,
                               child: ColoredBox(
                                 color: Colors.white70,
@@ -488,14 +509,16 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                                     '© OpenStreetMap',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: Colors.black87,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
                           ],
-                        ),
+                        )),
                 ),
               ),
               const SizedBox(height: 14),

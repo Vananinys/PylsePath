@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'notification_permission_service.dart';
 import '../config.dart';
+import '../config/app_variant.dart';
 import '../models/chat_message.dart';
 import '../utils/notification_identity.dart';
 import 'chat_service.dart';
@@ -102,6 +103,9 @@ class PushService {
   }
 
   Future<void> Function(String senderId)? onChatOpen;
+  Future<bool> Function(String messageId)? onInvitationOpen;
+  Future<void> Function(String clubId, String kind)? onClubOpen;
+  String? _pendingClub, _pendingClubOwner, _pendingClubKind;
   Future<bool> Function(String messageId)? onChatPreview;
   Future<void> Function()? onUpdateOpen;
   Future<void> Function()? onGarageOpen;
@@ -111,6 +115,7 @@ class PushService {
   bool _openingUpdate = false;
   String? _pendingSender;
   String? _pendingReceiver;
+  String? _pendingMessage;
   bool _opening = false;
   String? lastError;
   bool get isReady => _ready;
@@ -121,7 +126,7 @@ class PushService {
       if (Platform.isAndroid && !_updateTopicSubscribed) {
         try {
           await FirebaseMessaging.instance.subscribeToTopic(
-            'pulsepath_android_updates',
+            AppVariant.updateTopic,
           );
           _updateTopicSubscribed = true;
         } catch (error) {
@@ -318,6 +323,17 @@ class PushService {
     );
   }
 
+  Future<void> clearClubNotification(String club) async {
+    if (!_supported) return;
+    try {
+      await _localNotifications.cancel(
+        id: club.hashCode & 0x7fffffff,
+        tag: 'club_$club',
+      );
+      await _localNotifications.cancel(id: 0, tag: 'club_$club');
+    } catch (_) {}
+  }
+
   Future<void> _handleNotificationResponse(
     NotificationResponse response,
   ) async {
@@ -424,6 +440,10 @@ class PushService {
   void _onLocalTap(String? value) {
     try {
       final payload = jsonDecode(value ?? '') as Map<String, dynamic>;
+      if (payload['type'] == 'club') {
+        _queueClub(payload);
+        return;
+      }
       if (payload['type'] == 'garage_maintenance' &&
           payload['owner'] is String) {
         _pendingGarageOwner = payload['owner'] as String;
@@ -445,6 +465,7 @@ class PushService {
       }
       _pendingSender = sender;
       _pendingReceiver = receiver;
+      _pendingMessage = payload['messageId']?.toString();
       unawaited(flushPendingTap());
     } catch (_) {
       /* Reject legacy sender-only payloads. */
@@ -640,6 +661,42 @@ class PushService {
     RemoteMessage message, {
     bool background = false,
   }) async {
+    if (message.data['type'] == 'club') {
+      final owner = Supabase.instance.client.auth.currentUser?.id;
+      final club = message.data['clubId']?.toString(),
+          id = message.data['notificationId']?.toString();
+      if (!AppVariant.modernInterface ||
+          owner == null ||
+          owner != message.data['receiverId'] ||
+          club == null ||
+          id == null ||
+          !_shownMessages.add('club_$id'))
+        return;
+      if (_shownMessages.length > 1000)
+        _shownMessages.remove(_shownMessages.first);
+      try {
+        await _localNotifications.show(
+          id: club.hashCode & 0x7fffffff,
+          title: message.notification?.title ?? 'Новое в клубе',
+          body: message.notification?.body ?? 'Откройте клуб в PulsePath',
+          notificationDetails: NotificationDetails(
+            android: AndroidNotificationDetails(
+              'chat_messages',
+              'Сообщения',
+              importance: Importance.high,
+              priority: Priority.high,
+              icon: 'ic_stat_pulsepath',
+              tag: 'club_$club',
+            ),
+            iOS: const DarwinNotificationDetails(),
+          ),
+          payload: jsonEncode(message.data),
+        );
+      } catch (error) {
+        debugPrint('[Push] club notification failed: $error');
+      }
+      return;
+    }
     if (message.data['type'] == 'app_update') {
       final key = message.messageId;
       if (key != null && !_seenForeground.add(key)) return;
@@ -803,6 +860,11 @@ class PushService {
             params: {'p_token': value, 'p_platform': Platform.operatingSystem},
           )
           .timeout(const Duration(seconds: 10));
+      if (AppVariant.modernInterface && client.auth.currentUser?.id == uid) {
+        await client
+            .rpc('register_club_push_device', params: {'p_token': value})
+            .timeout(const Duration(seconds: 10));
+      }
       lastError = notificationsAuthorized
           ? null
           : 'Разрешение на уведомления не выдано';
@@ -847,10 +909,16 @@ class PushService {
     onGarageOpen = null;
     _pendingGarageOwner = null;
     onChatOpen = null;
+    onInvitationOpen = null;
+    onClubOpen = null;
     onChatPreview = null;
   }
 
   void _onPushTap(RemoteMessage message) {
+    if (message.data['type'] == 'club') {
+      _queueClub(message.data);
+      return;
+    }
     if (message.data['type'] == 'app_update') {
       final key = message.messageId;
       if (key != null && !_seenTaps.add(key)) return;
@@ -871,10 +939,31 @@ class PushService {
     if (_seenTaps.length > 200) _seenTaps.remove(_seenTaps.first);
     _pendingSender = sender;
     _pendingReceiver = receiver;
+    _pendingMessage = message.data['messageId']?.toString();
     unawaited(flushPendingTap());
   }
 
   Future<void> flushPendingTap() async {
+    if (_pendingClub != null && onClubOpen != null && !_opening) {
+      final owner = Supabase.instance.client.auth.currentUser?.id;
+      if (owner == null) return;
+      final club = _pendingClub!,
+          recipient = _pendingClubOwner,
+          kind = _pendingClubKind ?? 'message';
+      _pendingClub = null;
+      _pendingClubOwner = null;
+      _pendingClubKind = null;
+      if (owner == recipient) {
+        _opening = true;
+        try {
+          await onClubOpen!(club, kind);
+        } catch (error) {
+          debugPrint('[Push] open club failed: $error');
+        } finally {
+          _opening = false;
+        }
+      }
+    }
     if (_pendingGarageOwner != null &&
         onGarageOpen != null &&
         !_openingGarage) {
@@ -916,8 +1005,14 @@ class PushService {
     }
     _pendingSender = null;
     _pendingReceiver = null;
+    final messageId = _pendingMessage;
+    _pendingMessage = null;
     _opening = true;
     try {
+      if (messageId != null &&
+          onInvitationOpen != null &&
+          await onInvitationOpen!(messageId))
+        return;
       await callback(sender);
     } catch (error) {
       debugPrint('[Push] open chat failed: $error');
@@ -925,5 +1020,18 @@ class PushService {
       _opening = false;
       if (_pendingSender != null) unawaited(flushPendingTap());
     }
+  }
+
+  void _queueClub(Map<String, dynamic> payload) {
+    final club = payload['clubId']?.toString(),
+        owner = payload['receiverId']?.toString();
+    if (club == null ||
+        owner == null ||
+        !RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(club))
+      return;
+    _pendingClub = club;
+    _pendingClubOwner = owner;
+    _pendingClubKind = payload['kind']?.toString();
+    unawaited(flushPendingTap());
   }
 }

@@ -1,6 +1,8 @@
 import '../data/user_scope.dart';
 import '../services/profile_presentation_service.dart';
 import '../widgets/profile_identity_card.dart';
+import '../widgets/profile_dashboard.dart';
+import '../config/app_variant.dart';
 import 'profile_customize_screen.dart';
 
 import 'dart:io';
@@ -467,6 +469,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+    if (AppVariant.modernInterface) {
+      return ProfileDashboard(
+        identity: _buildProfileHeader(),
+        stats: ProfileSummaryGrid(
+          distance: '${_totalDistanceKm.toStringAsFixed(1)} км',
+          workouts: '$_totalWorkouts',
+          duration: _totalDuration,
+          elevation:
+              _workoutHistory.any(
+                (ride) =>
+                    ride.elevationGainMeters > 0 ||
+                    ride.workoutDetails.samples.any(
+                      (sample) => sample.altitudeMeters != null,
+                    ),
+              )
+              ? '${_totalElevationGain.toStringAsFixed(0)} м'
+              : 'Нет данных',
+        ),
+        awards: ProfileAwardsShowcase(style: _presentation),
+        progress: _buildProgressSection(),
+        activity: ActivityPanel(
+          summary: ActivitySummary.fromRides(_workoutHistory),
+          isOwner: true,
+          showAllTime: false,
+        ),
+        garage: _buildGarageSection(),
+        details: _buildAdditionalInfo(),
+        privacy: _activityPublic == null
+            ? const Text(
+                'Настройка ещё не загружена. Обновите профиль при доступной сети.',
+              )
+            : SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Показывать итоги и серию тренировок'),
+                subtitle: const Text(
+                  'Маршруты и координаты этой настройкой не публикуются.',
+                ),
+                value: _activityPublic!,
+                onChanged: _savingActivityPrivacy
+                    ? null
+                    : _setActivityVisibility,
+              ),
+        onHistory: _openWorkoutHistory,
+        onEdit: _editProfile,
+        onCustomize: _openingCustomizer || UserScope.currentUserId() == null
+            ? null
+            : _customizeProfile,
+        onRefresh: () => _loadData(showSpinner: false),
+        onTraining: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TrainingCenterScreen()),
+          );
+          if (mounted) await _loadData(showSpinner: false);
+        },
+        notices: [
+          if (_workoutRepo.recoveryNotice != null)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('История прочитана не полностью'),
+                    Text(_workoutRepo.recoveryNotice!),
+                    const Text('Итоги учитывают только доступные записи.'),
+                    TextButton(
+                      onPressed: () => _loadData(showSpinner: false),
+                      child: const Text('Повторить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_presentation.isPending || _workoutRepo.hasPendingSync)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(
+                'Изменения сохранены на телефоне. Синхронизация продолжится при доступной сети.',
+              ),
+            ),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Профиль райдера'),
@@ -488,6 +575,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_workoutRepo.recoveryNotice != null)
+              Card(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'История прочитана не полностью',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(_workoutRepo.recoveryNotice!),
+                      const Text(
+                        'Показатели ниже учитывают только доступные записи.',
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _loadData(showSpinner: false),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Повторить'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             // Верхний блок: аватар, имя, статус, город
             _buildProfileHeader(),
             if (_presentation.isPending)
@@ -791,7 +904,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fit: BoxFit.scaleDown,
             child: Text(
               title,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
               maxLines: 2,
             ),
@@ -890,22 +1006,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 12),
         // Переключатель периода: День / Неделя / Месяц / Год.
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<ProgressPeriod>(
-            segments: [
+        if (AppVariant.modernInterface)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               for (final period in ProgressPeriod.values)
-                ButtonSegment<ProgressPeriod>(
-                  value: period,
+                ChoiceChip(
                   label: Text(period.label),
+                  selected: _period == period,
+                  onSelected: (_) => _changeProgressPeriod(period),
                 ),
             ],
-            selected: {_period},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) =>
-                _changeProgressPeriod(selection.first),
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ProgressPeriod>(
+              segments: [
+                for (final period in ProgressPeriod.values)
+                  ButtonSegment<ProgressPeriod>(
+                    value: period,
+                    label: Text(period.label),
+                  ),
+              ],
+              selected: {_period},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  _changeProgressPeriod(selection.first),
+            ),
           ),
-        ),
         const SizedBox(height: 12),
         Card(
           elevation: 2,
@@ -927,28 +1057,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _period.metricLabel,
-                      style: TextStyle(fontSize: 16, color: Colors.grey[700]),
-                    ),
-                    const SizedBox(width: 12),
-                    // Значение забирает остаток строки и переносится —
-                    // при увеличенном системном шрифте строка не переполняется.
-                    Expanded(
-                      child: Text(
+                if (AppVariant.modernInterface)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _period.metricLabel,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
                         '${current.toStringAsFixed(1)} км',
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
-                        textAlign: TextAlign.right,
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _period.metricLabel,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Значение забирает остаток строки и переносится —
+                      // при увеличенном системном шрифте строка не переполняется.
+                      Expanded(
+                        child: Text(
+                          '${current.toStringAsFixed(1)} км',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -962,7 +1117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         fontWeight: FontWeight.bold,
                         color: goalReached
                             ? Colors.green[700]
-                            : Colors.grey[700],
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -990,13 +1145,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Flexible(
               child: Text(
                 'Цель: ${_formatKm(goal)}',
-                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.edit, size: 16, color: Colors.grey),
+            Icon(
+              Icons.edit,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),
@@ -1057,6 +1219,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _infoRow(String label, String value) {
+    if (AppVariant.modernInterface) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+    }
     // Та же ловушка, что и в карточке гаража: два НЕ-гибких Text в Row
     // измеряются без ограничения по ширине и переполняют строку при длинном
     // значении или увеличенном системном шрифте.
