@@ -1,3 +1,5 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
 import '../widgets/activity_trail_layer.dart';
 
 import 'package:flutter/material.dart';
@@ -467,7 +469,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                       ? const Center(
                           child: Text('В этом маршруте нет линии трека'),
                         )
-                      : FlutterMap(
+                      : MainMapGateway(title: 'Сохранённый маршрут', autoOpen: false, map: FlutterMap(
                           options: MapOptions(
                             initialCameraFit: CameraFit.bounds(
                               bounds: LatLngBounds.fromPoints(
@@ -480,7 +482,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                           children: [
                             if (!NavigationPreferences.instance.cachedMapOnly ||
                                 OfflineMapsService.isAvailable)
-                              TileLayer(
+                              if (!AppVariant.uiBeta) TileLayer(
                                 urlTemplate: OfflineMapsService.routeTileUrl,
                                 tileProvider: OfflineMapsService.tileProvider(
                                   offlineOnly: NavigationPreferences
@@ -516,7 +518,7 @@ class _SavedRoutesScreenState extends State<SavedRoutesScreen> {
                               ),
                             ),
                           ],
-                        ),
+                        )),
                 ),
               ),
               const SizedBox(height: 14),

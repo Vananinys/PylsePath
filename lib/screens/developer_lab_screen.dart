@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -129,7 +132,9 @@ class _DeveloperLabScreenState extends State<DeveloperLabScreen>
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'СИМУЛЯЦИЯ · только на этом экране',
+            AppVariant.uiBeta
+                ? 'СИМУЛЯЦИЯ · на основной карте'
+                : 'СИМУЛЯЦИЯ · только на этом экране',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
           const Text(
@@ -140,85 +145,109 @@ class _DeveloperLabScreenState extends State<DeveloperLabScreen>
             borderRadius: BorderRadius.circular(24),
             child: SizedBox(
               height: 300,
-              child: FlutterMap(
-                options: const MapOptions(
-                  initialCenter: LatLng(56.4804, 84.9522),
-                  initialZoom: 16,
-                ),
-                children: [
-                  const Positioned.fill(
-                    child: ColoredBox(color: Color(0xFF14232B)),
-                  ),
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: route,
-                        strokeWidth: 18,
-                        color: const Color(0xFF30464F),
-                      ),
-                      Polyline(
-                        points: route,
-                        strokeWidth: 2,
-                        color: Colors.white24,
-                      ),
-                    ],
-                  ),
-                  ActivityTrailLayer(
-                    preview: true,
-                    segments: [points],
-                    activity: _activity,
-                    live: true,
-                    liveAppearance: LiveTrailStyle(
-                      effect: _effect,
-                      enabled: true,
-                      size: 18,
-                      spacing: 22,
+              child: MainMapGateway(
+                controls: (_) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Симуляция · GPS-запись и публикация координат не изменяются',
                     ),
+                    FilledButton.icon(
+                      onPressed: _play,
+                      icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+                      label: Text(
+                        _playing ? 'Пауза симуляции' : 'Запустить симуляцию',
+                      ),
+                    ),
+                    Slider(
+                      value: _progress,
+                      max: 99,
+                      onChanged: (value) => setState(() => _progress = value),
+                    ),
+                  ],
+                ),
+                title: 'Симуляция · без записи и отправки координат',
+                autoOpen: false,
+                map: FlutterMap(
+                  options: const MapOptions(
+                    initialCenter: LatLng(56.4804, 84.9522),
+                    initialZoom: 16,
                   ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: point,
-                        width: 90,
-                        height: 90,
-                        rotate: true,
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .surface,
-                              radius: 23,
-                              child: Icon(
-                                Icons.person,
-                                color: Colors.teal,
-                                size: 30,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '${_gps && _playing ? _speed.round() : 0} км/ч',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface,
-                                  fontWeight: FontWeight.bold,
+                  children: [
+                    const Positioned.fill(
+                      child: ColoredBox(color: Color(0xFF14232B)),
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: route,
+                          strokeWidth: 18,
+                          color: const Color(0xFF30464F),
+                        ),
+                        Polyline(
+                          points: route,
+                          strokeWidth: 2,
+                          color: Colors.white24,
+                        ),
+                      ],
+                    ),
+                    ActivityTrailLayer(
+                      preview: true,
+                      segments: [points],
+                      activity: _activity,
+                      live: true,
+                      liveAppearance: LiveTrailStyle(
+                        effect: _effect,
+                        enabled: true,
+                        size: 18,
+                        spacing: 22,
+                      ),
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: point,
+                          width: 90,
+                          height: 90,
+                          rotate: true,
+                          child: Column(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .surface,
+                                radius: 23,
+                                child: Icon(
+                                  Icons.person,
+                                  color: Colors.teal,
+                                  size: 30,
                                 ),
                               ),
-                            ),
-                          ],
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${_gps && _playing ? _speed.round() : 0} км/ч',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

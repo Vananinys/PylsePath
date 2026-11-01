@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:pulsepath/models/friend_profile.dart';
 import 'package:pulsepath/widgets/friend_direction_layer.dart';
+import 'package:pulsepath/services/group_ride_service.dart';
 
 FriendProfile friend(String id, double lat, double lon, {bool stale = false}) =>
     FriendProfile(
@@ -17,6 +18,58 @@ FriendProfile friend(String id, double lat, double lon, {bool stale = false}) =>
     );
 
 void main() {
+  test('Meeting directions include only accepted current ride members', () {
+    GroupMember member(String id, {bool point = false}) => GroupMember(
+      userId: id,
+      username: id,
+      distanceMeters: 0,
+      durationSeconds: 0,
+      updatedAt: DateTime.now(),
+      latitude: point ? 1 : null,
+      longitude: point ? 1 : null,
+    );
+    final members = [
+      member('me'),
+      member('accepted'),
+      member('clubmate', point: true),
+    ];
+    final friends = [
+      friend('accepted', 0, 1),
+      friend('pending', 1, 0),
+      friend('outsider', 2, 0),
+    ];
+    List<FriendProfile> scope(
+      String? room, {
+      String? owner = 'me',
+      bool recording = false,
+      String? workoutRoom,
+    }) => rideDirectionFriends(
+      room: room,
+      userId: owner,
+      members: members,
+      friends: friends,
+      recording: recording,
+      workoutRoom: workoutRoom,
+    );
+    expect(scope(null), isEmpty);
+    expect(scope('ride').map((f) => f.id), ['accepted', 'clubmate']);
+    expect(scope('ride', owner: 'other-account'), isEmpty);
+    expect(scope('ride', recording: true), isEmpty);
+    expect(
+      scope('ride', recording: true, workoutRoom: 'previous-ride'),
+      isEmpty,
+    );
+    expect(scope('ride', recording: true, workoutRoom: 'ride'), hasLength(2));
+    expect(
+      rideDirectionFriends(
+        room: 'ride',
+        userId: 'me',
+        members: [member('me')],
+        friends: friends,
+      ),
+      isEmpty,
+    );
+  });
   test('Directions follow camera rotation and the nearest date-line world', () {
     MapCamera camera(double rotation, {LatLng center = const LatLng(0, 0)}) =>
         MapCamera(

@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -35,7 +38,8 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     steps: widget.source?.navigationSteps ?? const [],
   );
   final _undo = <RouteEditState>[], _redo = <RouteEditState>[];
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   final _owner = UserScope.currentUserId();
   late final _repository = SavedRoutesRepository();
   late final _name = TextEditingController(
@@ -54,7 +58,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
 
   @override
   void dispose() {
-    _map.dispose();
+    _localMap.dispose();
     _name.dispose();
     _notes.dispose();
     super.dispose();
@@ -254,6 +258,154 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     }
   }
 
+  Widget _mapTools() {
+    final points = _draft.points;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${points.length} точек · ${(_draft.meters / 1000).toStringAsFixed(2)} км · ${_draft.segmentCount} участков',
+        ),
+        Text(
+          _draft.estimatedSeconds == null
+              ? 'Линия без проверки дорог. Время не рассчитано.'
+              : 'По дорогам · примерно ${_draft.estimatedSeconds! ~/ 60} мин',
+        ),
+        const Text(
+          'Нажмите на карту. «Выбрать» находит ближайшую точку; «Перенести» перемещает выбранную. Исходник не изменяется.',
+          style: TextStyle(fontSize: 12),
+        ),
+        Wrap(
+          spacing: 6,
+          children: [
+            for (final action in _PointAction.values)
+              ChoiceChip(
+                label: Text(
+                  ['Добавлять', 'Выбрать', 'Перенести'][action.index],
+                ),
+                selected: _action == action,
+                onSelected: _busy
+                    ? null
+                    : (_) => setState(() => _action = action),
+              ),
+          ],
+        ),
+        if (points.isNotEmpty)
+          Row(
+            children: [
+              Expanded(
+                child: Slider(
+                  value: _selected.clamp(0, points.length - 1).toDouble(),
+                  max: (points.length - 1).clamp(1, 100000).toDouble(),
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(
+                          () => _selected = value.round().clamp(
+                            0,
+                            points.length - 1,
+                          ),
+                        ),
+                ),
+              ),
+              Text('${_selected + 1}/${points.length}'),
+            ],
+          ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            IconButton(
+              tooltip: 'Отменить изменение',
+              onPressed: _busy || _undo.isEmpty
+                  ? null
+                  : () => setState(() {
+                      _redo.add(_draft);
+                      _draft = _undo.removeLast();
+                      _selected = _draft.points.isEmpty ? -1 : 0;
+                      _changed = true;
+                    }),
+              icon: const Icon(Icons.undo),
+            ),
+            IconButton(
+              tooltip: 'Повторить изменение',
+              onPressed: _busy || _redo.isEmpty
+                  ? null
+                  : () => setState(() {
+                      _undo.add(_draft);
+                      _draft = _redo.removeLast();
+                      _selected = _draft.points.isEmpty ? -1 : 0;
+                      _changed = true;
+                    }),
+              icon: const Icon(Icons.redo),
+            ),
+            TextButton(
+              onPressed: _busy || _selected < 0
+                  ? null
+                  : () => _edit(() => _draft.remove(_selected)),
+              child: const Text('Убрать точку'),
+            ),
+            TextButton(
+              onPressed:
+                  _busy ||
+                      _selected <= 0 ||
+                      points.length > 32 ||
+                      _draft.segmentCount > 1
+                  ? null
+                  : () {
+                      _edit(() => _draft.reorder(_selected, _selected - 1));
+                      setState(() => _selected--);
+                    },
+              child: const Text('Раньше'),
+            ),
+            TextButton(
+              onPressed:
+                  _busy ||
+                      _selected < 0 ||
+                      _selected >= points.length - 1 ||
+                      points.length > 32 ||
+                      _draft.segmentCount > 1
+                  ? null
+                  : () {
+                      _edit(() => _draft.reorder(_selected, _selected + 1));
+                      setState(() => _selected++);
+                    },
+              child: const Text('Позже'),
+            ),
+            TextButton(
+              onPressed: _busy || points.isEmpty
+                  ? null
+                  : () => _edit(_draft.reversed),
+              child: const Text('Обратно'),
+            ),
+            TextButton(
+              onPressed: _busy || points.length < 2 || _draft.segmentCount > 1
+                  ? null
+                  : () => _edit(_draft.closeLoop),
+              child: const Text('Замкнуть круг'),
+            ),
+            TextButton(
+              onPressed: _busy || points.length < 3 ? null : _trim,
+              child: const Text('Обрезать'),
+            ),
+            TextButton(
+              onPressed: _busy || _draft.segmentCount > 1 || points.length <= 10
+                  ? null
+                  : () => _edit(_draft.controlPoints),
+              child: const Text('10 контрольных точек'),
+            ),
+            OutlinedButton(
+              onPressed: _busy ? null : _roads,
+              child: const Text('По дорогам'),
+            ),
+          ],
+        ),
+        const Text(
+          'Нажмите «Готово», чтобы вернуться к названию и сохранению маршрута.',
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final points = _draft.points;
@@ -272,74 +424,81 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             children: [
               Expanded(
                 flex: 3,
-                child: FlutterMap(
-                  mapController: _map,
-                  options: MapOptions(
-                    initialCenter: center,
-                    initialZoom: 13,
-                    initialCameraFit: points.length < 2
-                        ? null
-                        : CameraFit.bounds(
-                            bounds: LatLngBounds.fromPoints(points),
-                            padding: const EdgeInsets.all(24),
-                            maxZoom: 16,
-                          ),
-                    onTap: (_, point) => _tap(point),
-                  ),
-                  children: [
-                    if (!NavigationPreferences.instance.cachedMapOnly ||
-                        OfflineMapsService.isAvailable)
-                      TileLayer(
-                        urlTemplate: OfflineMapsService.routeTileUrl,
-                        tileProvider: OfflineMapsService.tileProvider(
-                          offlineOnly:
-                              NavigationPreferences.instance.cachedMapOnly,
-                        ),
-                        userAgentPackageName: 'com.pulsepath.app',
-                      ),
-                    PolylineLayer(
-                      polylines: [
-                        for (final segment in WorkoutDetails.splitTrack(
-                          points,
-                          _draft.starts,
-                        ))
-                          Polyline(
-                            points: segment,
-                            color: Colors.deepOrange,
-                            strokeWidth: 4,
-                          ),
-                      ],
+                child: MainMapGateway(
+                  controls: (_) => _mapTools(),
+                  keepCamera: widget.source == null && _draft.points.isEmpty,
+                  title: 'Редактирование маршрута',
+                  autoOpen: true,
+                  map: FlutterMap(
+                    mapController: _map,
+                    options: MapOptions(
+                      initialCenter: center,
+                      initialZoom: 13,
+                      initialCameraFit: points.length < 2
+                          ? null
+                          : CameraFit.bounds(
+                              bounds: LatLngBounds.fromPoints(points),
+                              padding: const EdgeInsets.all(24),
+                              maxZoom: 16,
+                            ),
+                      onTap: (_, point) => _tap(point),
                     ),
-                    MarkerLayer(
-                      markers: [
-                        for (final index in {
-                          if (points.isNotEmpty) 0,
-                          if (points.length > 1) points.length - 1,
-                          if (_selected >= 0) _selected,
-                        })
-                          Marker(
-                            point: points[index],
-                            width: 38,
-                            height: 38,
-                            child: Tooltip(
-                              message: 'Точка ${index + 1}',
-                              child: Icon(
-                                Icons.location_on,
-                                color: index == _selected
-                                    ? Colors.blue
-                                    : Colors.deepOrange,
-                                size: 36,
+                    children: [
+                      if (!NavigationPreferences.instance.cachedMapOnly ||
+                          OfflineMapsService.isAvailable)
+                        if (!AppVariant.uiBeta)
+                          TileLayer(
+                            urlTemplate: OfflineMapsService.routeTileUrl,
+                            tileProvider: OfflineMapsService.tileProvider(
+                              offlineOnly:
+                                  NavigationPreferences.instance.cachedMapOnly,
+                            ),
+                            userAgentPackageName: 'com.pulsepath.app',
+                          ),
+                      PolylineLayer(
+                        polylines: [
+                          for (final segment in WorkoutDetails.splitTrack(
+                            points,
+                            _draft.starts,
+                          ))
+                            Polyline(
+                              points: segment,
+                              color: Colors.deepOrange,
+                              strokeWidth: 4,
+                            ),
+                        ],
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          for (final index in {
+                            if (points.isNotEmpty) 0,
+                            if (points.length > 1) points.length - 1,
+                            if (_selected >= 0) _selected,
+                          })
+                            Marker(
+                              point: points[index],
+                              width: 38,
+                              height: 38,
+                              child: Tooltip(
+                                message: 'Точка ${index + 1}',
+                                child: Icon(
+                                  Icons.location_on,
+                                  color: index == _selected
+                                      ? Colors.blue
+                                      : Colors.deepOrange,
+                                  size: 36,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('© OpenStreetMap contributors'),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      const RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution('© OpenStreetMap contributors'),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Expanded(

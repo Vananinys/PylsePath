@@ -1,6 +1,8 @@
 import '../data/user_scope.dart';
 import '../services/profile_presentation_service.dart';
 import '../widgets/profile_identity_card.dart';
+import '../widgets/profile_dashboard.dart';
+import '../config/app_variant.dart';
 import 'profile_customize_screen.dart';
 
 import 'dart:io';
@@ -467,6 +469,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
+    if (AppVariant.uiBeta) {
+      return ProfileDashboard(
+        identity: _buildProfileHeader(),
+        stats: ProfileSummaryGrid(
+          distance: '${_totalDistanceKm.toStringAsFixed(1)} км',
+          workouts: '$_totalWorkouts',
+          duration: _totalDuration,
+          elevation:
+              _workoutHistory.any(
+                (ride) =>
+                    ride.elevationGainMeters > 0 ||
+                    ride.workoutDetails.samples.any(
+                      (sample) => sample.altitudeMeters != null,
+                    ),
+              )
+              ? '${_totalElevationGain.toStringAsFixed(0)} м'
+              : 'Нет данных',
+        ),
+        awards: ProfileAwardsShowcase(style: _presentation),
+        progress: _buildProgressSection(),
+        activity: ActivityPanel(
+          summary: ActivitySummary.fromRides(_workoutHistory),
+          isOwner: true,
+          showAllTime: false,
+        ),
+        garage: _buildGarageSection(),
+        details: _buildAdditionalInfo(),
+        privacy: _activityPublic == null
+            ? const Text(
+                'Настройка ещё не загружена. Обновите профиль при доступной сети.',
+              )
+            : SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Показывать итоги и серию тренировок'),
+                subtitle: const Text(
+                  'Маршруты и координаты этой настройкой не публикуются.',
+                ),
+                value: _activityPublic!,
+                onChanged: _savingActivityPrivacy
+                    ? null
+                    : _setActivityVisibility,
+              ),
+        onHistory: _openWorkoutHistory,
+        onEdit: _editProfile,
+        onCustomize: _openingCustomizer || UserScope.currentUserId() == null
+            ? null
+            : _customizeProfile,
+        onRefresh: () => _loadData(showSpinner: false),
+        onTraining: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TrainingCenterScreen()),
+          );
+          if (mounted) await _loadData(showSpinner: false);
+        },
+        notices: [
+          if (_workoutRepo.recoveryNotice != null)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('История прочитана не полностью'),
+                    Text(_workoutRepo.recoveryNotice!),
+                    const Text('Итоги учитывают только доступные записи.'),
+                    TextButton(
+                      onPressed: () => _loadData(showSpinner: false),
+                      child: const Text('Повторить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_presentation.isPending || _workoutRepo.hasPendingSync)
+            const Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(
+                'Изменения сохранены на телефоне. Синхронизация продолжится при доступной сети.',
+              ),
+            ),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Профиль райдера'),
@@ -919,22 +1006,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 12),
         // Переключатель периода: День / Неделя / Месяц / Год.
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<ProgressPeriod>(
-            segments: [
+        if (AppVariant.uiBeta)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               for (final period in ProgressPeriod.values)
-                ButtonSegment<ProgressPeriod>(
-                  value: period,
+                ChoiceChip(
                   label: Text(period.label),
+                  selected: _period == period,
+                  onSelected: (_) => _changeProgressPeriod(period),
                 ),
             ],
-            selected: {_period},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) =>
-                _changeProgressPeriod(selection.first),
+          )
+        else
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ProgressPeriod>(
+              segments: [
+                for (final period in ProgressPeriod.values)
+                  ButtonSegment<ProgressPeriod>(
+                    value: period,
+                    label: Text(period.label),
+                  ),
+              ],
+              selected: {_period},
+              showSelectedIcon: false,
+              onSelectionChanged: (selection) =>
+                  _changeProgressPeriod(selection.first),
+            ),
           ),
-        ),
         const SizedBox(height: 12),
         Card(
           elevation: 2,

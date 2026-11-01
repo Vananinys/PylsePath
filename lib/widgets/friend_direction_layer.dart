@@ -6,6 +6,42 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/friend_profile.dart';
+import '../services/group_ride_service.dart';
+
+/// Meeting aids belong to the accepted ride roster, including before start.
+List<FriendProfile> rideDirectionFriends({
+  required String? room,
+  required String? userId,
+  required List<GroupMember> members,
+  required List<FriendProfile> friends,
+  bool recording = false,
+  String? workoutRoom,
+}) {
+  if (room == null ||
+      userId == null ||
+      !members.any((member) => member.userId == userId) ||
+      recording && workoutRoom != room) {
+    return const [];
+  }
+  final authorizedFriends = {for (final friend in friends) friend.id: friend};
+  return [
+    for (final member in members)
+      if (member.userId != userId)
+        if (member.latitude != null && member.longitude != null)
+          FriendProfile(
+            id: member.userId,
+            username: member.username,
+            avatarUrl: member.avatarUrl,
+            liveLatitude: member.latitude,
+            liveLongitude: member.longitude,
+            liveUpdatedAt: member.updatedAt,
+            livePaused: member.workoutState == 'paused',
+          )
+        else if (authorizedFriends[member.userId]
+            case final FriendProfile friend)
+          friend,
+  ];
+}
 
 /// Screen coordinates, including map rotation and the closest world copy.
 Offset friendScreenPosition(MapCamera camera, LatLng point) {

@@ -1,3 +1,5 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -180,7 +182,7 @@ class _RideHeatmapScreenState extends State<LegacyRideHeatmapScreen> {
                 child: Text(_status, style: const TextStyle(fontSize: 12)),
               ),
               Expanded(
-                child: FlutterMap(
+                child: MainMapGateway(title: 'Карта активности', autoOpen: true, map: FlutterMap(
                   options: MapOptions(
                     initialCenter: _center,
                     initialZoom: 12,
@@ -193,7 +195,7 @@ class _RideHeatmapScreenState extends State<LegacyRideHeatmapScreen> {
                           ),
                   ),
                   children: [
-                    TileLayer(
+                    if (!AppVariant.uiBeta) TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       tileProvider: OfflineMapsService.tileProvider(),
@@ -212,7 +214,7 @@ class _RideHeatmapScreenState extends State<LegacyRideHeatmapScreen> {
                       child: MapCredits(),
                     ),
                   ],
-                ),
+                )),
               ),
               const SafeArea(
                 top: false,

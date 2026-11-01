@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -29,7 +32,8 @@ class RideHeatmapScreen extends StatefulWidget {
 }
 
 class _HeatmapExplorerState extends State<RideHeatmapScreen> {
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   final _repo = WorkoutHistoryRepository();
   List<SavedRoute> _rides = [];
   bool _loading = true, _busy = false, _ready = false;
@@ -462,12 +466,13 @@ class _HeatmapExplorerState extends State<RideHeatmapScreen> {
                     max: 10,
                     onChanged: (v) => change(() => _width = v),
                   ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Тёмная подложка'),
-                    value: _dark,
-                    onChanged: (v) => change(() => _dark = v),
-                  ),
+                  if (!AppVariant.uiBeta)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Тёмная подложка'),
+                      value: _dark,
+                      onChanged: (v) => change(() => _dark = v),
+                    ),
                   if (widget.previewRides == null)
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -517,7 +522,7 @@ class _HeatmapExplorerState extends State<RideHeatmapScreen> {
       : '${_filter.start!.toString().substring(0, 10)} — ${_filter.end?.toString().substring(0, 10) ?? 'сегодня'}';
   @override
   void dispose() {
-    _map.dispose();
+    _localMap.dispose();
     super.dispose();
   }
 
@@ -571,66 +576,127 @@ class _HeatmapExplorerState extends State<RideHeatmapScreen> {
               Expanded(
                 child: Stack(
                   children: [
-                    FlutterMap(
-                      mapController: _map,
-                      options: MapOptions(
-                        backgroundColor: _dark
-                            ? const Color(0xFF151821)
-                            : const Color(0xFFF1F1ED),
-                        initialCenter: const LatLng(52.54, 85.2),
-                        initialZoom: 12,
-                        onMapReady: () {
-                          _ready = true;
-                          _fit();
-                        },
-                        onTap: (_, point) => _inspect(point),
-                      ),
-                      children: [
-                        ColorFiltered(
-                          // Darken the key-free OSM tiles locally. Only the
-                          // basemap is filtered; heat colours stay unchanged.
-                          colorFilter: ColorFilter.matrix(_dark
-                              ? const [
-                                  -.30, -.30, -.30, 0, 235,
-                                  -.30, -.30, -.30, 0, 238,
-                                  -.30, -.30, -.30, 0, 245,
-                                  0, 0, 0, 1, 0,
-                                ]
-                              : const [
-                                  1, 0, 0, 0, 0,
-                                  0, 1, 0, 0, 0,
-                                  0, 0, 1, 0, 0,
-                                  0, 0, 0, 1, 0,
-                                ]),
-                          child: TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            tileProvider:
-                                widget.tileProvider ??
-                                OfflineMapsService.tileProvider(),
-                            userAgentPackageName: 'com.pulsepath.app',
-                            maxNativeZoom: 19,
+                    MainMapGateway(
+                      controls: (_) => Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Text(_status),
+                          TextButton.icon(
+                            onPressed: _settings,
+                            icon: const Icon(Icons.tune),
+                            label: const Text('Фильтры и оформление'),
                           ),
-                        ),
-                        HeatmapPathLayer(
-                          personal: _personal,
-                          public: _public && widget.previewRides == null,
-                          filter: _filter,
-                          rides: _rides,
-                          palette: _palette,
-                          opacity: _opacity,
-                          width: _width,
-                          revision: _revision,
-                          onStatus: (s) {
-                            if (mounted && s != _status)
-                              setState(() => _status = s);
+                          IconButton(
+                            onPressed: _fit,
+                            tooltip: 'Показать треки',
+                            icon: const Icon(Icons.fit_screen),
+                          ),
+                          IconButton(
+                            onPressed: _locate,
+                            tooltip: 'Моё местоположение',
+                            icon: const Icon(Icons.my_location),
+                          ),
+                        ],
+                      ),
+                      keepCamera: true,
+                      title: 'Карта тренировок',
+                      autoOpen: true,
+                      map: FlutterMap(
+                        mapController: _map,
+                        options: MapOptions(
+                          backgroundColor: _dark
+                              ? const Color(0xFF151821)
+                              : const Color(0xFFF1F1ED),
+                          initialCenter: const LatLng(52.54, 85.2),
+                          initialZoom: 12,
+                          onMapReady: () {
+                            _ready = true;
+                            _fit();
                           },
+                          onTap: (_, point) => _inspect(point),
                         ),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: MapCredits(),
-                        ),
-                      ],
+                        children: [
+                          if (!AppVariant.uiBeta)
+                            ColorFiltered(
+                              // Darken the key-free OSM tiles locally. Only the
+                              // basemap is filtered; heat colours stay unchanged.
+                              colorFilter: ColorFilter.matrix(
+                                _dark
+                                    ? const [
+                                        -.30,
+                                        -.30,
+                                        -.30,
+                                        0,
+                                        235,
+                                        -.30,
+                                        -.30,
+                                        -.30,
+                                        0,
+                                        238,
+                                        -.30,
+                                        -.30,
+                                        -.30,
+                                        0,
+                                        245,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                      ]
+                                    : const [
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                      ],
+                              ),
+                              child: TileLayer(
+                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                tileProvider:
+                                    widget.tileProvider ??
+                                    OfflineMapsService.tileProvider(),
+                                userAgentPackageName: 'com.pulsepath.app',
+                                maxNativeZoom: 19,
+                              ),
+                            ),
+                          HeatmapPathLayer(
+                            personal: _personal,
+                            public: _public && widget.previewRides == null,
+                            filter: _filter,
+                            rides: _rides,
+                            palette: _palette,
+                            opacity: _opacity,
+                            width: _width,
+                            revision: _revision,
+                            onStatus: (s) {
+                              if (mounted && s != _status)
+                                setState(() => _status = s);
+                            },
+                          ),
+                          Align(
+                            alignment: Alignment.bottomRight,
+                            child: MapCredits(),
+                          ),
+                        ],
+                      ),
                     ),
                     Positioned(
                       right: 12,

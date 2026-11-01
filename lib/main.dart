@@ -26,6 +26,7 @@ import 'services/smooth_map_position.dart';
 import 'services/smooth_map_heading.dart';
 import 'widgets/friend_motion_layer.dart';
 import 'widgets/friend_direction_layer.dart';
+import 'widgets/primary_map_portal.dart';
 import 'screens/events_screen.dart';
 import 'widgets/friend_trails_layer.dart';
 import 'services/owned_trail_style_service.dart';
@@ -1154,374 +1155,460 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
         body: Stack(
           children: [
             // Message notifications use the phone UI. Only ride achievements get an in-app banner.
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _navigationController.currentLocation,
-                initialZoom: 16.0,
-                // При блокировке экрана отключаем все жесты карты: защита от
-                // случайных нажатий (карман / дождевик).
-                interactionOptions: InteractionOptions(
-                  flags: _isScreenLocked
-                      ? InteractiveFlag.none
-                      : InteractiveFlag.all,
-                ),
-                onPositionChanged: (position, hasGesture) {
-                  if (hasGesture &&
-                      _navigationController.isFollowingUser &&
-                      _cameraLockMode != CameraLockMode.free) {
-                    debugPrint('User gesture detected, switching to free mode');
+            PrimaryMapPortal(
+              controller: _mapController,
+              locate: () =>
+                  _navigationController.gpsSignal.value.updatedAt == null
+                  ? null
+                  : _navigationController.currentLocation,
+              onLayers: _chooseMapLayer,
+              onOpen: () => _setCameraLockMode(CameraLockMode.free),
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _navigationController.currentLocation,
+                  initialZoom: 16.0,
+                  // При блокировке экрана отключаем все жесты карты: защита от
+                  // случайных нажатий (карман / дождевик).
+                  interactionOptions: InteractionOptions(
+                    flags: _isScreenLocked
+                        ? InteractiveFlag.none
+                        : InteractiveFlag.all,
+                  ),
+                  onPositionChanged: (position, hasGesture) {
+                    PrimaryMapNavigation.instance.camera(position, hasGesture);
+                    if (hasGesture &&
+                        _navigationController.isFollowingUser &&
+                        _cameraLockMode != CameraLockMode.free) {
+                      debugPrint(
+                        'User gesture detected, switching to free mode',
+                      );
+                      setState(() {
+                        _navigationController.setFollowingUser(false);
+                        // Держим autoRotateMap в согласии с режимом камеры,
+                        // иначе карта продолжит доворачиваться по компасу.
+                        _navigationController.setAutoRotateMap(false);
+                        _cameraLockMode = CameraLockMode.free;
+                      });
+                    }
+                  },
+                  onTap: (tap, point) {
+                    if (PrimaryMapNavigation.instance.tap(tap, point)) return;
+                    FocusScope.of(context).unfocus();
+                    setState(() => _searchResults = []);
+                  },
+                  onLongPress: (tap, point) {
+                    if (!PrimaryMapNavigation.instance.longPress(tap, point))
+                      _onLongPressMap(point);
+                  },
+                  onMapEvent: (event) {
+                    // Догрузка парковок при перемещении карты (с дебаунсом).
+                    if (_showParkingLayer && !_parkingsLoading) {
+                      _parkingsDebounce?.cancel();
+                      _parkingsDebounce = Timer(
+                        const Duration(milliseconds: 600),
+                        () => unawaited(_loadParkingsForViewport()),
+                      );
+                    }
+                  },
+                  onMapReady: () {
                     setState(() {
-                      _navigationController.setFollowingUser(false);
-                      // Держим autoRotateMap в согласии с режимом камеры,
-                      // иначе карта продолжит доворачиваться по компасу.
-                      _navigationController.setAutoRotateMap(false);
-                      _cameraLockMode = CameraLockMode.free;
+                      _isMapReady = true;
                     });
-                  }
-                },
-                onTap: (_, __) {
-                  FocusScope.of(context).unfocus();
-                  setState(() => _searchResults = []);
-                },
-                onLongPress: (_, point) => _onLongPressMap(point),
-                onMapEvent: (event) {
-                  // Догрузка парковок при перемещении карты (с дебаунсом).
-                  if (_showParkingLayer && !_parkingsLoading) {
-                    _parkingsDebounce?.cancel();
-                    _parkingsDebounce = Timer(
-                      const Duration(milliseconds: 600),
-                      () => unawaited(_loadParkingsForViewport()),
-                    );
-                  }
-                },
-                onMapReady: () {
-                  setState(() {
-                    _isMapReady = true;
-                  });
-                  // A fix can arrive before FlutterMap finishes its first frame.
-                  _onDisplayedPositionChanged();
-                  // Городские метки: загрузка + realtime, когда камера готова.
-                  unawaited(_refreshMapMarks());
-                  unawaited(_subscribeMapMarks());
-                  if (_importedGpxPendingFit) {
-                    _importedGpxPendingFit = false;
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _fitRoute(),
-                    );
-                  }
-                },
-              ),
-              children: [
-                if (!_useOfflineMap || OfflineMapsService.isAvailable)
-                  TileLayer(
-                    key: ValueKey('$_mapLayerIndex:${_useOfflineMap}'),
-                    urlTemplate: _usePreparedMapSource
-                        ? OfflineMapsService.routeTileUrl
-                        : _mapLayerIndex == 3
-                        ? SatelliteMap.template
-                        : _MapScreenStateBase._mapLayerUrls[_mapLayerIndex],
-                    maxNativeZoom: _usePreparedMapSource
-                        ? 16
-                        : _mapLayerIndex == 3
-                        ? SatelliteMap.maxZoom
-                        : 19,
-                    subdomains: const ['a', 'b', 'c'],
-                    // Кэширование тайлов (офлайн-карты); без FMTC — сетевой провайдер.
-                    tileProvider: _useOfflineMap
-                        ? OfflineMapsService.tileProvider(offlineOnly: true)
-                        : _mapLayerIndex == 3
-                        ? NetworkTileProvider()
-                        : OfflineMapsService.tileProvider(),
-                    userAgentPackageName: 'com.pulsepath.app',
-                  ),
-                if (_heatMode != 0)
-                  HeatmapPathLayer(
-                    revision: _heatRevision,
-                    personal: _heatMode == 1 || _heatMode == 3,
-                    public: _heatMode == 2 || _heatMode == 3,
-                    onStatus: (status) {
-                      if (mounted && _heatStatus != status) {
-                        setState(() => _heatStatus = status);
-                      }
-                    },
-                  ),
-                // Путь рисуем над тайлами, но до слоёв маркеров: маршрут не
-                // должен перекрывать аватары друзей и значок пользователя.
-                if (_navigationController.routePoints.isNotEmpty)
-                  ActivityTrailLayer(
-                    segments: _navigationController.routeSegments,
-                    activity: _navigationController.workoutActivity,
-                    transport: _navigationController.gearVehicle?.transportType,
-                    baseColor: NavigationPreferences.instance.routeColor,
-                    baseWidth: NavigationPreferences.instance.lineWidth,
-                  ),
-                MarkerLayer(
-                  markers: [
-                    for (
-                      var i = 0;
-                      i < _navigationController.routeWaypoints.length;
-                      i++
-                    )
-                      Marker(
-                        point: _navigationController.routeWaypoints[i],
-                        width: 30,
-                        height: 30,
-                        rotate: true,
-                        child: Tooltip(
-                          message: 'Остановка ${i + 1}',
-                          child: Container(
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.deepOrange,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: Text(
-                              '${i + 1}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    for (final member in GroupRideService().members)
-                      if (member.userId != _chatService.userId &&
-                          member.isLive &&
-                          member.latitude != null &&
-                          member.longitude != null &&
-                          !_navigationController.friends.any(
-                            (friend) =>
-                                friend.id == member.userId &&
-                                friend.hasLivePosition &&
-                                friend.hasFreshMotion,
-                          ))
-                        Marker(
-                          point: LatLng(member.latitude!, member.longitude!),
-                          width: 52,
-                          height: 52,
-                          rotate: true,
-                          child: Tooltip(
-                            message:
-                                '${member.username} · ${(member.distanceMeters / 1000).toStringAsFixed(1)} км',
-                            child: CircleAvatar(
-                              backgroundColor: Colors.deepOrange,
-                              child: Text(
-                                member.username.isEmpty
-                                    ? 'Р'
-                                    : member.username.characters.first,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                  ],
+                    // A fix can arrive before FlutterMap finishes its first frame.
+                    _onDisplayedPositionChanged();
+                    // Городские метки: загрузка + realtime, когда камера готова.
+                    unawaited(_refreshMapMarks());
+                    unawaited(_subscribeMapMarks());
+                    if (_importedGpxPendingFit) {
+                      _importedGpxPendingFit = false;
+                      WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _fitRoute(),
+                      );
+                    }
+                  },
                 ),
-                ValueListenableBuilder<LatLng>(
-                  valueListenable: _displayPosition,
-                  builder: (context, position, _) => MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: position,
-                        width: 96,
-                        height: 96,
-                        // true: flutter_map сам компенсирует поворот карты
-                        // (MarkerLayer -> Transform.rotate(-map.rotationRad)),
-                        // поэтому screenAngleDeg в RiderMarker — экранный угол,
-                        // который считает _buildUserLocationMarker.
-                        rotate: true,
-                        child: _buildUserLocationMarker(),
-                      ),
-                      if (_navigationController.finishPoint != null)
-                        Marker(
-                          point: _navigationController.finishPoint!,
-                          width: 44,
-                          height: 44,
-                          // true: пин должен всегда стоять вертикально, даже когда
-                          // карта повёрнута в режиме "По направлению взгляда".
-                          rotate: true,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.deepOrange,
-                            size: 44,
+                children: [
+                  PrimaryMapBaseLayers(
+                    child: Stack(
+                      children: [
+                        if (!_useOfflineMap || OfflineMapsService.isAvailable)
+                          TileLayer(
+                            key: ValueKey('$_mapLayerIndex:${_useOfflineMap}'),
+                            urlTemplate: _usePreparedMapSource
+                                ? OfflineMapsService.routeTileUrl
+                                : _mapLayerIndex == 3
+                                ? SatelliteMap.template
+                                : _MapScreenStateBase
+                                      ._mapLayerUrls[_mapLayerIndex],
+                            maxNativeZoom: _usePreparedMapSource
+                                ? 16
+                                : _mapLayerIndex == 3
+                                ? SatelliteMap.maxZoom
+                                : 19,
+                            subdomains: const ['a', 'b', 'c'],
+                            // Кэширование тайлов (офлайн-карты); без FMTC — сетевой провайдер.
+                            tileProvider: _useOfflineMap
+                                ? OfflineMapsService.tileProvider(
+                                    offlineOnly: true,
+                                  )
+                                : _mapLayerIndex == 3
+                                ? NetworkTileProvider()
+                                : OfflineMapsService.tileProvider(),
+                            userAgentPackageName: 'com.pulsepath.app',
                           ),
+                        if (_heatMode != 0)
+                          HeatmapPathLayer(
+                            revision: _heatRevision,
+                            personal: _heatMode == 1 || _heatMode == 3,
+                            public: _heatMode == 2 || _heatMode == 3,
+                            onStatus: (status) {
+                              if (mounted && _heatStatus != status) {
+                                setState(() => _heatStatus = status);
+                              }
+                            },
+                          ),
+                        // Путь рисуем над тайлами, но до слоёв маркеров: маршрут не
+                        // должен перекрывать аватары друзей и значок пользователя.
+                        if (_navigationController.routePoints.isNotEmpty)
+                          ActivityTrailLayer(
+                            segments: _navigationController.routeSegments,
+                            activity: _navigationController.workoutActivity,
+                            transport: _navigationController
+                                .gearVehicle
+                                ?.transportType,
+                            baseColor:
+                                NavigationPreferences.instance.routeColor,
+                            baseWidth: NavigationPreferences.instance.lineWidth,
+                          ),
+                        MarkerLayer(
+                          markers: [
+                            for (
+                              var i = 0;
+                              i < _navigationController.routeWaypoints.length;
+                              i++
+                            )
+                              Marker(
+                                point: _navigationController.routeWaypoints[i],
+                                width: 30,
+                                height: 30,
+                                rotate: true,
+                                child: Tooltip(
+                                  message: 'Остановка ${i + 1}',
+                                  child: Container(
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.deepOrange,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            for (final member in GroupRideService().members)
+                              if (member.userId != _chatService.userId &&
+                                  member.isLive &&
+                                  member.latitude != null &&
+                                  member.longitude != null &&
+                                  !_navigationController.friends.any(
+                                    (friend) =>
+                                        friend.id == member.userId &&
+                                        friend.hasLivePosition &&
+                                        friend.hasFreshMotion,
+                                  ))
+                                Marker(
+                                  point: LatLng(
+                                    member.latitude!,
+                                    member.longitude!,
+                                  ),
+                                  width: 52,
+                                  height: 52,
+                                  rotate: true,
+                                  child: Tooltip(
+                                    message:
+                                        '${member.username} · ${(member.distanceMeters / 1000).toStringAsFixed(1)} км',
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.deepOrange,
+                                      child: Text(
+                                        member.username.isEmpty
+                                            ? 'Р'
+                                            : member.username.characters.first,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                          ],
                         ),
-                    ],
-                  ),
-                ), // ValueListenableBuilder(positionNotifier)
-                if (!isTracking)
-                  ValueListenableBuilder<LatLng>(
-                    valueListenable: _navigationController.positionNotifier,
-                    builder: (context, position, _) => FriendTrailsLayer(
-                      key: ValueKey('idle-trail-${UserScope.currentUserId()}'),
-                      idle: true,
-                      friends:
-                          _navigationController.gpsSignal.value.updatedAt ==
-                              null
-                          ? const []
-                          : [
-                              FriendProfile(
-                                id: 'self',
-                                username: '',
-                                liveLatitude: position.latitude,
-                                liveLongitude: position.longitude,
-                                liveUpdatedAt: _navigationController
-                                    .gpsSignal
-                                    .value
-                                    .updatedAt,
-                                liveActivity: 'walking',
+                        ValueListenableBuilder<LatLng>(
+                          valueListenable: _displayPosition,
+                          builder: (context, position, _) => MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: position,
+                                width: 96,
+                                height: 96,
+                                // true: flutter_map сам компенсирует поворот карты
+                                // (MarkerLayer -> Transform.rotate(-map.rotationRad)),
+                                // поэтому screenAngleDeg в RiderMarker — экранный угол,
+                                // который считает _buildUserLocationMarker.
+                                rotate: true,
+                                child: _buildUserLocationMarker(),
+                              ),
+                              if (_navigationController.finishPoint != null)
+                                Marker(
+                                  point: _navigationController.finishPoint!,
+                                  width: 44,
+                                  height: 44,
+                                  // true: пин должен всегда стоять вертикально, даже когда
+                                  // карта повёрнута в режиме "По направлению взгляда".
+                                  rotate: true,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.deepOrange,
+                                    size: 44,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ), // ValueListenableBuilder(positionNotifier)
+                        if (!isTracking)
+                          ValueListenableBuilder<LatLng>(
+                            valueListenable:
+                                _navigationController.positionNotifier,
+                            builder: (context, position, _) =>
+                                FriendTrailsLayer(
+                                  key: ValueKey(
+                                    'idle-trail-${UserScope.currentUserId()}',
+                                  ),
+                                  idle: true,
+                                  friends:
+                                      _navigationController
+                                              .gpsSignal
+                                              .value
+                                              .updatedAt ==
+                                          null
+                                      ? const []
+                                      : [
+                                          FriendProfile(
+                                            id: 'self',
+                                            username: '',
+                                            liveLatitude: position.latitude,
+                                            liveLongitude: position.longitude,
+                                            liveUpdatedAt: _navigationController
+                                                .gpsSignal
+                                                .value
+                                                .updatedAt,
+                                            liveActivity: 'walking',
+                                          ),
+                                        ],
+                                ),
+                          ),
+                        FriendMotionLayer(
+                          key: ValueKey(
+                            'friend-motion-${UserScope.currentUserId()}',
+                          ),
+                          friends: !_navigationController.canDisplayFriendTrails
+                              ? const []
+                              : _navigationController.friendsOnMap,
+                          markerBuilder: (friend) => _buildFriendMarker(
+                            friend,
+                            selected: _selectedMapFriend?.id == friend.id,
+                          ),
+                          onSelect: (friend) =>
+                              setState(() => _selectedMapFriend = friend),
+                        ),
+                        if (_navigationController.recordedPath.isNotEmpty)
+                          ActivityTrailLayer(
+                            segments: _navigationController.recordedSegments,
+                            activity: _navigationController.workoutActivity,
+                            transport: _navigationController
+                                .gearVehicle
+                                ?.transportType,
+                            recorded: true,
+                            baseColor: Colors.greenAccent.withValues(alpha: .8),
+                          ),
+                        // Летящие стикеры: анимация прилёта к маркеру друга
+                        // (только при включённом игровом модуле).
+                        // Городские метки проблем (urban-модуль): эмодзи-пины.
+                        if (urbanEnabled)
+                          MarkerLayer(
+                            markers: [
+                              for (final mark in _mapMarks)
+                                Marker(
+                                  point: LatLng(mark.latitude, mark.longitude),
+                                  width: 46,
+                                  height: 46,
+                                  alignment: Alignment.topCenter,
+                                  child: GestureDetector(
+                                    onTap: () => _showMarkDetails(mark),
+                                    child: Opacity(
+                                      // Свежие метки ярче; «стареющие» — полупрозрачные.
+                                      opacity: 0.45 + mark.freshness * 0.55,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: mark.type.color,
+                                            width: 2.5,
+                                          ),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Colors.black26,
+                                              blurRadius: 6,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            mark.type.emoji,
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        // Индикатор выбранной точки для будущего отчёта.
+                        if (urbanEnabled && _pendingReportPoint != null)
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: _pendingReportPoint!,
+                                width: 28,
+                                height: 28,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.amber,
+                                  size: 28,
+                                ),
                               ),
                             ],
-                    ),
-                  ),
-                FriendMotionLayer(
-                  key: ValueKey('friend-motion-${UserScope.currentUserId()}'),
-                  friends: !_navigationController.canDisplayFriendTrails
-                      ? const []
-                      : _navigationController.friendsOnMap,
-                  markerBuilder: (friend) => _buildFriendMarker(
-                    friend,
-                    selected: _selectedMapFriend?.id == friend.id,
-                  ),
-                  onSelect: (friend) =>
-                      setState(() => _selectedMapFriend = friend),
-                ),
-                if (_navigationController.recordedPath.isNotEmpty)
-                  ActivityTrailLayer(
-                    segments: _navigationController.recordedSegments,
-                    activity: _navigationController.workoutActivity,
-                    transport: _navigationController.gearVehicle?.transportType,
-                    recorded: true,
-                    baseColor: Colors.greenAccent.withValues(alpha: .8),
-                  ),
-                // Летящие стикеры: анимация прилёта к маркеру друга
-                // (только при включённом игровом модуле).
-                // Городские метки проблем (urban-модуль): эмодзи-пины.
-                if (urbanEnabled)
-                  MarkerLayer(
-                    markers: [
-                      for (final mark in _mapMarks)
-                        Marker(
-                          point: LatLng(mark.latitude, mark.longitude),
-                          width: 46,
-                          height: 46,
-                          alignment: Alignment.topCenter,
-                          child: GestureDetector(
-                            onTap: () => _showMarkDetails(mark),
-                            child: Opacity(
-                              // Свежие метки ярче; «стареющие» — полупрозрачные.
-                              opacity: 0.45 + mark.freshness * 0.55,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: mark.type.color,
-                                    width: 2.5,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black26,
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
+                          ),
+                        // Слой парковок OSM (urban-модуль, кнопка 🅿️).
+                        if (urbanEnabled &&
+                            _showParkingLayer &&
+                            _parkings.isNotEmpty)
+                          MarkerLayer(
+                            markers: [
+                              for (final parking in _parkings)
+                                Marker(
+                                  point: parking.point,
+                                  width: 34,
+                                  height: 34,
+                                  alignment: Alignment.topCenter,
+                                  child: Tooltip(
+                                    message: parking.name,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.blue),
+                                      ),
+                                      child: const Center(
+                                        child: Text(
+                                          'P',
+                                          style: TextStyle(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ],
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    mark.type.emoji,
-                                    style: const TextStyle(fontSize: 20),
                                   ),
                                 ),
-                              ),
-                            ),
+                            ],
                           ),
-                        ),
-                    ],
-                  ),
-                // Индикатор выбранной точки для будущего отчёта.
-                if (urbanEnabled && _pendingReportPoint != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: _pendingReportPoint!,
-                        width: 28,
-                        height: 28,
-                        child: const Icon(
-                          Icons.location_on,
-                          color: Colors.amber,
-                          size: 28,
-                        ),
-                      ),
-                    ],
-                  ),
-                // Слой парковок OSM (urban-модуль, кнопка 🅿️).
-                if (urbanEnabled && _showParkingLayer && _parkings.isNotEmpty)
-                  MarkerLayer(
-                    markers: [
-                      for (final parking in _parkings)
-                        Marker(
-                          point: parking.point,
-                          width: 34,
-                          height: 34,
-                          alignment: Alignment.topCenter,
-                          child: Tooltip(
-                            message: parking.name,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.blue),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'P',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                        if (AppVariant.uiBeta &&
+                            (!_isPreRideOpen || isTracking) &&
+                            !_isScreenLocked &&
+                            _selectedMapFriend == null &&
+                            _searchResults.isEmpty &&
+                            !_searchFocusNode.hasFocus &&
+                            MediaQuery.viewInsetsOf(context).bottom == 0)
+                          ValueListenableBuilder<LatLng>(
+                            valueListenable:
+                                _navigationController.positionNotifier,
+                            builder: (context, position, _) =>
+                                ListenableBuilder(
+                                  listenable: GroupRideService(),
+                                  builder: (context, _) => FriendDirectionLayer(
+                                    friends:
+                                        !_navigationController
+                                            .canDisplayFriendTrails
+                                        ? const []
+                                        : rideDirectionFriends(
+                                            room:
+                                                GroupRideService().activeRoomId,
+                                            userId:
+                                                UserScope.currentUserId() ==
+                                                    GroupRideService().userId
+                                                ? GroupRideService().userId
+                                                : null,
+                                            members: GroupRideService().members,
+                                            friends: _navigationController
+                                                .friendsOnMap,
+                                            recording: isTracking,
+                                            workoutRoom: _navigationController
+                                                .workoutGroupRoomId,
+                                          ),
+                                    myPosition:
+                                        _navigationController
+                                                .gpsSignal
+                                                .value
+                                                .updatedAt ==
+                                            null
+                                        ? null
+                                        : position,
+                                    insets: EdgeInsets.fromLTRB(
+                                      12,
+                                      MediaQuery.paddingOf(context).top +
+                                          (showNavigationCard ? 260 : 136),
+                                      72,
+                                      bottomPanelHeight + 12,
+                                    ),
+                                    onSelect: (friend) {
+                                      _setCameraLockMode(CameraLockMode.free);
+                                      _mapController.move(
+                                        LatLng(
+                                          friend.liveLatitude!,
+                                          friend.liveLongitude!,
+                                        ),
+                                        _mapController.camera.zoom,
+                                      );
+                                      setState(
+                                        () => _selectedMapFriend = friend,
+                                      );
+                                    },
                                   ),
                                 ),
-                              ),
-                            ),
                           ),
-                        ),
-                    ],
-                  ),
-                if (AppVariant.uiBeta &&
-                    (!_isPreRideOpen || isTracking) &&
-                    !_isScreenLocked &&
-                    _selectedMapFriend == null &&
-                    _searchResults.isEmpty &&
-                    !_searchFocusNode.hasFocus &&
-                    MediaQuery.viewInsetsOf(context).bottom == 0)
-                  ValueListenableBuilder<LatLng>(
-                    valueListenable: _navigationController.positionNotifier,
-                    builder: (context, position, _) => FriendDirectionLayer(
-                      friends: _navigationController.canDisplayFriendTrails
-                          ? _navigationController.friendsOnMap : const [],
-                      myPosition: _navigationController.gpsSignal.value.updatedAt == null
-                          ? null : position,
-                      insets: EdgeInsets.fromLTRB(
-                        12,
-                        MediaQuery.paddingOf(context).top + (showNavigationCard ? 260 : 136),
-                        72,
-                        bottomPanelHeight + 12,
-                      ),
-                      onSelect: (friend) {
-                        _setCameraLockMode(CameraLockMode.free);
-                        _mapController.move(
-                          LatLng(friend.liveLatitude!, friend.liveLongitude!),
-                          _mapController.camera.zoom,
-                        );
-                        setState(() => _selectedMapFriend = friend);
-                      },
+                      ],
                     ),
                   ),
-              ],
+                  const PrimaryMapTaskLayers(),
+                ],
+              ),
             ),
 
             if (!_isPreRideOpen || isTracking)

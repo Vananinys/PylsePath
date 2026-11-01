@@ -1,3 +1,6 @@
+import '../config/app_variant.dart';
+import '../widgets/primary_map_portal.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -745,7 +748,8 @@ class _GroupRideMap extends StatefulWidget {
 }
 
 class _GroupRideMapState extends State<_GroupRideMap> {
-  final _map = MapController();
+  final _localMap = MapController();
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   bool _ready = false;
   @override
   void didUpdateWidget(_GroupRideMap old) {
@@ -759,7 +763,7 @@ class _GroupRideMapState extends State<_GroupRideMap> {
 
   @override
   void dispose() {
-    _map.dispose();
+    _localMap.dispose();
     super.dispose();
   }
 
@@ -782,108 +786,114 @@ class _GroupRideMapState extends State<_GroupRideMap> {
     ];
     return Stack(
       children: [
-        FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            onMapReady: () {
-              if (mounted) setState(() => _ready = true);
-            },
-            initialCenter:
-                visible.firstOrNull ??
-                widget.center ??
-                const LatLng(55.75, 37.62),
-            initialZoom: 14,
-            initialCameraFit: visible.length < 2
-                ? null
-                : CameraFit.bounds(
-                    bounds: LatLngBounds.fromPoints(visible),
-                    padding: const EdgeInsets.all(40),
-                    maxZoom: 16,
-                  ),
-          ),
-          children: [
-            if (!NavigationPreferences.instance.cachedMapOnly ||
-                OfflineMapsService.isAvailable)
-              TileLayer(
-                urlTemplate: OfflineMapsService.routeTileUrl,
-                tileProvider: OfflineMapsService.tileProvider(
-                  offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-                ),
-                userAgentPackageName: 'com.pulsepath.app',
-              ),
-            if (service.route != null)
-              PolylineLayer(
-                polylines: [
-                  for (final segment in service.route!.segments)
-                    Polyline(
-                      points: segment,
-                      color: Colors.deepOrange,
-                      strokeWidth: 4,
+        MainMapGateway(
+          title: 'Совместный заезд',
+          autoOpen: false,
+          map: FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              onMapReady: () {
+                if (mounted) setState(() => _ready = true);
+              },
+              initialCenter:
+                  (AppVariant.uiBeta ? widget.focus : null) ??
+                  visible.firstOrNull ??
+                  widget.center ??
+                  const LatLng(55.75, 37.62),
+              initialZoom: 14,
+              initialCameraFit: visible.length < 2 || AppVariant.uiBeta && widget.focus != null
+                  ? null
+                  : CameraFit.bounds(
+                      bounds: LatLngBounds.fromPoints(visible),
+                      padding: const EdgeInsets.all(40),
+                      maxZoom: 16,
                     ),
-                ],
-              ),
-            MarkerLayer(
-              markers: [
-                if (meeting != null)
-                  Marker(
-                    point: meeting,
-                    width: 44,
-                    height: 44,
-                    child: const Tooltip(
-                      message: 'Место сбора',
-                      child: Icon(
-                        Icons.flag_circle,
+            ),
+            children: [
+              if (!NavigationPreferences.instance.cachedMapOnly ||
+                  OfflineMapsService.isAvailable)
+                if (!AppVariant.uiBeta)
+                  TileLayer(
+                    urlTemplate: OfflineMapsService.routeTileUrl,
+                    tileProvider: OfflineMapsService.tileProvider(
+                      offlineOnly: NavigationPreferences.instance.cachedMapOnly,
+                    ),
+                    userAgentPackageName: 'com.pulsepath.app',
+                  ),
+              if (service.route != null)
+                PolylineLayer(
+                  polylines: [
+                    for (final segment in service.route!.segments)
+                      Polyline(
+                        points: segment,
                         color: Colors.deepOrange,
-                        size: 42,
+                        strokeWidth: 4,
                       ),
-                    ),
-                  ),
-                for (final event in events)
-                  Marker(
-                    point: event.point!,
-                    width: 44,
-                    height: 44,
-                    child: Tooltip(
-                      message: event.note.isEmpty
-                          ? event.kind.label
-                          : event.note,
-                      child: Icon(
-                        event.kind == GroupSignalKind.stop
-                            ? Icons.local_cafe
-                            : Icons.campaign,
-                        color: event.kind == GroupSignalKind.help
-                            ? Colors.red
-                            : Colors.teal,
-                        size: 36,
-                      ),
-                    ),
-                  ),
-                for (final member in people)
-                  Marker(
-                    point: LatLng(member.latitude!, member.longitude!),
-                    width: 36,
-                    height: 36,
-                    child: Tooltip(
-                      message: member.username,
-                      child: CircleAvatar(
-                        backgroundColor: Colors.teal,
-                        child: Text(
-                          member.username.isEmpty
-                              ? '?'
-                              : member.username.characters.first,
-                          style: const TextStyle(color: Colors.white),
+                  ],
+                ),
+              MarkerLayer(
+                markers: [
+                  if (meeting != null)
+                    Marker(
+                      point: meeting,
+                      width: 44,
+                      height: 44,
+                      child: const Tooltip(
+                        message: 'Место сбора',
+                        child: Icon(
+                          Icons.flag_circle,
+                          color: Colors.deepOrange,
+                          size: 42,
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const RichAttributionWidget(
-              attributions: [
-                TextSourceAttribution('© OpenStreetMap contributors'),
-              ],
-            ),
-          ],
+                  for (final event in events)
+                    Marker(
+                      point: event.point!,
+                      width: 44,
+                      height: 44,
+                      child: Tooltip(
+                        message: event.note.isEmpty
+                            ? event.kind.label
+                            : event.note,
+                        child: Icon(
+                          event.kind == GroupSignalKind.stop
+                              ? Icons.local_cafe
+                              : Icons.campaign,
+                          color: event.kind == GroupSignalKind.help
+                              ? Colors.red
+                              : Colors.teal,
+                          size: 36,
+                        ),
+                      ),
+                    ),
+                  for (final member in people)
+                    Marker(
+                      point: LatLng(member.latitude!, member.longitude!),
+                      width: 36,
+                      height: 36,
+                      child: Tooltip(
+                        message: member.username,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.teal,
+                          child: Text(
+                            member.username.isEmpty
+                                ? '?'
+                                : member.username.characters.first,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const RichAttributionWidget(
+                attributions: [
+                  TextSourceAttribution('© OpenStreetMap contributors'),
+                ],
+              ),
+            ],
+          ),
         ),
         Positioned(
           right: 8,
