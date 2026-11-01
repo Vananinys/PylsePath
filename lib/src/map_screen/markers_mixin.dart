@@ -4,11 +4,18 @@ part of '../../main.dart';
 mixin _MapMarkersMixin on _MapScreenStateBase {
   Widget _buildUserLocationMarker() {
     // Угол обновляется через headingListenable (до 50 Гц), без rebuild экрана.
-    return ValueListenableBuilder<double>(
-      valueListenable: _navigationController.headingListenable,
-      builder: (context, heading, _) {
-        return _buildUserLocationMarkerInner(heading);
-      },
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        _navigationController.headingListenable,
+        _navigationController.gpsSignal,
+        _navigationController.workoutTick,
+      ]),
+      builder: (context, _) => ValueListenableBuilder<double>(
+        valueListenable: _navigationController.headingListenable,
+        builder: (context, heading, _) {
+          return _buildUserLocationMarkerInner(heading);
+        },
+      ),
     );
   }
 
@@ -48,8 +55,8 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
         (url.startsWith('http://') || url.startsWith('https://'));
 
     return SizedBox(
-      width: 64,
-      height: 76,
+      width: 96,
+      height: 96,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -127,9 +134,12 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: const Color(0xFF1E88E5)),
             ),
-            child: const Text(
-              'Вы',
-              maxLines: 1,
+            child: Text(
+              _navigationController.gpsSignal.value.quality == GpsQuality.good
+                  ? 'Вы\n${_navigationController.instantSpeedKmh.toStringAsFixed(1)} км/ч'
+                  : 'Вы\nGPS…',
+              maxLines: 2,
+              textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 9,
@@ -203,7 +213,11 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
                   ),
                   if (friend.hasFreshMotion)
                     Text(
-                      friend.motionText,
+                      friend.liveSpeedKmh != null &&
+                              friend.liveSpeedKmh.isFinite &&
+                              friend.liveSpeedKmh >= 0
+                          ? '${friend.liveSpeedKmh.toStringAsFixed(1)} км/ч'
+                          : 'Скорость неизвестна',
                       maxLines: 2,
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,

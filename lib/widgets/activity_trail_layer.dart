@@ -145,7 +145,10 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
         transport: widget.transport,
         pattern: widget.live ? personal.style : null,
       );
-      if (widget.live && !enabled) { _pulse.stop(); return const SizedBox.shrink(); }
+      if (widget.live && !enabled) {
+        _pulse.stop();
+        return const SizedBox.shrink();
+      }
       final decorated =
           enabled &&
           (style != TrailStyle.line ||
@@ -222,6 +225,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
                     widget.live ? personal.spacing : prefs.spacing,
                     origin: origin,
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
+                    screenSized: widget.live,
                     phaseOffset: widget.phaseOffset,
                     effect: widget.live ? personal.effect : MotionEffect.none,
                     animation: animate ? _pulse : null,
@@ -244,6 +248,7 @@ class TrailPainter extends CustomPainter {
     this.spacing, {
     this.origin = Offset.zero,
     this.scale = 1,
+    this.screenSized = false,
     this.phaseOffset = 0,
     this.effect = MotionEffect.none,
     this.animation,
@@ -253,6 +258,7 @@ class TrailPainter extends CustomPainter {
   final List<List<Offset>> segments;
   final Offset origin;
   final double scale;
+  final bool screenSized;
   final double phaseOffset;
   final TrailStyle style;
   final Color color;
@@ -261,7 +267,7 @@ class TrailPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (style == TrailStyle.line && effect == MotionEffect.none) {
       final pen = Paint()
-        ..color = color
+        ..color = this.color
         ..strokeWidth = 3
         ..style = PaintingStyle.stroke;
       for (final segment in segments) {
@@ -274,16 +280,20 @@ class TrailPainter extends CustomPainter {
       }
       return;
     }
+    // Live cosmetics use pixels, not Mercator metres: zoom must not enlarge
+    // the symbols or leave long gaps. Recorded activity patterns stay unchanged.
+    final samplingSpacing = screenSized ? spacing / scale : spacing;
+    final symbolScale = screenSized ? 1.0 : scale;
     final stamps = sampleTrail(
       segments,
-      spacing,
+      samplingSpacing,
       Rect.fromLTWH(
         origin.dx / scale,
         origin.dy / scale,
         size.width / scale,
         size.height / scale,
       ).inflate(markerSize * 2 / scale),
-      phaseOffset: phaseOffset,
+      phaseOffset: phaseOffset + (screenSized ? samplingSpacing / 2 : 0),
     );
     canvas.save();
     canvas.translate(-origin.dx, -origin.dy);
@@ -298,7 +308,7 @@ class TrailPainter extends CustomPainter {
       canvas.save();
       canvas.translate(stamp.position.dx * scale, stamp.position.dy * scale);
       canvas.rotate(stamp.angle + math.pi / 2);
-      canvas.scale(markerSize / 12 * scale);
+      canvas.scale(markerSize / 12 * symbolScale);
       if (effect != MotionEffect.none) {
         final seed = stamp.identity * 2.399963;
         final end = segments.last.last;
@@ -484,6 +494,7 @@ class TrailPainter extends CustomPainter {
       old.segments != segments ||
       old.origin != origin ||
       old.scale != scale ||
+      old.screenSized != screenSized ||
       old.phaseOffset != phaseOffset ||
       old.style != style ||
       old.effect != effect ||
