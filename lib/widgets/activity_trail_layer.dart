@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,10 +11,16 @@ import '../models/activity_type.dart';
 import '../models/live_trail_style.dart';
 
 class TrailStamp {
-  const TrailStamp(this.position, this.angle, this.alternate);
+  const TrailStamp(
+    this.position,
+    this.angle,
+    this.alternate, [
+    this.identity = 0,
+  ]);
   final Offset position;
   final double angle;
   final bool alternate;
+  final int identity;
 }
 
 /// Bounded screen-space decoration. Gaps reset phase; no geographic data changes.
@@ -64,6 +72,7 @@ List<TrailStamp> sampleTrail(
               a + d * (distance / length),
               math.atan2(d.dy, d.dx),
               ((walked + distance) / spacing).floor().isOdd,
+              ((walked + distance) / spacing).floor(),
             ),
           );
         }
@@ -103,7 +112,18 @@ class ActivityTrailLayer extends StatefulWidget {
   State<ActivityTrailLayer> createState() => _ActivityTrailLayerState();
 }
 
-class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
+class _ActivityTrailLayerState extends State<ActivityTrailLayer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
   List<List<LatLng>>? _source;
   List<List<Offset>> _world = [];
   double? _zoom;
@@ -131,8 +151,15 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
           (style != TrailStyle.line ||
               (widget.live && personal.effect != MotionEffect.none)) &&
           camera.zoom >= 12;
-      if (decorated && (_source != widget.segments || _zoom != 16)) {
-        _source = widget.segments;
+      if (decorated &&
+          (_source == null ||
+              _source!.length != widget.segments.length ||
+              List.generate(
+                widget.segments.length,
+                (i) => !listEquals(_source![i], widget.segments[i]),
+              ).any((v) => v) ||
+              _zoom != 16)) {
+        _source = [for (final segment in widget.segments) List.of(segment)];
         _zoom = 16;
         _world = [
           for (final segment in widget.segments)
@@ -145,6 +172,12 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
             ],
         ];
       }
+      final animate =
+          decorated &&
+          personal.effect == MotionEffect.pulse &&
+          !MediaQuery.disableAnimationsOf(context);
+      if (animate && !_pulse.isAnimating) _pulse.repeat();
+      if (!animate && _pulse.isAnimating) _pulse.stop();
       final origin = Offset(camera.pixelOrigin.x, camera.pixelOrigin.y);
       return IgnorePointer(
         child: Stack(
@@ -191,6 +224,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer> {
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
                     phaseOffset: widget.phaseOffset,
                     effect: widget.live ? personal.effect : MotionEffect.none,
+                    animation: animate ? _pulse : null,
                   ),
                 ),
               ),
@@ -212,7 +246,9 @@ class TrailPainter extends CustomPainter {
     this.scale = 1,
     this.phaseOffset = 0,
     this.effect = MotionEffect.none,
-  });
+    this.animation,
+  }) : super(repaint: animation);
+  final Animation<double>? animation;
   final MotionEffect effect;
   final List<List<Offset>> segments;
   final Offset origin;
@@ -262,14 +298,29 @@ class TrailPainter extends CustomPainter {
       canvas.save();
       canvas.translate(stamp.position.dx * scale, stamp.position.dy * scale);
       canvas.rotate(stamp.angle + math.pi / 2);
-      canvas.scale(markerSize / 12 * math.min(1.0, scale));
+      canvas.scale(markerSize / 12 * scale);
       if (effect != MotionEffect.none) {
-        final seed = (stamp.position.dx * .13 + stamp.position.dy * .17);
+        final seed = stamp.identity * 2.399963;
         final end = segments.last.last;
         final fade = (1 - (stamp.position - end).distance / 320).clamp(
           .12,
           1.0,
         );
+        if (effect == MotionEffect.pulse) {
+          final wave = ((animation?.value ?? 0) - stamp.identity * .08) % 1;
+          final pen = Paint()
+            ..color = color.withValues(alpha: color.a * fade * (1 - wave))
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5;
+          canvas.drawCircle(Offset.zero, 2 + wave * 8, pen);
+          canvas.drawCircle(
+            Offset.zero,
+            1.8,
+            Paint()..color = color.withValues(alpha: color.a * fade),
+          );
+          canvas.restore();
+          continue;
+        }
         final palette = effect == MotionEffect.confetti
             ? [Colors.cyan, Colors.pink, Colors.amber, Colors.greenAccent]
             : effect == MotionEffect.ember
@@ -438,10 +489,11 @@ class TrailPainter extends CustomPainter {
       old.effect != effect ||
       old.color != color ||
       old.markerSize != markerSize ||
-      old.spacing != spacing;
+      old.spacing != spacing ||
+      old.animation != animation;
 }
 
-class TrailStylePreview extends StatelessWidget {
+class TrailStylePreview extends StatefulWidget {
   const TrailStylePreview({
     super.key,
     required this.appearance,
@@ -454,35 +506,63 @@ class TrailStylePreview extends StatelessWidget {
   final ActivityType activity;
   final String? transport;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 130,
-    child: LayoutBuilder(
-      builder: (context, box) {
-        final points = [
-          Offset(15, 105),
-          Offset(box.maxWidth * .3, 85),
-          Offset(box.maxWidth * .52, 25),
-          Offset(box.maxWidth * .75, 55),
-          Offset(box.maxWidth - 15, 25),
-        ];
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: CustomPaint(
-            painter: TrailPainter(
-              [points],
-              appearance.effective(activity, transport: transport),
-              appearance.color.withValues(alpha: appearance.opacity),
-              appearance.size,
-              appearance.spacing,
-              effect: effect,
-            ),
-            size: Size.infinite,
-          ),
-        );
-      },
-    ),
+  State<TrailStylePreview> createState() => _TrailStylePreviewState();
+}
+
+class _TrailStylePreviewState extends State<TrailStylePreview>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController animation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
   );
+  @override
+  void dispose() {
+    animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = widget.appearance,
+        activity = widget.activity,
+        transport = widget.transport,
+        effect = widget.effect;
+    final animate =
+        effect == MotionEffect.pulse &&
+        !MediaQuery.disableAnimationsOf(context);
+    if (animate && !animation.isAnimating) animation.repeat();
+    if (!animate) animation.stop();
+    return SizedBox(
+      height: 130,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final points = [
+            Offset(15, 105),
+            Offset(box.maxWidth * .3, 85),
+            Offset(box.maxWidth * .52, 25),
+            Offset(box.maxWidth * .75, 55),
+            Offset(box.maxWidth - 15, 25),
+          ];
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: CustomPaint(
+              painter: TrailPainter(
+                [points],
+                appearance.effective(activity, transport: transport),
+                appearance.color.withValues(alpha: appearance.opacity),
+                appearance.size,
+                appearance.spacing,
+                effect: effect,
+                animation: animate ? animation : null,
+              ),
+              size: Size.infinite,
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

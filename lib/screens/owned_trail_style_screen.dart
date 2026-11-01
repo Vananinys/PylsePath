@@ -170,21 +170,41 @@ class _OwnedTrailStyleScreenState extends State<OwnedTrailStyleScreen> {
                                 ? null
                                 : (v) => _change(_choice.copyWith(enabled: v)),
                           ),
-                          Wrap(
-                            spacing: 8,
-                            children: [
-                              for (final effect in MotionEffect.values)
-                                ChoiceChip(
-                                  label: Text(effect.label),
-                                  selected: effect == _choice.effect,
-                                  onSelected: _saving
-                                      ? null
-                                      : (_) => _change(
-                                          _choice.copyWith(effect: effect),
-                                        ),
+                          for (final effect in MotionEffect.values)
+                            Card(
+                              color: effect == _choice.effect
+                                  ? Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer
+                                  : null,
+                              child: InkWell(
+                                onTap: _saving
+                                    ? null
+                                    : () => _change(
+                                        _choice.copyWith(effect: effect),
+                                      ),
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      title: Text(effect.label),
+                                      trailing: Icon(
+                                        effect == _choice.effect
+                                            ? Icons.check_circle
+                                            : Icons.circle_outlined,
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: 74,
+                                      child: TrailStylePreview(
+                                        appearance: _preview,
+                                        activity: ActivityType.hiking,
+                                        effect: effect,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                            ],
-                          ),
+                              ),
+                            ),
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,

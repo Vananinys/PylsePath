@@ -6,7 +6,8 @@ enum MotionEffect {
   confetti('Конфетти'),
   orbit('Созвездие'),
   pixel('Пиксели'),
-  bloom('Лепестки');
+  bloom('Лепестки'),
+  pulse('Пульс · тестовый');
 
   const MotionEffect(this.label);
   final String label;
@@ -39,11 +40,12 @@ class LiveTrailStyle {
     }
 
     return LiveTrailStyle(
-      effect:
-          MotionEffect.values
-              .where((e) => e.name == row['effect'])
-              .firstOrNull ??
-          MotionEffect.none,
+      effect: row['pulse'] == true
+          ? MotionEffect.pulse
+          : MotionEffect.values
+                    .where((e) => e.name == row['effect'])
+                    .firstOrNull ??
+                MotionEffect.none,
       style:
           TrailStyle.values.where((s) => s.name == row['style']).firstOrNull ??
           TrailStyle.automatic,
@@ -56,7 +58,8 @@ class LiveTrailStyle {
     );
   }
   Map<String, Object> toRow() => {
-    'effect': effect.name,
+    'effect': effect == MotionEffect.pulse ? 'orbit' : effect.name,
+    'pulse': effect == MotionEffect.pulse,
     'version': 1,
     'style': style.name,
     'color_index': colorIndex,
@@ -75,7 +78,9 @@ class LiveTrailStyle {
     bool? enabled,
   }) => LiveTrailStyle.fromRow({
     ...toRow(),
-    if (effect != null) 'effect': effect.name,
+    if (effect != null)
+      'effect': effect == MotionEffect.pulse ? 'orbit' : effect.name,
+    if (effect != null) 'pulse': effect == MotionEffect.pulse,
     if (style != null) 'style': style.name,
     if (colorIndex != null) 'color_index': colorIndex,
     if (size != null) 'marker_size': size,
