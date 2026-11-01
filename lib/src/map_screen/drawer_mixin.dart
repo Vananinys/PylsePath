@@ -299,7 +299,10 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                   subtitle: const Text('Бета-тест, опросы и награды'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EventsScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EventsScreen()),
+                    );
                   },
                 ),
                 for (final module in UiModules.drawerModules)
@@ -363,6 +366,19 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
                       context,
                       MaterialPageRoute(
                         builder: (_) => SettingsScreen(
+                          onOpenLaboratory: () async {
+                            try {
+                              await _navigationController.beginLaboratory();
+                              if (!mounted || !context.mounted) return;
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                              _showSnackBar(
+                                'Тестовый GPS включён на основной карте',
+                              );
+                            } catch (error) {
+                              if (mounted) _showSnackBar('$error');
+                            }
+                          },
                           canSignOut: () =>
                               !_navigationController.isWorkoutActive &&
                               !_navigationController.isWorkoutPaused &&

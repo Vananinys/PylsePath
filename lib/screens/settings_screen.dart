@@ -41,6 +41,7 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.authService,
+    this.onOpenLaboratory,
     this.canSignOut,
     this.settings,
     this.onBackgroundChanged,
@@ -52,6 +53,7 @@ class SettingsScreen extends StatefulWidget {
 
   /// Позволяет подставить сервис в тестах.
   final AuthService? authService;
+  final Future<void> Function()? onOpenLaboratory;
   final bool Function()? canSignOut;
 
   /// Настройки приложения (значения по умолчанию для заездов).
@@ -469,10 +471,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsHub(
       onDeveloper: !(_isOwner || _canLab)
           ? null
-          : () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DeveloperLabScreen()),
-            ),
+          : widget.onOpenLaboratory ??
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DeveloperLabScreen()),
+                ),
       summaries: {
         'Внешний вид': 'Кастомизация: профиль, шлейфы, карта и набор разделов',
         'Шагомер и активность': 'Шаги, дневная цель и огонёк активности',

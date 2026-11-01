@@ -1,3 +1,6 @@
+import '../services/laboratory_motion_source.dart';
+import '../services/lab_access.dart';
+import '../data/laboratory_store.dart';
 import '../services/usage_statistics.dart';
 import '../models/workout_details.dart';
 import '../services/distance_laps.dart';
@@ -67,6 +70,92 @@ enum SportMode {
 }
 
 class MapNavigationController extends ChangeNotifier {
+  LaboratoryMotionSource? _laboratory;
+  LaboratoryMotionSource? get laboratory => _laboratory;
+  bool get laboratoryActive => _laboratory != null;
+  late final laboratoryStore = LaboratoryStore(_ownerId);
+  bool _changingLaboratory = false;
+
+  Future<void> beginLaboratory() async {
+    if (laboratoryActive) return;
+    if (_changingLaboratory)
+      throw StateError('Проверка доступа уже выполняется');
+    if (_hasSession || _isSavingWorkout)
+      throw StateError('Сначала завершите настоящую тренировку');
+    _changingLaboratory = true;
+    try {
+      final access = await LabAccess.check();
+      if (_disposed || !_hasCurrentOwner || access['can_simulate'] != true) {
+        throw StateError('Нет подтверждённого доступа к лаборатории');
+      }
+      // An older one-shot fix must finish before switching source.
+      await _locationInitialization;
+      if (_disposed || !_hasCurrentOwner || _hasSession)
+        throw StateError('Состояние изменилось');
+      if (await _draftStore.load() != null)
+        throw StateError(
+          'Сначала восстановите или завершите прерванную настоящую тренировку',
+        );
+      if (_disposed || !_hasCurrentOwner || _hasSession)
+        throw StateError('Состояние изменилось');
+      _routeGeneration++;
+      _isLoadingRoute = false;
+      _laboratory = LaboratoryMotionSource(_currentLocation);
+      _laboratory!.addListener(() {
+        if (_disposed || !_hasCurrentOwner) {
+          _laboratory?.suspend();
+          return;
+        }
+        gpsSignal.value = gpsSignal.value.checkedAt(_gpsNow());
+      });
+      _gpsRecoveryTimer?.cancel();
+      _gpsRecoveryTimer = null;
+      _streamFailed = false;
+      _waitingForRecoveredStream = false;
+      _lastStreamPosition = null;
+      _lastStreamFixAt = null;
+      _locationReady = true;
+      _resetDeviation();
+      await restartPositionStream();
+      if (_disposed || !_hasCurrentOwner) {
+        _laboratory?.suspend();
+        throw StateError('Аккаунт или экран изменился');
+      }
+      _laboratory!.start();
+      notifyListeners();
+    } finally {
+      _changingLaboratory = false;
+    }
+  }
+
+  Future<void> endLaboratory() async {
+    if (!laboratoryActive) return;
+    if (_hasSession || _isSavingWorkout)
+      throw StateError('Сначала завершите и сохраните тестовую запись');
+    setNavigating(false);
+    _routeGeneration++;
+    _isLoadingRoute = false;
+    _laboratory!.dispose();
+    _laboratory = null;
+    _hasGpsFix = false;
+    _lastMotionPoint = null;
+    _lastMotionTime = null;
+    _lastStreamPosition = null;
+    _lastStreamFixAt = null;
+    _stationaryProbe = null;
+    _lowSpeedSince = null;
+    _lastNavigationFixAt = null;
+    _lastNavigationFixPosition = null;
+    _needsRouteReacquire = true;
+    _resetDeviation();
+    gpsSignal.value = const GpsSignal(unavailable: true);
+    _locationReady = false;
+    await _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+    notifyListeners();
+    await initLocationTracking(requestPermission: false);
+  }
+
   bool _preserveTrack = false;
   bool _offRoute = false;
   int _offRouteSamples = 0;
@@ -357,6 +446,7 @@ class MapNavigationController extends ChangeNotifier {
 
   Future<void> _publishGroupProgress() async {
     final room = _groupRideService.activeRoomId;
+    if (laboratoryActive) return;
     if (room == null || _publishingGroup || _disposed || !_hasCurrentOwner) {
       return;
     }
@@ -473,6 +563,7 @@ class MapNavigationController extends ChangeNotifier {
   }
 
   void _scheduleGpsRecovery() {
+    if (laboratoryActive) return;
     if (_disposed ||
         !_hasCurrentOwner ||
         (!_hasSession && !_isNavigating) ||
@@ -508,6 +599,7 @@ class MapNavigationController extends ChangeNotifier {
   void acceptFreshnessProbeForTesting(Position p) => _acceptFreshnessProbe(p);
 
   void _acceptFreshnessProbe(Position p) {
+    if (laboratoryActive) return;
     if (_disposed || !_hasCurrentOwner || !_validPosition(p)) return;
     _updateGpsSignal(p);
     final accurate = p.accuracy.isFinite && p.accuracy >= 0 && p.accuracy <= 20;
@@ -1503,19 +1595,23 @@ class MapNavigationController extends ChangeNotifier {
     }
     _lastDraftQueuedAt = now;
     unawaited(
-      _draftStore.save(_draftSnapshot()).catchError((Object error) {
-        debugPrint('[Workout] checkpoint failed: $error');
-        if (!_disposed && _checkpointError == null) {
-          _checkpointError = 'Не удалось сохранить контрольную точку. Завершите заезд и проверьте свободное место.';
-          notifyListeners();
-        }
-      }),
+      (laboratoryActive
+              ? laboratoryStore.checkpoint(_draftSnapshot())
+              : _draftStore.save(_draftSnapshot()))
+          .catchError((Object error) {
+            debugPrint('[Workout] checkpoint failed: $error');
+            if (!_disposed && _checkpointError == null) {
+              _checkpointError = 'Не удалось сохранить контрольную точку. Завершите заезд и проверьте свободное место.';
+              notifyListeners();
+            }
+          }),
     );
   }
 
   /// An interrupted ride is always resumed paused, so no distance is inferred
   /// across the period when the app was closed.
   Future<WorkoutDraft?> loadInterruptedWorkout() async {
+    if (laboratoryActive) return null;
     if (_ownerId == null || !_hasCurrentOwner || _hasSession) return null;
     final draft = await _draftStore.load();
     if (draft == null) return null;
@@ -1628,18 +1724,20 @@ class MapNavigationController extends ChangeNotifier {
     _averageSpeedKmh = hours > 0 ? draft.distanceMeters / 1000 / hours : 0;
     _workoutStartTime = draft.startedAt;
     _stepTracker.restore(
-      WalkingSteps.fromJson(
-            draft.details.walkingSteps?.toJson(),
-            restorePaused: true,
-          ) ??
-          (draft.activity.isFoot
-              ? WalkingSteps(
-                  device: '',
-                  windows: const [],
-                  observedAt: DateTime.now().millisecondsSinceEpoch,
-                  stride: DailyActivityService.instance.strideMeters,
-                )
-              : null),
+      laboratoryActive
+          ? null
+          : WalkingSteps.fromJson(
+                  draft.details.walkingSteps?.toJson(),
+                  restorePaused: true,
+                ) ??
+                (draft.activity.isFoot
+                    ? WalkingSteps(
+                        device: '',
+                        windows: const [],
+                        observedAt: DateTime.now().millisecondsSinceEpoch,
+                        stride: DailyActivityService.instance.strideMeters,
+                      )
+                    : null),
     );
     _isWorkoutActive = false;
     _isWorkoutPaused = true;
@@ -1653,7 +1751,9 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> discardInterruptedWorkout() => _draftStore.delete();
+  Future<void> discardInterruptedWorkout() async {
+    if (!laboratoryActive) await _draftStore.delete();
+  }
 
   void checkpointWorkout() => _queueDraft(force: true);
 
@@ -1668,6 +1768,8 @@ class MapNavigationController extends ChangeNotifier {
     if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
       return;
     }
+    if (laboratoryActive && groupRoomId != null)
+      throw StateError('Тестовая запись не входит в настоящую группу');
     if (groupRoomId != null &&
         (groupRoomId != _groupRideService.activeRoomId ||
             _ownerId == null ||
@@ -1723,7 +1825,7 @@ class MapNavigationController extends ChangeNotifier {
     _breakTrackSegment = false;
     _sessionActivity = _selectedActivity;
     _stepTracker.start(
-      foot: _sessionActivity!.isFoot,
+      foot: !laboratoryActive && _sessionActivity!.isFoot,
       stride: DailyActivityService.instance.strideMeters,
     );
     _sessionVehicle = _sportMode == SportMode.vehicle ? _preRideVehicle : null;
@@ -1810,6 +1912,7 @@ class MapNavigationController extends ChangeNotifier {
   /// Поднимает уведомление в шторке на время заезда: перезапускает GPS-поток
   /// с foreground-конфигурацией и запрашивает разрешение на уведомления.
   Future<void> _startRideNotification() async {
+    if (laboratoryActive) return;
     // Start collection while the workout-start action is still in foreground;
     // a notification permission dialog must not delay the recording service.
     if (!_disposed && _hasSession) {
@@ -1829,6 +1932,7 @@ class MapNavigationController extends ChangeNotifier {
   /// Публикация позиции друзьям: реже в покое, чаще во время тренировки.
   /// (в том числе на паузе — вы «висите» на месте остановки).
   Future<void> _publishLivePosition(LatLng point) async {
+    if (laboratoryActive) return;
     if ((!_sharingForeground &&
             (!_hasSession || !_backgroundTrackingEnabled)) ||
         !_shareLivePosition ||
@@ -1971,6 +2075,7 @@ class MapNavigationController extends ChangeNotifier {
   }) async {
     if (!_hasSession || _isSavingWorkout || _disposed) return null;
     if (!_hasCurrentOwner) throw StateError('Аккаунт изменился');
+    final laboratoryRecording = laboratoryActive;
     _isSavingWorkout = true;
     _stepTracker.pause();
     if (_isWorkoutActive) {
@@ -2022,6 +2127,11 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
     try {
       _queueDraft(force: true);
+      if (laboratoryRecording) {
+        await laboratoryStore.save(route);
+        if (!_disposed) _resetWorkoutState();
+        return route;
+      }
       await _workoutHistoryRepository.addWorkout(route);
       UsageStatistics.instance.record(UsageEvent.workoutSaved);
       if (!_disposed) _resetWorkoutState();
@@ -2062,7 +2172,11 @@ class MapNavigationController extends ChangeNotifier {
     _startLivePublishTimer();
     notifyListeners();
     try {
-      await _draftStore.delete();
+      if (laboratoryActive && _sessionLocalId != null) {
+        await laboratoryStore.closeCheckpoint(_sessionLocalId!);
+      } else {
+        await _draftStore.delete();
+      }
       UsageStatistics.instance.record(UsageEvent.workoutDiscarded);
       if (!_disposed) _resetWorkoutState();
     } finally {
@@ -2130,12 +2244,22 @@ class MapNavigationController extends ChangeNotifier {
 
   void clearWorkout() {
     if (_isSavingWorkout) return;
+    if (laboratoryActive && _sessionLocalId != null) {
+      unawaited(
+        laboratoryStore.closeCheckpoint(_sessionLocalId!).catchError((
+          Object error,
+        ) {
+          debugPrint('[Laboratory] checkpoint close failed: $error');
+        }),
+      );
+    }
     _resetWorkoutState();
-    unawaited(
-      _draftStore.delete().catchError((Object error) {
-        debugPrint('[Workout] checkpoint cleanup failed: $error');
-      }),
-    );
+    if (!laboratoryActive)
+      unawaited(
+        _draftStore.delete().catchError((Object error) {
+          debugPrint('[Workout] checkpoint cleanup failed: $error');
+        }),
+      );
     unawaited(restartPositionStream());
     notifyListeners();
   }
@@ -2291,6 +2415,7 @@ class MapNavigationController extends ChangeNotifier {
   }
 
   Future<void> _saveCachedPosition(LatLng position) async {
+    if (laboratoryActive) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_cachedLatPref, position.latitude);
@@ -2301,6 +2426,7 @@ class MapNavigationController extends ChangeNotifier {
   }
 
   Future<void> initLocationTracking({bool requestPermission = true}) {
+    if (laboratoryActive) return Future.value();
     if (requestPermission) _gpsRecoveryAttempts = 0;
     return _locationInitialization ??= _initLocationOnce(requestPermission)
         .whenComplete(() => _locationInitialization = null);
@@ -2325,7 +2451,7 @@ class MapNavigationController extends ChangeNotifier {
       _locationServiceWatchStarted = true;
       _locationServiceSubscription = Geolocator.getServiceStatusStream().listen(
         (status) {
-          if (_disposed) return;
+          if (_disposed || laboratoryActive) return;
           if (status == ServiceStatus.enabled) {
             unawaited(resumeLocationTracking());
           } else {
@@ -2346,6 +2472,7 @@ class MapNavigationController extends ChangeNotifier {
         _gpsFreshnessProbe.check(
           DateTime.now(),
           enabled:
+              !laboratoryActive &&
               _locationReady &&
               _locationInitialization == null &&
               _hasCurrentOwner &&
@@ -2452,6 +2579,16 @@ class MapNavigationController extends ChangeNotifier {
   StreamSubscription<Position> _createPositionStreamSubscription({
     bool withForeground = false,
   }) {
+    final lab = _laboratory;
+    if (lab != null) {
+      return lab.positions.listen((position) {
+        if (_disposed || !_hasCurrentOwner) {
+          lab.suspend();
+          return;
+        }
+        _onPositionUpdate(position);
+      });
+    }
     final inActiveRide = _hasSession || _isNavigating;
     final distanceFilter = inActiveRide ? 5 : 20;
     const accuracy = LocationAccuracy.high;
@@ -3274,6 +3411,7 @@ class MapNavigationController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _laboratory?.dispose();
     gpsSignal.removeListener(_onTelemetryQualityChanged);
     _stepTracker.removeListener(_onWorkoutStepsChanged);
     _stepTracker.dispose();

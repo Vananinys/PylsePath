@@ -267,6 +267,18 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
         if (mounted) _showSnackBar('Запись удалена без сохранения');
         return;
       }
+      if (_navigationController.laboratoryActive) {
+        final saved = await _navigationController.finishAndSaveWorkout(
+          title: request.title,
+          notes: request.notes,
+          effort: request.effort,
+        );
+        if (mounted && saved != null)
+          _showSnackBar(
+            'Тестовая запись сохранена: лаборатория → Записи / JSON. Обычная история и награды не изменены.',
+          );
+        return;
+      }
       final history = WorkoutHistoryRepository();
       await history.load();
       final previous = List<SavedRoute>.of(history.workoutHistory);
