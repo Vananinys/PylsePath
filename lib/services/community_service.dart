@@ -114,6 +114,7 @@ class CommunityService {
   Future<List<CommunityPost>> fetchUserPosts(
     String authorId, {
     int limit = 10,
+    bool strict = false,
   }) async {
     final client = _client;
     if (client == null) return const [];
@@ -131,9 +132,11 @@ class CommunityService {
       return await _hydrate(posts);
     } on PostgrestException catch (error) {
       debugPrint('[Community] userPosts ${error.code}: ${error.message}');
+      if (strict) rethrow;
       return const [];
     } catch (error) {
       debugPrint('[Community] userPosts failed: $error');
+      if (strict) rethrow;
       return const [];
     }
   }
