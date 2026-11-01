@@ -145,7 +145,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
         transport: widget.transport,
         pattern: widget.live ? personal.style : null,
       );
-      if (widget.live && !enabled) return const SizedBox.shrink();
+      if (widget.live && !enabled) { _pulse.stop(); return const SizedBox.shrink(); }
       final decorated =
           enabled &&
           (style != TrailStyle.line ||
