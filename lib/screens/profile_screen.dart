@@ -1057,31 +1057,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _period.metricLabel,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                if (AppVariant.uiBeta)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _period.metricLabel,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Значение забирает остаток строки и переносится —
-                    // при увеличенном системном шрифте строка не переполняется.
-                    Expanded(
-                      child: Text(
+                      const SizedBox(height: 6),
+                      Text(
                         '${current.toStringAsFixed(1)} км',
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
-                        textAlign: TextAlign.right,
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _period.metricLabel,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Значение забирает остаток строки и переносится —
+                      // при увеличенном системном шрифте строка не переполняется.
+                      Expanded(
+                        child: Text(
+                          '${current.toStringAsFixed(1)} км',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -1197,6 +1219,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _infoRow(String label, String value) {
+    if (AppVariant.uiBeta) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+    }
     // Та же ловушка, что и в карточке гаража: два НЕ-гибких Text в Row
     // измеряются без ограничения по ширине и переполняют строку при длинном
     // значении или увеличенном системном шрифте.

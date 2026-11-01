@@ -10,6 +10,25 @@ import 'package:pulsepath/data/saved_routes_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('Primary map task remains usable on a narrow phone at 200%', (tester) async {
+    tester.view.physicalSize = const Size(320, 800); tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize); addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = MapController();
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)), child: child!),
+      home: Builder(builder: (context) => Scaffold(body: Stack(children: [
+        PrimaryMapPortal(controller: controller, onOpen: () {}, child: FlutterMap(mapController: controller,
+          options: MapOptions(onTap: PrimaryMapNavigation.instance.tap), children: const [PrimaryMapTaskLayers()])),
+        Positioned(top: 24, left: 12, child: FilledButton(onPressed: () => PrimaryMapNavigation.instance.open(context,
+          title: 'Место встречи и остановки', config: () => const FlutterMap(children: [])), child: const Text('Место'))),
+      ]))),
+    ));
+    await tester.pumpAndSettle(); await tester.tap(find.text('Место')); await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.binding.handlePopRoute(); await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink()); controller.dispose();
+  });
   testWidgets(
     'Point task moves the same map state and preserves the source form',
     (tester) async {
