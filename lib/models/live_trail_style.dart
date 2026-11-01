@@ -40,7 +40,7 @@ class LiveTrailStyle {
     }
 
     return LiveTrailStyle(
-      effect: row['pulse'] == true
+      effect: row['pulse'] == true && row['effect'] == 'orbit'
           ? MotionEffect.pulse
           : MotionEffect.values
                     .where((e) => e.name == row['effect'])
