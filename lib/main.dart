@@ -25,6 +25,7 @@ import 'widgets/map_sticker_flight.dart';
 import 'services/smooth_map_position.dart';
 import 'services/smooth_map_heading.dart';
 import 'widgets/friend_motion_layer.dart';
+import 'widgets/friend_direction_layer.dart';
 import 'screens/events_screen.dart';
 import 'widgets/friend_trails_layer.dart';
 import 'services/owned_trail_style_service.dart';
@@ -1489,6 +1490,36 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                           ),
                         ),
                     ],
+                  ),
+                if (AppVariant.uiBeta &&
+                    (!_isPreRideOpen || isTracking) &&
+                    !_isScreenLocked &&
+                    _selectedMapFriend == null &&
+                    _searchResults.isEmpty &&
+                    !_searchFocusNode.hasFocus &&
+                    MediaQuery.viewInsetsOf(context).bottom == 0)
+                  ValueListenableBuilder<LatLng>(
+                    valueListenable: _navigationController.positionNotifier,
+                    builder: (context, position, _) => FriendDirectionLayer(
+                      friends: _navigationController.canDisplayFriendTrails
+                          ? _navigationController.friendsOnMap : const [],
+                      myPosition: _navigationController.gpsSignal.value.updatedAt == null
+                          ? null : position,
+                      insets: EdgeInsets.fromLTRB(
+                        12,
+                        MediaQuery.paddingOf(context).top + (showNavigationCard ? 260 : 136),
+                        72,
+                        bottomPanelHeight + 12,
+                      ),
+                      onSelect: (friend) {
+                        _setCameraLockMode(CameraLockMode.free);
+                        _mapController.move(
+                          LatLng(friend.liveLatitude!, friend.liveLongitude!),
+                          _mapController.camera.zoom,
+                        );
+                        setState(() => _selectedMapFriend = friend);
+                      },
+                    ),
                   ),
               ],
             ),
