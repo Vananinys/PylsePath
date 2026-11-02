@@ -1,3 +1,5 @@
+import 'widgets/map_home_navigation.dart';
+import 'widgets/map_speed_badge.dart';
 import 'widgets/laboratory_controls.dart';
 import 'data/trail_appearance.dart';
 import 'widgets/activity_trail_layer.dart';
@@ -299,6 +301,7 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   final _achievementBanner = AchievementBannerController();
   double _workoutHudHeight = 220;
   double _preRideHudHeight = 380;
+  double _homeActionsHeight = 88;
   LiveAchievementSession? _liveAchievements;
   String? _achievementSessionKey;
   bool _preparingAchievements = false;
@@ -1132,13 +1135,21 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   MediaQuery.paddingOf(context).bottom)
         : MediaQuery.sizeOf(context).height * .48;
 
+    final homeNavigationVisible =
+        !isTracking &&
+        !_isPreRideOpen &&
+        !routeSheetVisible &&
+        !_isChoosingRoute &&
+        MediaQuery.viewInsetsOf(context).bottom == 0;
     final bottomPanelHeight = isTracking
         ? _workoutHudHeight
         : _isPreRideOpen
         ? _preRideHudHeight + 16 + MediaQuery.paddingOf(context).bottom
         : routeSheetVisible
         ? routeSheetHeight
-        : 100.0 + MediaQuery.paddingOf(context).bottom;
+        : _homeActionsHeight +
+              (homeNavigationVisible ? 96 : 16) +
+              MediaQuery.paddingOf(context).bottom;
 
     return PopScope(
       canPop: !_isPreRideOpen && !_isChoosingRoute,
@@ -1929,7 +1940,8 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               Positioned(
                 bottom: routeSheetVisible && !_isPreRideOpen
                     ? routeSheetHeight + 12
-                    : 16 + MediaQuery.paddingOf(context).bottom,
+                    : (homeNavigationVisible ? 96 : 16) +
+                          MediaQuery.paddingOf(context).bottom,
                 left: 16,
                 right: 16,
                 child: _isPreRideOpen
@@ -2030,7 +2042,50 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                           ),
                         ),
                       )
-                    : _buildRideBottomBar(),
+                    : WidgetSizeObserver(
+                        onSize: (size) {
+                          if (mounted &&
+                              (size.height - _homeActionsHeight).abs() > 1) {
+                            setState(() => _homeActionsHeight = size.height);
+                          }
+                        },
+                        child: _buildRideBottomBar(),
+                      ),
+              ),
+
+            if (homeNavigationVisible)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: MapHomeNavigation(
+                  selectedIndex: 0,
+                  onSelected: _isScreenLocked
+                      ? null
+                      : (index) {
+                          if (index == 0) return;
+                          if (index == 3) {
+                            _scaffoldKey.currentState?.openDrawer();
+                            return;
+                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MapHomeSections(
+                                initialIndex: index,
+                                community: FriendsScreen(
+                                  navigationController: _navigationController,
+                                ),
+                                profile: ProfileScreen(
+                                  provider: context.read<ProfileProvider>(),
+                                ),
+                                onMenu: () =>
+                                    _scaffoldKey.currentState?.openDrawer(),
+                              ),
+                            ),
+                          );
+                        },
+                ),
               ),
 
             // Панель друга на карте (2ГИС-стиль): компактная + разворот.

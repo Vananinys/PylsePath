@@ -57,96 +57,122 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
     return SizedBox(
       width: 96,
       height: 96,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
         children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Кольцо с треугольным указателем: вращается по курсу.
-                Transform.rotate(
-                  angle: relativeHeading * math.pi / 180.0,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
+          if (AppVariant.modernInterface)
+            Positioned(
+              right: 0,
+              top: 34,
+              child: MapSpeedBadge(
+                speed:
+                    _navigationController.gpsSignal.value.quality ==
+                        GpsQuality.good
+                    ? _navigationController.instantSpeedKmh
+                    : null,
+              ),
+            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Кольцо с треугольным указателем: вращается по курсу.
+                    Transform.rotate(
+                      angle: relativeHeading * math.pi / 180.0,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ],
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned(
+                              top: -6,
+                              left: (44 - 10) / 2,
+                              child: CustomPaint(
+                                size: const Size(10, 7),
+                                painter: _HeadingArrowPainter(),
+                              ),
+                            ),
+                            Container(
+                              margin: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFF1E88E5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Positioned(
-                          top: -6,
-                          left: (44 - 10) / 2,
-                          child: CustomPaint(
-                            size: const Size(10, 7),
-                            painter: _HeadingArrowPainter(),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFF1E88E5),
-                          ),
-                        ),
-                      ],
+                    // Аватар поверх кольца — статичен, крутится только указатель.
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.deepOrange.shade50,
+                      backgroundImage: hasUrl ? NetworkImage(url) : null,
+                      child: hasUrl
+                          ? null
+                          : Text(
+                              profile.username.trim().isEmpty
+                                  ? 'Я'
+                                  : profile.username.characters.first
+                                        .toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              Offstage(
+                offstage: AppVariant.modernInterface,
+                child: Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF1E88E5)),
+                  ),
+                  child: Text(
+                    _navigationController.gpsSignal.value.quality ==
+                            GpsQuality.good
+                        ? 'Вы\n${_navigationController.instantSpeedKmh.toStringAsFixed(1)} км/ч'
+                        : 'Вы\nGPS…',
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E88E5),
                     ),
                   ),
                 ),
-                // Аватар поверх кольца — статичен, крутится только указатель.
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.deepOrange.shade50,
-                  backgroundImage: hasUrl ? NetworkImage(url) : null,
-                  child: hasUrl
-                      ? null
-                      : Text(
-                          profile.username.trim().isEmpty
-                              ? 'Я'
-                              : profile.username.characters.first.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepOrange,
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.only(top: 2),
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF1E88E5)),
-            ),
-            child: Text(
-              _navigationController.gpsSignal.value.quality == GpsQuality.good
-                  ? 'Вы\n${_navigationController.instantSpeedKmh.toStringAsFixed(1)} км/ч'
-                  : 'Вы\nGPS…',
-              maxLines: 2,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E88E5),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -212,18 +238,21 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
                     ),
                   ),
                   if (friend.hasFreshMotion)
-                    Text(
-                      friend.liveSpeedKmh != null &&
-                              friend.liveSpeedKmh.isFinite &&
-                              friend.liveSpeedKmh >= 0
-                          ? '${friend.liveSpeedKmh.toStringAsFixed(1)} км/ч'
-                          : 'Скорость неизвестна',
-                      maxLines: 2,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 9,
-                        color: Color(0xFF455A64),
+                    Offstage(
+                      offstage: AppVariant.modernInterface,
+                      child: Text(
+                        friend.liveSpeedKmh != null &&
+                                friend.liveSpeedKmh.isFinite &&
+                                friend.liveSpeedKmh >= 0
+                            ? '${friend.liveSpeedKmh.toStringAsFixed(1)} км/ч'
+                            : 'Скорость неизвестна',
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Color(0xFF455A64),
+                        ),
                       ),
                     ),
                 ],
@@ -231,6 +260,12 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
             ),
           ],
         ),
+        if (AppVariant.modernInterface && friend.hasFreshMotion)
+          Positioned(
+            right: 8,
+            top: 22,
+            child: MapSpeedBadge(speed: friend.liveSpeedKmh),
+          ),
       ],
     );
   }
