@@ -1,3 +1,5 @@
+import 'community_composer_frame.dart';
+import '../config/app_variant.dart';
 import '../data/ui_snapshot_cache.dart';
 import '../data/user_scope.dart';
 
@@ -32,6 +34,7 @@ Future<bool> showCommunityComposer(
 }) async =>
     await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => _ComposerDialog(route: route),
     ) ??
     false;
@@ -597,6 +600,41 @@ class __ComposerDialogState extends State<_ComposerDialog> {
 
   bool _isLoadingRides = true;
   bool _publishing = false;
+  bool _allowClose = false;
+  bool get _hasDraft =>
+      _bodyController.text.trim().isNotEmpty ||
+      _photoPaths.isNotEmpty ||
+      _selectedRideId != null;
+  Future<void> _closeComposer() async {
+    if (_publishing) return;
+    if (_hasDraft) {
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Выйти без публикации?"),
+          content: const Text(
+            "Текст и выбранные вложения не сохранятся. Сами заезды и фотографии останутся на месте.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Продолжить писать"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Выйти"),
+            ),
+          ],
+        ),
+      );
+      if (discard != true || !mounted) return;
+    }
+    setState(() => _allowClose = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.pop(context);
+    });
+  }
+
   String? _ridesError;
   List<({String id, String label})> _recentRides = [];
   String? _selectedRideId;
@@ -611,6 +649,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   void initState() {
     super.initState();
     _publicationOwner = _communityService.userId;
+    _bodyController.addListener(_contentChanged);
     final route = widget.route;
     if (route != null) {
       _bodyController.text =
@@ -628,6 +667,10 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   }
 
   /// Последние заезды для прикрепления (из локальной истории).
+  void _contentChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _loadRecentRides() async {
     try {
       final repo = CommunityRidesBridge();
@@ -741,7 +784,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Не удалось подготовить материалы. Проверьте файлы, сеть и формат видео. Попробуйте MP4 с H.264/AAC.',
+            'Не удалось опубликовать. Проверьте сеть и вложения. Текст остаётся в открытом редакторе.',
           ),
         ),
       );
@@ -751,20 +794,32 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_publishing,
-      child: AlertDialog(
-        title: const Text('Новый пост'),
+      canPop: !_publishing && (!_hasDraft || _allowClose),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeComposer();
+      },
+      child: CommunityComposerFrame(
+        busy: _publishing,
+        onClose: _publishing ? null : _closeComposer,
+        title: const Text('Новая публикация'),
         content: SizedBox(
-          width: 400,
+          width: double.infinity,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Расскажите о поездке. Фото и заезд можно добавить по желанию.',
+                  ),
+                ),
                 TextField(
+                  enabled: !_publishing,
                   controller: _bodyController,
                   maxLines: 5,
                   maxLength: 1000,
-                  autofocus: true,
+                  autofocus: false,
                   decoration: const InputDecoration(
                     hintText: 'Что нового? Как прошла тренировка?',
                     border: OutlineInputBorder(),
@@ -840,7 +895,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: _pickPhotos,
+                      onPressed: _publishing ? null : _pickPhotos,
                       icon: const Icon(
                         Icons.add_photo_alternate_outlined,
                         size: 18,
@@ -878,23 +933,39 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _recentRides.map((ride) {
-                      final selected = _selectedRideId == ride.id;
-                      return FilterChip(
-                        label: Text(ride.label),
-                        selected: selected,
-                        onSelected: (_) => setState(() {
-                          _selectedRideId = selected ? null : ride.id;
-                          _rideMediaIds = {};
-                        }),
-                        selectedColor: Colors.deepOrange.withValues(alpha: 0.2),
-                        checkmarkColor: Colors.deepOrange,
-                      );
-                    }).toList(),
-                  ),
+                  if (AppVariant.modernInterface)
+                    CommunityRidePicker(
+                      rides: _recentRides
+                          .map((r) => _rideByLocalId[r.id]!)
+                          .toList(),
+                      selectedId: _selectedRideId,
+                      busy: _publishing,
+                      onChanged: (id) => setState(() {
+                        _selectedRideId = id;
+                        _rideMediaIds = {};
+                        _shareGpx = false;
+                      }),
+                    ),
+                  if (!AppVariant.modernInterface)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: _recentRides.map((ride) {
+                        final selected = _selectedRideId == ride.id;
+                        return FilterChip(
+                          label: Text(ride.label),
+                          selected: selected,
+                          onSelected: (_) => setState(() {
+                            _selectedRideId = selected ? null : ride.id;
+                            _rideMediaIds = {};
+                          }),
+                          selectedColor: Colors.deepOrange.withValues(
+                            alpha: 0.2,
+                          ),
+                          checkmarkColor: Colors.deepOrange,
+                        );
+                      }).toList(),
+                    ),
                   // Приватность трека: GPX уедет в пост только с согласия.
                   if (_selectedRideId != null)
                     TrackPrivacyPicker(
@@ -920,7 +991,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         ),
         actions: [
           TextButton(
-            onPressed: _publishing ? null : () => Navigator.pop(context),
+            onPressed: _publishing ? null : _closeComposer,
             child: const Text('Отмена'),
           ),
           ElevatedButton(
@@ -928,7 +999,13 @@ class __ComposerDialogState extends State<_ComposerDialog> {
               backgroundColor: Colors.deepOrange,
               foregroundColor: Colors.white,
             ),
-            onPressed: _publishing ? null : _publish,
+            onPressed:
+                _publishing ||
+                    (_bodyController.text.trim().isEmpty &&
+                        _photoPaths.isEmpty &&
+                        _selectedRideId == null)
+                ? null
+                : _publish,
             child: _publishing
                 ? const SizedBox(
                     width: 18,
