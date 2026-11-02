@@ -68,6 +68,17 @@ List<TrailStamp> sampleTrail(
         var distance =
             phase +
             math.max(0, ((lo * length - phase) / spacing).ceil()) * spacing;
+        if (keepLast != null) {
+          // Jump directly to this segment's final stamps; do not iterate a
+          // potentially enormous projected segment (e.g. world wrapping).
+          distance =
+              phase +
+              math.max(
+                    0,
+                    ((hi * length - phase) / spacing).floor() - keepLast + 1,
+                  ) *
+                  spacing;
+        }
         for (; distance <= hi * length; distance += spacing) {
           if (keepLast == null && result.length >= limit) return result;
           result.add(

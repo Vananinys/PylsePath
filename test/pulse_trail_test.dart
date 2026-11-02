@@ -11,6 +11,16 @@ void main() {
   test(
     'Idle tail keeps last four stamps even when viewport only shows older path',
     () {
+      final huge = sampleTrail(
+        [
+          [const Offset(0, 0), const Offset(1e9, 0)],
+        ],
+        28,
+        const Rect.fromLTWH(0, 0, 10, 10),
+        keepLast: 4,
+      );
+      expect(huge, hasLength(4));
+      expect(huge.first.position.dx, greaterThan(1e9 - 150));
       final path = [
         [const Offset(0, 0), const Offset(500, 0)],
       ];
