@@ -125,6 +125,7 @@ import 'screens/public_profile_screen.dart';
 import 'screens/chats_list_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/notifications_screen.dart';
+import 'screens/community_post_screen.dart';
 import 'screens/group_ride_screen.dart';
 import 'widgets/friend_map_panel.dart';
 import 'widgets/app_update_gate.dart';
@@ -856,6 +857,15 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
           if (mounted) setState(() {});
         },
       )..start();
+      PushService.instance.onCommunityOpen = (postId) async {
+        if (!mounted || _chatService.userId == null) return;
+        await Navigator.push(context, MaterialPageRoute(
+          builder: (_) => postId == null
+              ? const NotificationsScreen()
+              : CommunityPostScreen(postId: postId),
+        ));
+        if (mounted) unawaited(NotificationService.instance.refresh());
+      };
       PushService.instance.onChatOpen = _openChatFromPush;
       PushService.instance.onClubOpen = (club, kind) async {
         final service = ClubService(), owner = _chatService.userId;

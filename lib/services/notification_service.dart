@@ -1,3 +1,5 @@
+import 'community_inbox_service.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +10,7 @@ import '../models/chat_message.dart';
 import 'chat_service.dart';
 import 'friend_service.dart';
 
-enum AppNotificationType { chat, friendRequest, system }
+enum AppNotificationType { chat, friendRequest, system, community }
 
 class AppNotification {
   final String id;
@@ -17,6 +19,7 @@ class AppNotification {
   final String subtitle;
   final DateTime createdAt;
   final String? payloadUserId;
+  final String? payloadPostId;
   const AppNotification({
     required this.id,
     required this.type,
@@ -24,6 +27,7 @@ class AppNotification {
     required this.subtitle,
     required this.createdAt,
     this.payloadUserId,
+    this.payloadPostId,
   });
 }
 
@@ -75,6 +79,17 @@ class NotificationService extends ChangeNotifier {
             callback: (_) {
               unawaited(refresh());
             },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'community_notifications',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'recipient_id',
+              value: uid,
+            ),
+            callback: (_) => unawaited(refresh()),
           )
           .subscribe();
     } catch (error) {
@@ -149,6 +164,36 @@ class NotificationService extends ChangeNotifier {
             payloadUserId: entry.key,
           ),
         );
+      }
+      try {
+        final activity = await CommunityInboxService().unread();
+        if (epoch != _epoch ||
+            request != _request ||
+            revision != _revision ||
+            UserScope.currentUserId() != uid)
+          return;
+        for (final n in activity) {
+          final id = 'community_${n['id']}';
+          fingerprints[id] = n['id'].toString();
+          if (!_visible(id, n['id'].toString())) continue;
+          built.add(
+            AppNotification(
+              id: id,
+              type: AppNotificationType.community,
+              title: switch (n['kind']) {
+                'like' => 'Новая отметка «Нравится»',
+                'comment' => 'Новый комментарий',
+                _ => 'Новый друг',
+              },
+              subtitle: 'Откройте, чтобы посмотреть',
+              createdAt: DateTime.parse(n['created_at'] as String),
+              payloadUserId: n['actor_id'] as String?,
+              payloadPostId: n['post_id'] as String?,
+            ),
+          );
+        }
+      } catch (_) {
+        /* Older server or offline; existing chat inbox still works. */
       }
       final system = _items
           .where((n) => n.type == AppNotificationType.system)

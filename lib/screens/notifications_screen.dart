@@ -1,3 +1,6 @@
+import 'community_post_screen.dart';
+import '../services/community_inbox_service.dart';
+
 import 'package:flutter/material.dart';
 
 import '../services/chat_service.dart';
@@ -80,6 +83,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (mounted) _refresh();
         });
         break;
+      case AppNotificationType.community:
+        final owner = _friendService.userId;
+        try {
+          await CommunityInboxService().markRead(
+            item.id.replaceFirst('community_', ''),
+          );
+        } catch (_) {}
+        if (!mounted || owner != _friendService.userId) break;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => item.payloadPostId == null
+                ? const FriendsScreen()
+                : CommunityPostScreen(postId: item.payloadPostId!),
+          ),
+        );
+        if (mounted) _refresh();
+        break;
       case AppNotificationType.system:
         break;
     }
@@ -126,7 +147,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Здесь появятся сообщения, заявки\nв друзья и события приложения',
+                    'Здесь появятся сообщения, заявки в друзья,\nотметки и комментарии к публикациям',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 13,
@@ -157,6 +178,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         Colors.blue,
       ),
       AppNotificationType.system => (Icons.info_outline, Colors.grey),
+      AppNotificationType.community => (
+        Icons.favorite_outline,
+        Colors.deepOrange,
+      ),
     };
 
     return Card(

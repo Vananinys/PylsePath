@@ -1,6 +1,7 @@
 import '../utils/ride_id.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
@@ -22,6 +23,8 @@ class CommunityServiceException implements Exception {
 }
 
 enum CommunityFeedScope { everyone, friends, mine }
+
+enum CommunityPostType { all, text, photos, rides }
 
 /// Лента сообщества: посты с прикреплёнными заездами и лайками
 /// (таблицы `community_posts` / `community_post_likes`).
@@ -64,6 +67,7 @@ class CommunityService {
     int limit = 50,
     bool strict = false,
     CommunityFeedScope scope = CommunityFeedScope.everyone,
+    CommunityPostType type = CommunityPostType.all,
     DateTime? before,
     String? beforeId,
   }) async {
@@ -73,6 +77,7 @@ class CommunityService {
       return const [];
     }
 
+    final owner = userId;
     try {
       var query = client.from('community_posts').select();
       if (scope == CommunityFeedScope.mine) {
@@ -85,12 +90,26 @@ class CommunityService {
             .select('friend_id')
             .eq('user_id', userId!)
             .timeout(const Duration(seconds: 12));
+        _requireOwner(owner);
         final ids = friends
             .map((row) => row['friend_id'].toString())
             .toSet()
             .toList();
         if (ids.isEmpty) return const [];
         query = query.inFilter('author_id', ids);
+      }
+      switch (type) {
+        case CommunityPostType.all:
+          break;
+        case CommunityPostType.text:
+          query = query.isFilter('ride_id', null)
+              .isFilter('route_attachment', null)
+              .or('photo_urls.is.null,photo_urls.eq.{}')
+              .or('private_photo_paths.is.null,private_photo_paths.eq.{}');
+        case CommunityPostType.photos:
+          query = query.or('photo_urls.not.eq.{},private_photo_paths.not.eq.{}');
+        case CommunityPostType.rides:
+          query = query.or('ride_id.not.is.null,route_attachment.not.is.null');
       }
       if (before != null && beforeId != null) {
         if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(beforeId)) {
@@ -108,9 +127,11 @@ class CommunityService {
           .order('id', ascending: false)
           .limit(limit.clamp(1, 100))
           .timeout(const Duration(seconds: 12));
+      if (userId != owner) throw StateError('Account changed');
       if (posts.isEmpty) return const [];
-
-      return await _hydrate(posts);
+      final hydrated = await _hydrate(posts);
+      if (userId != owner) throw StateError('Account changed');
+      return hydrated;
     } on PostgrestException catch (error) {
       debugPrint('[Community] feed ${error.code}: ${error.message}');
       if (strict) rethrow;
@@ -119,6 +140,61 @@ class CommunityService {
       debugPrint('[Community] feed failed: $error');
       if (strict) rethrow;
       return const [];
+    }
+  }
+
+  Future<CommunityPost?> fetchPost(String id, {bool strict = true}) async {
+    final owner = _requireOwner();
+    try {
+      final rows = await _client!.from('community_posts').select()
+          .eq('id', id).limit(1).timeout(const Duration(seconds: 12));
+      _requireOwner(owner);
+      if (rows.isEmpty) return null;
+      final posts = await _hydrate(rows);
+      _requireOwner(owner);
+      return posts.first;
+    } catch (_) {
+      if (strict) rethrow;
+      return null;
+    }
+  }
+
+  Future<void> updatePostBody(String postId, String body,
+      {String? expectedOwner}) async {
+    final owner = _requireOwner(expectedOwner);
+    final clean = body.trim();
+    if (clean.characters.length > 1000) {
+      throw const CommunityServiceException('Максимум 1000 символов в посте');
+    }
+    try {
+      final rows = await _client!.from('community_posts').select()
+          .eq('id', postId).eq('author_id', owner).limit(1)
+          .timeout(const Duration(seconds: 12));
+      _requireOwner(owner);
+      if (rows.isEmpty) {
+        throw const CommunityServiceException('Пост удалён или недоступен');
+      }
+      final row = rows.first;
+      final hasAttachment = row['ride_id'] != null || row['route_attachment'] != null ||
+          (row['photo_urls'] as List? ?? []).isNotEmpty ||
+          (row['private_photo_paths'] as List? ?? []).isNotEmpty;
+      if (clean.isEmpty && !hasAttachment) {
+        throw const CommunityServiceException('Добавьте текст публикации');
+      }
+      final updated = await _client!.from('community_posts')
+          .update({'body': clean}).eq('id', postId).eq('author_id', owner)
+          .select('id').timeout(const Duration(seconds: 15));
+      _requireOwner(owner);
+      if (updated.isEmpty) {
+        throw const CommunityServiceException('Пост удалён или недоступен');
+      }
+    } on CommunityServiceException {
+      rethrow;
+    } on PostgrestException catch (error) {
+      await _explainModerationDenial(error);
+      throw const CommunityServiceException('Не удалось сохранить изменения. Повторите попытку.');
+    } catch (_) {
+      throw const CommunityServiceException('Нет связи с сообществом. Повторите попытку.');
     }
   }
 
@@ -360,7 +436,7 @@ class CommunityService {
         'Пост не может быть пустым: добавьте текст или фото',
       );
     }
-    if (clean.length > 1000) {
+    if (clean.characters.length > 1000) {
       throw const CommunityServiceException('Максимум 1000 символов в посте');
     }
 

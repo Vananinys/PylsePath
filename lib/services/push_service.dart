@@ -105,6 +105,8 @@ class PushService {
   Future<void> Function(String senderId)? onChatOpen;
   Future<bool> Function(String messageId)? onInvitationOpen;
   Future<void> Function(String clubId, String kind)? onClubOpen;
+  Future<void> Function(String? postId)? onCommunityOpen;
+  String? _pendingCommunityNotice, _pendingCommunityOwner;
   String? _pendingClub, _pendingClubOwner, _pendingClubKind;
   Future<bool> Function(String messageId)? onChatPreview;
   Future<void> Function()? onUpdateOpen;
@@ -440,6 +442,10 @@ class PushService {
   void _onLocalTap(String? value) {
     try {
       final payload = jsonDecode(value ?? '') as Map<String, dynamic>;
+      if (payload['type'] == 'community') {
+        _queueCommunity(payload);
+        return;
+      }
       if (payload['type'] == 'club') {
         _queueClub(payload);
         return;
@@ -661,6 +667,35 @@ class PushService {
     RemoteMessage message, {
     bool background = false,
   }) async {
+    if (message.data['type'] == 'community') {
+      final owner = Supabase.instance.client.auth.currentUser?.id;
+      final id = message.data['notificationId']?.toString();
+      if (owner == null ||
+          owner != message.data['receiverId'] ||
+          id == null ||
+          !_shownMessages.add('community_$id'))
+        return;
+      unawaited(NotificationService.instance.refresh());
+      try {
+        await _localNotifications.show(
+          id: id.hashCode & 0x7fffffff,
+          title: message.notification?.title ?? 'Новое в сообществе',
+          body: 'Откройте PulsePath, чтобы посмотреть',
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'chat_messages',
+              'Сообщения',
+              importance: Importance.high,
+              priority: Priority.high,
+              icon: 'ic_stat_pulsepath',
+            ),
+            iOS: DarwinNotificationDetails(),
+          ),
+          payload: jsonEncode(message.data),
+        );
+      } catch (_) {}
+      return;
+    }
     if (message.data['type'] == 'club') {
       final owner = Supabase.instance.client.auth.currentUser?.id;
       final club = message.data['clubId']?.toString(),
@@ -865,6 +900,11 @@ class PushService {
             .rpc('register_club_push_device', params: {'p_token': value})
             .timeout(const Duration(seconds: 10));
       }
+      if (client.auth.currentUser?.id == uid) {
+        await client
+            .rpc('register_community_push_device', params: {'p_token': value})
+            .timeout(const Duration(seconds: 10));
+      }
       lastError = notificationsAuthorized
           ? null
           : 'Разрешение на уведомления не выдано';
@@ -911,10 +951,17 @@ class PushService {
     onChatOpen = null;
     onInvitationOpen = null;
     onClubOpen = null;
+    onCommunityOpen = null;
+    _pendingCommunityNotice = null;
+    _pendingCommunityOwner = null;
     onChatPreview = null;
   }
 
   void _onPushTap(RemoteMessage message) {
+    if (message.data['type'] == 'community') {
+      _queueCommunity(message.data);
+      return;
+    }
     if (message.data['type'] == 'club') {
       _queueClub(message.data);
       return;
@@ -944,6 +991,33 @@ class PushService {
   }
 
   Future<void> flushPendingTap() async {
+    if (_pendingCommunityNotice != null &&
+        onCommunityOpen != null &&
+        !_opening) {
+      final owner = Supabase.instance.client.auth.currentUser?.id;
+      if (owner == null) return;
+      final id = _pendingCommunityNotice!, recipient = _pendingCommunityOwner;
+      _pendingCommunityNotice = null;
+      _pendingCommunityOwner = null;
+      if (owner == recipient) {
+        _opening = true;
+        try {
+          final notice = await Supabase.instance.client
+              .from('community_notifications')
+              .select('post_id')
+              .eq('id', id)
+              .eq('recipient_id', owner)
+              .maybeSingle();
+          if (owner == Supabase.instance.client.auth.currentUser?.id &&
+              onCommunityOpen != null)
+            await onCommunityOpen!(notice?['post_id'] as String?);
+        } catch (_) {
+          /* Inaccessible notices never disclose post content. */
+        } finally {
+          _opening = false;
+        }
+      }
+    }
     if (_pendingClub != null && onClubOpen != null && !_opening) {
       final owner = Supabase.instance.client.auth.currentUser?.id;
       if (owner == null) return;
@@ -1020,6 +1094,18 @@ class PushService {
       _opening = false;
       if (_pendingSender != null) unawaited(flushPendingTap());
     }
+  }
+
+  void _queueCommunity(Map<String, dynamic> payload) {
+    final id = payload['notificationId']?.toString(),
+        owner = payload['receiverId']?.toString();
+    if (id == null ||
+        owner == null ||
+        !RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(id))
+      return;
+    _pendingCommunityNotice = id;
+    _pendingCommunityOwner = owner;
+    unawaited(flushPendingTap());
   }
 
   void _queueClub(Map<String, dynamic> payload) {

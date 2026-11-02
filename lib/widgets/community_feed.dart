@@ -24,6 +24,12 @@ import '../services/community_service.dart';
 import '../screens/post_comments_screen.dart';
 import '../screens/public_profile_screen.dart';
 import 'community_post_card.dart';
+import 'community_post_edit_sheet.dart';
+import 'community_activity_panel.dart';
+import '../screens/community_post_screen.dart';
+import '../screens/workout_history_screen.dart';
+import '../screens/notifications_screen.dart';
+import '../services/notification_service.dart';
 import '../utils/gpx_share.dart';
 import '../services/ride_media_service.dart';
 import 'ride_media_selection.dart';
@@ -108,12 +114,11 @@ class _CommunityFeedState extends State<CommunityFeed>
   List<CommunityPost> _posts = [];
   static const _pageSize = 20;
   CommunityFeedScope _scope = CommunityFeedScope.everyone;
+  CommunityPostType _type = CommunityPostType.all;
   bool _canLoadMore = false, _loadingMore = false;
   String? _pageError;
   final _pendingLikes = <String>{};
-  String get _cacheName => _scope == CommunityFeedScope.everyone
-      ? 'community_feed'
-      : 'community_feed_${_scope.name}';
+  String get _cacheName => 'community_feed_${_scope.name}_${_type.name}';
 
   @override
   void initState() {
@@ -162,6 +167,7 @@ class _CommunityFeedState extends State<CommunityFeed>
         strict: true,
         limit: _pageSize,
         scope: scope,
+        type: _type,
       );
       if (!current()) return;
       setState(() {
@@ -239,6 +245,7 @@ class _CommunityFeedState extends State<CommunityFeed>
         strict: true,
         limit: _pageSize,
         scope: scope,
+        type: _type,
         before: cursor.createdAt,
         beforeId: cursor.id,
       );
@@ -282,6 +289,31 @@ class _CommunityFeedState extends State<CommunityFeed>
       _loadingMore = false;
     });
     _load();
+  }
+
+  void _changeType(CommunityPostType type) {
+    if (_type == type) return;
+    setState(() {
+      _type = type;
+      _posts = [];
+      _isLoading = true;
+      _canLoadMore = false;
+      _loadingMore = false;
+      _pageError = null;
+      _cacheNotice = null;
+      _loadError = null;
+    });
+    _load();
+  }
+
+  Future<void> _editPost(CommunityPost post) async {
+    final changed = await showCommunityPostEditor(context,
+      post: post,
+      currentUserId: () => _communityService.userId,
+      onSave: (body) => _communityService.updatePostBody(post.id, body,
+        expectedOwner: _cacheOwner),
+    );
+    if (changed && mounted) await _load();
   }
 
   Future<void> _openComposer() async {
@@ -412,6 +444,32 @@ class _CommunityFeedState extends State<CommunityFeed>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                CommunityActivityPanel(
+                  refreshToken: _loadGeneration,
+                  onOpenHistory: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const WorkoutHistoryScreen(),
+                  )),
+                  onOpenFriends: widget.onFindFriends,
+                  onOpenPost: (post) async {
+                    await Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => CommunityPostScreen(postId: post.id),
+                    ));
+                    if (mounted) await _load();
+                  },
+                ),
+                Align(alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => const NotificationsScreen(),
+                    )),
+                    icon: const Icon(Icons.notifications_outlined),
+                    label: ValueListenableBuilder<int>(
+                      valueListenable: NotificationService.badge,
+                      builder: (_, count, _) => Text(count == 0
+                          ? 'Уведомления' : 'Уведомления · $count'),
+                    ),
+                  ),
+                ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -431,6 +489,26 @@ class _CommunityFeedState extends State<CommunityFeed>
                         ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: [
+                    for (final type in CommunityPostType.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(switch (type) {
+                            CommunityPostType.all => 'Все форматы',
+                            CommunityPostType.text => 'Текст',
+                            CommunityPostType.photos => 'Фото',
+                            CommunityPostType.rides => 'Заезды',
+                          }),
+                          selected: type == _type,
+                          onSelected: (_) => _changeType(type),
+                        ),
+                      ),
+                  ]),
                 ),
                 const SizedBox(height: 8),
                 if (_moderation.isModerator)
@@ -536,6 +614,9 @@ class _CommunityFeedState extends State<CommunityFeed>
                       }
                     : null,
                 onAuthorTap: () => _openAuthorProfile(post),
+                onEdit: !_moderation.isBanned && post.authorId == _communityService.userId
+                    ? () => _editPost(post)
+                    : null,
                 onDelete: post.authorId == _communityService.userId
                     ? () => _deletePost(post)
                     : null,
@@ -609,7 +690,7 @@ class _CommunityFeedState extends State<CommunityFeed>
           ),
           const SizedBox(height: 12),
           Text(
-            'Лента пуста',
+            _type == CommunityPostType.all ? 'Лента пуста' : 'Публикаций этого формата пока нет',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,

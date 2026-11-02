@@ -13,6 +13,7 @@ class CommunityPostCard extends StatelessWidget {
   final VoidCallback? onLike;
   final VoidCallback onAuthorTap;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
   final VoidCallback? onModerate;
 
   /// Открыть комментарии (экран со списком и вводом).
@@ -29,6 +30,7 @@ class CommunityPostCard extends StatelessWidget {
     required this.onLike,
     required this.onAuthorTap,
     this.onDelete,
+    this.onEdit,
     this.onModerate,
     this.onOpenComments,
     this.onDownloadGpx,
@@ -208,14 +210,21 @@ class CommunityPostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if ((isMine && onDelete != null) || onModerate != null)
+                  if ((isMine && (onDelete != null || onEdit != null)) ||
+                      onModerate != null)
                     PopupMenuButton<String>(
                       tooltip: 'Действия с публикацией',
                       onSelected: (action) {
+                        if (action == 'edit' && isMine) onEdit?.call();
                         if (action == 'delete') onDelete?.call();
                         if (action == 'moderate') onModerate?.call();
                       },
                       itemBuilder: (_) => [
+                        if (isMine && onEdit != null)
+                          const PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Редактировать текст'),
+                          ),
                         if (isMine && onDelete != null)
                           const PopupMenuItem(
                             value: 'delete',
