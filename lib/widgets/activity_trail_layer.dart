@@ -29,9 +29,11 @@ List<TrailStamp> sampleTrail(
   double spacing,
   Rect viewport, {
   int limit = 600,
+  int? keepLast,
   double phaseOffset = 0,
 }) {
   if (!spacing.isFinite || spacing < 1 || limit <= 0) return const [];
+  if (keepLast != null && keepLast <= 0) return const [];
   final result = <TrailStamp>[];
   for (final segment in segments) {
     var walked = identical(segment, segments.first) ? phaseOffset : 0.0;
@@ -59,14 +61,15 @@ List<TrailStamp> sampleTrail(
         return lo <= hi;
       }
 
-      if (clip(a.dx, d.dx, viewport.left, viewport.right) &&
-          clip(a.dy, d.dy, viewport.top, viewport.bottom)) {
+      if (keepLast != null ||
+          (clip(a.dx, d.dx, viewport.left, viewport.right) &&
+              clip(a.dy, d.dy, viewport.top, viewport.bottom))) {
         final phase = (spacing / 2 - walked % spacing + spacing) % spacing;
         var distance =
             phase +
             math.max(0, ((lo * length - phase) / spacing).ceil()) * spacing;
         for (; distance <= hi * length; distance += spacing) {
-          if (result.length >= limit) return result;
+          if (keepLast == null && result.length >= limit) return result;
           result.add(
             TrailStamp(
               a + d * (distance / length),
@@ -75,6 +78,7 @@ List<TrailStamp> sampleTrail(
               ((walked + distance) / spacing).floor(),
             ),
           );
+          if (keepLast != null && result.length > keepLast) result.removeAt(0);
         }
       }
       walked += length;
@@ -97,6 +101,7 @@ class ActivityTrailLayer extends StatefulWidget {
     this.phaseOffset = 0,
     this.liveAppearance,
     this.preview = false,
+    this.maxStamps,
   });
   final List<List<LatLng>> segments;
   final ActivityType activity;
@@ -108,6 +113,7 @@ class ActivityTrailLayer extends StatefulWidget {
   final double phaseOffset;
   final LiveTrailStyle? liveAppearance;
   final bool preview;
+  final int? maxStamps;
   @override
   State<ActivityTrailLayer> createState() => _ActivityTrailLayerState();
 }
@@ -226,6 +232,7 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
                     origin: origin,
                     scale: math.pow(2, camera.zoom - 16).toDouble(),
                     screenSized: widget.live,
+                    maxStamps: widget.maxStamps,
                     phaseOffset: widget.phaseOffset,
                     effect: widget.live ? personal.effect : MotionEffect.none,
                     animation: animate ? _pulse : null,
@@ -249,6 +256,7 @@ class TrailPainter extends CustomPainter {
     this.origin = Offset.zero,
     this.scale = 1,
     this.screenSized = false,
+    this.maxStamps,
     this.phaseOffset = 0,
     this.effect = MotionEffect.none,
     this.animation,
@@ -259,6 +267,7 @@ class TrailPainter extends CustomPainter {
   final Offset origin;
   final double scale;
   final bool screenSized;
+  final int? maxStamps;
   final double phaseOffset;
   final TrailStyle style;
   final Color color;
@@ -294,6 +303,7 @@ class TrailPainter extends CustomPainter {
         size.height / scale,
       ).inflate(markerSize * 2 / scale),
       phaseOffset: phaseOffset + (screenSized ? samplingSpacing / 2 : 0),
+      keepLast: maxStamps,
     );
     canvas.save();
     canvas.translate(-origin.dx, -origin.dy);
@@ -495,6 +505,7 @@ class TrailPainter extends CustomPainter {
       old.origin != origin ||
       old.scale != scale ||
       old.screenSized != screenSized ||
+      old.maxStamps != maxStamps ||
       old.phaseOffset != phaseOffset ||
       old.style != style ||
       old.effect != effect ||

@@ -115,6 +115,7 @@ class _FriendTrailsLayerState extends State<FriendTrailsLayer>
             activity: activity ?? ActivityType.hiking,
             recorded: true,
             live: true,
+            maxStamps: widget.idle || friend.liveActivity == 'idle' ? 4 : null,
             idle: widget.idle,
             liveAppearance: widget.idle
                 ? OwnedTrailStyleService.instance.style
