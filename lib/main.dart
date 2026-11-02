@@ -302,6 +302,7 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   double _workoutHudHeight = 220;
   double _preRideHudHeight = 380;
   double _homeActionsHeight = 88;
+  double _homeDockHeight = 200;
   LiveAchievementSession? _liveAchievements;
   String? _achievementSessionKey;
   bool _preparingAchievements = false;
@@ -1147,9 +1148,9 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
         ? _preRideHudHeight + 16 + MediaQuery.paddingOf(context).bottom
         : routeSheetVisible
         ? routeSheetHeight
-        : _homeActionsHeight +
-              (homeNavigationVisible ? 96 : 16) +
-              MediaQuery.paddingOf(context).bottom;
+        : homeNavigationVisible
+        ? _homeDockHeight
+        : _homeActionsHeight + 16 + MediaQuery.paddingOf(context).bottom;
 
     return PopScope(
       canPop: !_isPreRideOpen && !_isChoosingRoute,
@@ -1936,12 +1937,13 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
             // Нижняя панель карты (как в Komoot): компактная плашка с кнопкой
             // «Свободный заезд»; по нажатию раскрывается в HUD подготовки.
             // Когда заезд идёт — обе прячутся, остаётся панель метрик.
-            if (!isTracking && (!routeSheetVisible || _isPreRideOpen))
+            if (!homeNavigationVisible &&
+                !isTracking &&
+                (!routeSheetVisible || _isPreRideOpen))
               Positioned(
                 bottom: routeSheetVisible && !_isPreRideOpen
                     ? routeSheetHeight + 12
-                    : (homeNavigationVisible ? 96 : 16) +
-                          MediaQuery.paddingOf(context).bottom,
+                    : 16 + MediaQuery.paddingOf(context).bottom,
                 left: 16,
                 right: 16,
                 child: _isPreRideOpen
@@ -2058,33 +2060,41 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: MapHomeNavigation(
-                  selectedIndex: 0,
-                  onSelected: _isScreenLocked
-                      ? null
-                      : (index) {
-                          if (index == 0) return;
-                          if (index == 3) {
-                            _scaffoldKey.currentState?.openDrawer();
-                            return;
-                          }
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => MapHomeSections(
-                                initialIndex: index,
-                                community: FriendsScreen(
-                                  navigationController: _navigationController,
+                child: MapHomeDock(
+                  actions: _buildRideBottomBar(),
+                  onSize: (size) {
+                    if (mounted && (size.height - _homeDockHeight).abs() > 1) {
+                      setState(() => _homeDockHeight = size.height);
+                    }
+                  },
+                  navigation: MapHomeNavigation(
+                    selectedIndex: 0,
+                    onSelected: _isScreenLocked
+                        ? null
+                        : (index) {
+                            if (index == 0) return;
+                            if (index == 3) {
+                              _scaffoldKey.currentState?.openDrawer();
+                              return;
+                            }
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => MapHomeSections(
+                                  initialIndex: index,
+                                  community: FriendsScreen(
+                                    navigationController: _navigationController,
+                                  ),
+                                  profile: ProfileScreen(
+                                    provider: context.read<ProfileProvider>(),
+                                  ),
+                                  onMenu: () =>
+                                      _scaffoldKey.currentState?.openDrawer(),
                                 ),
-                                profile: ProfileScreen(
-                                  provider: context.read<ProfileProvider>(),
-                                ),
-                                onMenu: () =>
-                                    _scaffoldKey.currentState?.openDrawer(),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                  ),
                 ),
               ),
 

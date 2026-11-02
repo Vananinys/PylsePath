@@ -222,7 +222,7 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
               Container(
                 margin: EdgeInsets.only(
                   top: AppVariant.modernInterface && friend.hasFreshMotion
-                      ? 28
+                      ? 14
                       : 2,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),

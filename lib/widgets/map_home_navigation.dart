@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'widget_size_observer.dart';
+
 class MapHomeNavigation extends StatelessWidget {
   const MapHomeNavigation({
     super.key,
@@ -10,28 +12,32 @@ class MapHomeNavigation extends StatelessWidget {
   final ValueChanged<int>? onSelected;
 
   @override
-  Widget build(BuildContext context) => NavigationBar(
-    selectedIndex: selectedIndex,
-    onDestinationSelected: onSelected,
-    labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-    destinations: const [
-      NavigationDestination(
-        icon: Icon(Icons.map_outlined),
-        selectedIcon: Icon(Icons.map),
-        label: 'Карта',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.explore_outlined),
-        selectedIcon: Icon(Icons.explore),
-        label: 'Сообщество',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.person_outline),
-        selectedIcon: Icon(Icons.person),
-        label: 'Профиль',
-      ),
-      NavigationDestination(icon: Icon(Icons.menu), label: 'Меню'),
-    ],
+  Widget build(BuildContext context) => MediaQuery.removePadding(
+    context: context,
+    removeTop: true,
+    child: NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onSelected,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.map_outlined),
+          selectedIcon: Icon(Icons.map),
+          label: 'Карта',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.explore_outlined),
+          selectedIcon: Icon(Icons.explore),
+          label: 'Сообщество',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.person_outline),
+          selectedIcon: Icon(Icons.person),
+          label: 'Профиль',
+        ),
+        NavigationDestination(icon: Icon(Icons.menu), label: 'Меню'),
+      ],
+    ),
   );
 }
 
@@ -70,6 +76,33 @@ class _MapHomeSectionsState extends State<MapHomeSections> {
           setState(() => _index = index);
         }
       },
+    ),
+  );
+}
+
+/// Buttons and tabs share one layout, including the bottom system inset.
+class MapHomeDock extends StatelessWidget {
+  const MapHomeDock({
+    super.key,
+    required this.actions,
+    required this.navigation,
+    required this.onSize,
+  });
+  final Widget actions;
+  final Widget navigation;
+  final ValueChanged<Size> onSize;
+  @override
+  Widget build(BuildContext context) => WidgetSizeObserver(
+    onSize: onSize,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: actions,
+        ),
+        navigation,
+      ],
     ),
   );
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pulsepath/ui/app_theme.dart';
 import 'package:pulsepath/widgets/map_home_navigation.dart';
 import 'package:pulsepath/widgets/map_home_actions.dart';
 import 'package:pulsepath/widgets/map_speed_badge.dart';
@@ -16,21 +17,34 @@ void main() {
       var workout = false, route = false;
       await tester.pumpWidget(
         MaterialApp(
-          theme: ThemeData(brightness: brightness),
+          theme: pulsePathTheme(brightness: brightness),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: const TextScaler.linear(2)),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+              padding: const EdgeInsets.only(top: 48, bottom: 34),
+              viewPadding: const EdgeInsets.only(top: 48, bottom: 34),
+            ),
             child: child!,
           ),
           home: Scaffold(
-            body: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
+            body: Stack(
               children: [
-                MapHomeActions(
-                  onWorkout: () => workout = true,
-                  onRoute: () => route = true,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: MapHomeDock(
+                    onSize: (_) {},
+                    actions: MapHomeActions(
+                      onWorkout: () => workout = true,
+                      onRoute: () => route = true,
+                    ),
+                    navigation: MapHomeNavigation(
+                      selectedIndex: 0,
+                      onSelected: (_) {},
+                    ),
+                  ),
                 ),
-                MapHomeNavigation(selectedIndex: 0, onSelected: (_) {}),
               ],
             ),
           ),
@@ -39,6 +53,11 @@ void main() {
       await tester.tap(find.text('Начать тренировку'));
       await tester.tap(find.text('Построить маршрут'));
       expect(workout && route, isTrue);
+      final actions = tester.getRect(find.byType(MapHomeActions));
+      final navigation = tester.getRect(find.byType(MapHomeNavigation));
+      expect(actions.bottom, lessThanOrEqualTo(navigation.top - 12));
+      expect(navigation.height, 80 + 34);
+
       expect(tester.takeException(), isNull);
     });
   }
@@ -86,7 +105,15 @@ void main() {
           home: Center(child: MapSpeedBadge(speed: speed)),
         ),
       );
-      expect(find.text(speed == 62.0 ? '62' : '—'), findsOneWidget);
+      if (speed == 62.0) {
+        expect(find.text('62'), findsOneWidget);
+        final size = tester.getSize(find.byType(Container));
+        expect(size.height, lessThan(20));
+        expect(size.width, lessThan(50));
+      } else {
+        expect(find.text('—'), findsNothing);
+        expect(find.text(' км/ч'), findsNothing);
+      }
       expect(tester.takeException(), isNull);
     }
   });
