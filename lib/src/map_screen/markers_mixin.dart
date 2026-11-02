@@ -186,87 +186,95 @@ mixin _MapMarkersMixin on _MapScreenStateBase {
         url != null &&
         (url.startsWith('http://') || url.startsWith('https://'));
     final Color markerColor = friend.isLive ? Colors.green : Colors.grey;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: markerColor, width: 2.5),
-                color: Colors.white,
-              ),
-              child: CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.deepOrange.shade50,
-                backgroundImage: hasUrl ? NetworkImage(url) : null,
-                child: hasUrl
-                    ? null
-                    : Text(
-                        friend.username.isEmpty
-                            ? 'Р'
-                            : friend.username.characters.first.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange,
+    return SizedBox(
+      width: 118,
+      height: 100,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: markerColor, width: 2.5),
+                  color: Colors.white,
+                ),
+                child: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.deepOrange.shade50,
+                  backgroundImage: hasUrl ? NetworkImage(url) : null,
+                  child: hasUrl
+                      ? null
+                      : Text(
+                          friend.username.isEmpty
+                              ? 'Р'
+                              : friend.username.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepOrange,
+                          ),
                         ),
-                      ),
+                ),
               ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: markerColor),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    friend.username,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: markerColor,
-                    ),
-                  ),
-                  if (friend.hasFreshMotion)
-                    Offstage(
-                      offstage: AppVariant.modernInterface,
-                      child: Text(
-                        friend.liveSpeedKmh != null &&
-                                friend.liveSpeedKmh.isFinite &&
-                                friend.liveSpeedKmh >= 0
-                            ? '${friend.liveSpeedKmh.toStringAsFixed(1)} км/ч'
-                            : 'Скорость неизвестна',
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 9,
-                          color: Color(0xFF455A64),
-                        ),
+              Container(
+                margin: EdgeInsets.only(
+                  top: AppVariant.modernInterface && friend.hasFreshMotion
+                      ? 28
+                      : 2,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: markerColor),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      friend.username,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: markerColor,
                       ),
                     ),
-                ],
+                    if (friend.hasFreshMotion)
+                      Offstage(
+                        offstage: AppVariant.modernInterface,
+                        child: Text(
+                          friend.liveSpeedKmh != null &&
+                                  friend.liveSpeedKmh.isFinite &&
+                                  friend.liveSpeedKmh >= 0
+                              ? '${friend.liveSpeedKmh.toStringAsFixed(1)} км/ч'
+                              : 'Скорость неизвестна',
+                          maxLines: 2,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Color(0xFF455A64),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        if (AppVariant.modernInterface && friend.hasFreshMotion)
-          Positioned(
-            right: 8,
-            top: 22,
-            child: MapSpeedBadge(speed: friend.liveSpeedKmh),
+            ],
           ),
-      ],
+          if (AppVariant.modernInterface && friend.hasFreshMotion)
+            Positioned(
+              right: 8,
+              top: 22,
+              child: MapSpeedBadge(speed: friend.liveSpeedKmh),
+            ),
+        ],
+      ),
     );
   }
 }
