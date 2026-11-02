@@ -1,3 +1,5 @@
+import '../utils/ride_id.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -46,6 +48,16 @@ class CommunityService {
   }
 
   String? get userId => _client?.auth.currentUser?.id;
+
+  String _requireOwner([String? expectedOwner]) {
+    final owner = userId;
+    if (owner == null || (expectedOwner != null && expectedOwner != owner)) {
+      throw const CommunityServiceException(
+        'Аккаунт изменился. Откройте сообщество заново.',
+      );
+    }
+    return owner;
+  }
 
   /// Лента постов (свежие сверху) с авторами, лайками и сводками заездов.
   Future<List<CommunityPost>> fetchFeed({
@@ -208,23 +220,67 @@ class CommunityService {
       }
     }
 
-    return rows
-        .map(
-          (row) => CommunityPost.fromRow(
+    return Future.wait(
+      rows.map(
+        (row) => resolvePostMedia(
+          CommunityPost.fromRow(
             row,
             authorById: authorById,
             likeCountByPost: likeCountByPost,
             likedByMePosts: likedByMePosts,
             rideById: rideById,
           ),
-        )
-        .toList();
+          expectedOwner: me,
+        ),
+      ),
+    );
+  }
+
+  Future<CommunityPost> resolvePostMedia(
+    CommunityPost post, {
+    String? expectedOwner,
+  }) async {
+    final owner = _requireOwner(expectedOwner);
+    if (post.privatePhotoPaths.isEmpty) return post;
+    final urls = <String>[
+      ...post.photoUrls.where(
+        (u) => !u.contains('/object/sign/community_private/'),
+      ),
+    ];
+    for (final path in post.privatePhotoPaths) {
+      _requireOwner(owner);
+      urls.add(
+        await _client!.storage
+            .from('community_private')
+            .createSignedUrl(path, 300),
+      );
+    }
+    _requireOwner(owner);
+    return post.copyWith(photoUrls: urls);
+  }
+
+  Future<PostComment> resolveCommentMedia(
+    PostComment comment, {
+    String? expectedOwner,
+  }) async {
+    final owner = _requireOwner(expectedOwner);
+    final path = comment.privatePhotoPath;
+    if (path == null) return comment;
+    final url = await _client!.storage
+        .from('community_private')
+        .createSignedUrl(path, 300);
+    _requireOwner(owner);
+    return comment.withResolvedPhoto(url);
   }
 
   /// Загружает фото поста/комментария в бакет `community` и возвращает
   /// публичный URL. Путь: `community/<uid>/<timestamp>.<ext>` — политики
   /// Storage разрешают запись только в свою папку.
-  Future<String> uploadPhoto(String localFilePath) async {
+  Future<String> uploadPhoto(
+    String localFilePath, {
+    String? expectedOwner,
+    bool privatePhoto = false,
+  }) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
     if (client == null || id == null) {
@@ -232,19 +288,36 @@ class CommunityService {
     }
 
     try {
+      _requireOwner(expectedOwner ?? id);
       final bytes = await readBytesFromPath(localFilePath);
+      _requireOwner(id);
       final extension = _extensionOf(localFilePath);
-      final objectPath =
-          '$id/post_${DateTime.now().millisecondsSinceEpoch}$extension';
+      final objectPath = '$id/post_${newRideId()}$extension';
 
+      final bucket = privatePhoto
+          ? 'community_private'
+          : AppConfig.communityBucket;
       await client.storage
-          .from(AppConfig.communityBucket)
+          .from(bucket)
           .uploadBinary(
             objectPath,
             bytes,
-            fileOptions: const FileOptions(upsert: true, cacheControl: '3600'),
+            fileOptions: FileOptions(
+              upsert: false,
+              cacheControl: '3600',
+              contentType: switch (extension) {
+                '.png' => 'image/png',
+                '.webp' => 'image/webp',
+                '.gif' => 'image/gif',
+                '.heic' => 'image/heic',
+                '.heif' => 'image/heif',
+                _ => 'image/jpeg',
+              },
+            ),
           )
           .timeout(const Duration(seconds: 30));
+      _requireOwner(id);
+      if (privatePhoto) return objectPath;
       return client.storage
           .from(AppConfig.communityBucket)
           .getPublicUrl(objectPath);
@@ -269,12 +342,16 @@ class CommunityService {
     List<String> photoPaths = const [],
     bool shareGpx = false,
     SharedRoute? routeAttachment,
+    String? expectedOwner,
+    CommunityPostAudience audience = CommunityPostAudience.everyone,
   }) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
     if (client == null || id == null) {
       throw const CommunityServiceException('Нет сессии. Войдите в аккаунт.');
     }
+    _requireOwner(expectedOwner ?? id);
+    final paths = List<String>.of(photoPaths.take(4));
     final clean = body.trim().isEmpty && routeAttachment != null
         ? '${routeAttachment.label}: ${routeAttachment.title}'
         : body.trim();
@@ -289,13 +366,27 @@ class CommunityService {
 
     try {
       final photoUrls = <String>[];
-      for (final path in photoPaths.take(4)) {
-        photoUrls.add(await uploadPhoto(path));
+      final privatePaths = <String>[];
+      for (final path in paths) {
+        _requireOwner(id);
+        final uploaded = await uploadPhoto(
+          path,
+          expectedOwner: id,
+          privatePhoto: audience == CommunityPostAudience.friends,
+        );
+        if (audience == CommunityPostAudience.friends) {
+          privatePaths.add(uploaded);
+        } else {
+          photoUrls.add(uploaded);
+        }
       }
 
+      _requireOwner(id);
       await client
           .from('community_posts')
           .insert({
+            'audience': audience.name,
+            if (privatePaths.isNotEmpty) 'private_photo_paths': privatePaths,
             'author_id': id,
             'body': clean,
             if (rideId != null && rideId.isNotEmpty) 'ride_id': rideId,
@@ -313,7 +404,9 @@ class CommunityService {
       );
     } on CommunityServiceException {
       rethrow;
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('[Community] create failed: ${error.runtimeType}');
+      debugPrintStack(stackTrace: stack);
       throw const CommunityServiceException(
         'Не удалось опубликовать пост. Проверьте интернет и повторите.',
       );
@@ -326,12 +419,11 @@ class CommunityService {
     final client = _client;
     if (client == null) return null;
     try {
-      final gpx = await client
-          .rpc(
-            'pulsepath_shared_gpx',
-            params: {'p_ride_id': rideId},
-          )
-          .timeout(const Duration(seconds: 15)) as String?;
+      final gpx =
+          await client
+                  .rpc('pulsepath_shared_gpx', params: {'p_ride_id': rideId})
+                  .timeout(const Duration(seconds: 15))
+              as String?;
       return (gpx == null || gpx.isEmpty) ? null : gpx;
     } on PostgrestException catch (error) {
       debugPrint('[Community] gpx ${error.code}: ${error.message}');
@@ -382,14 +474,18 @@ class CommunityService {
         }
       }
 
-      return rows
-          .map(
-            (raw) => PostComment.fromRow(
+      final owner = _requireOwner();
+      return await Future.wait(
+        rows.map(
+          (raw) => resolveCommentMedia(
+            PostComment.fromRow(
               Map<String, dynamic>.from(raw),
               authorById: authorById,
             ),
-          )
-          .toList();
+            expectedOwner: owner,
+          ),
+        ),
+      );
     } on PostgrestException catch (error) {
       debugPrint('[Community] comments ${error.code}: ${error.message}');
       if (strict)
@@ -460,12 +556,14 @@ class CommunityService {
     String? body,
     String? parentCommentId,
     String? photoPath,
+    String? expectedOwner,
   }) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
     if (client == null || id == null) {
       throw const CommunityServiceException('Нет сессии. Войдите в аккаунт.');
     }
+    _requireOwner(expectedOwner ?? id);
     final clean = body?.trim() ?? '';
     if (clean.isEmpty && photoPath == null) {
       throw const CommunityServiceException('Пустой комментарий');
@@ -478,9 +576,27 @@ class CommunityService {
 
     try {
       String? photoUrl;
+      String? privatePath;
       if (photoPath != null) {
-        photoUrl = await uploadPhoto(photoPath);
+        final post = await client
+            .from('community_posts')
+            .select('audience')
+            .eq('id', postId)
+            .single();
+        _requireOwner(id);
+        final privatePhoto = post['audience'] == 'friends';
+        final uploaded = await uploadPhoto(
+          photoPath,
+          expectedOwner: id,
+          privatePhoto: privatePhoto,
+        );
+        if (privatePhoto) {
+          privatePath = uploaded;
+        } else {
+          photoUrl = uploaded;
+        }
       }
+      _requireOwner(id);
       await client
           .from('post_comments')
           .insert({
@@ -490,6 +606,7 @@ class CommunityService {
             if (parentCommentId != null && parentCommentId.isNotEmpty)
               'parent_comment_id': parentCommentId,
             if (photoUrl != null) 'photo_url': photoUrl,
+            if (privatePath != null) 'private_photo_path': privatePath,
           })
           .timeout(const Duration(seconds: 15));
     } on PostgrestException catch (error) {
@@ -506,7 +623,8 @@ class CommunityService {
   }
 
   /// Удаляет свой комментарий.
-  Future<void> deleteComment(String commentId) async {
+  Future<void> deleteComment(String commentId, {String? expectedOwner}) async {
+    _requireOwner(expectedOwner);
     final client = _client;
     final owner = userId;
     if (client == null || owner == null)
@@ -558,7 +676,8 @@ class CommunityService {
   }
 
   /// Удаляет свой пост.
-  Future<void> deletePost(String postId) async {
+  Future<void> deletePost(String postId, {String? expectedOwner}) async {
+    _requireOwner(expectedOwner);
     final client = _client;
     final owner = userId;
     if (client == null || owner == null) {
@@ -592,7 +711,12 @@ class CommunityService {
   }
 
   /// Лайк/снятие лайка. Возвращает новое состояние «лайкнул ли я».
-  Future<bool> toggleLike(String postId, {required bool isLiked}) async {
+  Future<bool> toggleLike(
+    String postId, {
+    required bool isLiked,
+    String? expectedOwner,
+  }) async {
+    _requireOwner(expectedOwner);
     final client = _client;
     final id = client?.auth.currentUser?.id;
     if (client == null || id == null) {

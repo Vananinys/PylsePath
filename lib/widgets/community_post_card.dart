@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/community_post.dart';
 import 'shared_route_card.dart';
+import 'community_photo_viewer.dart';
 
 /// Карточка поста сообщества: автор, текст, плашка заезда, лайк, удаление.
 class CommunityPostCard extends StatelessWidget {
@@ -19,6 +20,7 @@ class CommunityPostCard extends StatelessWidget {
 
   /// Скачать GPX-трек прикреплённого заезда (если автор разрешил).
   final VoidCallback? onDownloadGpx;
+  final Future<List<String>> Function()? onRefreshPhotoUrls;
 
   const CommunityPostCard({
     super.key,
@@ -30,6 +32,7 @@ class CommunityPostCard extends StatelessWidget {
     this.onModerate,
     this.onOpenComments,
     this.onDownloadGpx,
+    this.onRefreshPhotoUrls,
   });
 
   String get _timeAgo {
@@ -61,17 +64,22 @@ class CommunityPostCard extends StatelessWidget {
     if (urls.length == 1) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.network(
-          urls.first,
-          width: double.infinity,
-          height: 180,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            height: 100,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Icon(
-              Icons.broken_image_outlined,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+        child: _photo(
+          context,
+          urls,
+          0,
+          Image.network(
+            urls.first,
+            width: double.infinity,
+            height: 180,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              height: 100,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),
@@ -91,14 +99,19 @@ class CommunityPostCard extends StatelessWidget {
       itemBuilder: (context, index) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: Image.network(
-            urls[index],
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Icon(
-                Icons.broken_image_outlined,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+          child: _photo(
+            context,
+            urls,
+            index,
+            Image.network(
+              urls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
@@ -106,6 +119,28 @@ class CommunityPostCard extends StatelessWidget {
       },
     );
   }
+
+  Widget _photo(
+    BuildContext context,
+    List<String> urls,
+    int index,
+    Widget child,
+  ) => Semantics(
+    button: true,
+    label: 'Открыть фото ${index + 1} из ${urls.length}',
+    child: InkWell(
+      onTap: () => Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(
+          builder: (_) => CommunityPhotoViewer(
+            urls: urls,
+            initialIndex: index,
+            onRefreshPhotoUrls: onRefreshPhotoUrls,
+          ),
+        ),
+      ),
+      child: child,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -173,39 +208,53 @@ class CommunityPostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (isMine && onDelete != null)
-                    IconButton(
-                      tooltip: 'Удалить пост',
-                      icon: Icon(
-                        Icons.delete_outline,
-                        size: 20,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      onPressed: onDelete,
-                    ),
-                  if (onModerate != null)
-                    IconButton(
-                      tooltip: 'Модерация публикации',
-                      icon: const Icon(Icons.shield_outlined, size: 20),
-                      onPressed: onModerate,
+                  if ((isMine && onDelete != null) || onModerate != null)
+                    PopupMenuButton<String>(
+                      tooltip: 'Действия с публикацией',
+                      onSelected: (action) {
+                        if (action == 'delete') onDelete?.call();
+                        if (action == 'moderate') onModerate?.call();
+                      },
+                      itemBuilder: (_) => [
+                        if (isMine && onDelete != null)
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Удалить пост'),
+                          ),
+                        if (onModerate != null)
+                          const PopupMenuItem(
+                            value: 'moderate',
+                            child: Text('Модерация публикации'),
+                          ),
+                      ],
                     ),
                 ],
               ),
             ),
+            if (post.audience == CommunityPostAudience.friends)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.group_outlined, size: 16),
+                    SizedBox(width: 6),
+                    Flexible(child: Text('Только друзья')),
+                  ],
+                ),
+              ),
             const SizedBox(height: 10),
             // Текст поста.
             if (post.body.isNotEmpty)
-              SelectableText(
-                post.body,
-                style: const TextStyle(fontSize: 14, height: 1.4),
-              ),
+              _ExpandablePostText(key: ValueKey(post.id), text: post.body),
             // Фотографии поста (до 4, сетка 2 колонки).
             if (post.photoUrls.isNotEmpty) ...[
               const SizedBox(height: 10),
               _buildPhotoGrid(context, post.photoUrls),
             ],
             // Прикреплённый заезд.
-            if (post.rideId != null && post.rideDistanceKm != null) ...[
+            if (post.routeAttachment == null &&
+                post.rideId != null &&
+                post.rideDistanceKm != null) ...[
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
@@ -250,7 +299,8 @@ class CommunityPostCard extends StatelessWidget {
             if (post.routeAttachment != null) ...[
               SharedRouteCard(route: post.routeAttachment!),
               if (onDownloadGpx != null &&
-                  post.routeAttachment!.points.length >= 2)
+                  (post.routeAttachment!.points.length >= 2 ||
+                      (post.shareGpx && post.rideId != null)))
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
@@ -261,82 +311,34 @@ class CommunityPostCard extends StatelessWidget {
                 ),
               const SizedBox(height: 8),
             ],
-            // Лайк и комментарии.
-            Row(
+            // Подписанные действия переносятся на узком экране.
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                InkWell(
-                  onTap: onLike,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          post.likedByMe
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          size: 20,
-                          color: post.likedByMe
-                              ? Colors.deepOrange
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        if (post.likeCount > 0) ...[
-                          const SizedBox(width: 5),
-                          Text(
-                            '${post.likeCount}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: post.likedByMe
-                                  ? Colors.deepOrange
-                                  : Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    foregroundColor: post.likedByMe
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  onPressed: onLike,
+                  icon: Icon(
+                    post.likedByMe ? Icons.favorite : Icons.favorite_border,
+                  ),
+                  label: Text(
+                    '${post.likedByMe ? 'Нравится' : 'Поддержать'} · ${post.likeCount}',
                   ),
                 ),
-                const SizedBox(width: 4),
                 if (onOpenComments != null)
-                  InkWell(
-                    onTap: onOpenComments,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline,
-                            size: 18,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                          if (post.commentsCount > 0) ...[
-                            const SizedBox(width: 5),
-                            Text(
-                              '${post.commentsCount}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
                     ),
+                    onPressed: onOpenComments,
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: Text('Комментарии · ${post.commentsCount}'),
                   ),
               ],
             ),
@@ -345,4 +347,51 @@ class CommunityPostCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ExpandablePostText extends StatefulWidget {
+  const _ExpandablePostText({super.key, required this.text});
+  final String text;
+  @override
+  State<_ExpandablePostText> createState() => _ExpandablePostTextState();
+}
+
+class _ExpandablePostTextState extends State<_ExpandablePostText> {
+  bool expanded = false;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const style = TextStyle(fontSize: 14, height: 1.4);
+      final painter = TextPainter(
+        text: TextSpan(
+          text: widget.text,
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 5,
+      )..layout(maxWidth: constraints.maxWidth);
+      final overflows = painter.didExceedMaxLines;
+      painter.dispose();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (expanded || !overflows)
+            SelectableText(widget.text, style: style)
+          else
+            Text(
+              widget.text,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+          if (overflows)
+            TextButton(
+              onPressed: () => setState(() => expanded = !expanded),
+              child: Text(expanded ? 'Свернуть' : 'Читать полностью'),
+            ),
+        ],
+      );
+    },
+  );
 }

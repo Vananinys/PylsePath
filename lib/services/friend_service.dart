@@ -77,10 +77,16 @@ class FriendService {
   }
 
   /// Список друзей с публичными профилями и живыми позициями.
-  Future<List<FriendProfile>> fetchFriends() async {
+  Future<List<FriendProfile>> fetchFriends({bool strict = false}) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
-    if (client == null || id == null) return const [];
+    if (client == null || id == null) {
+      if (strict)
+        throw const FriendServiceException(
+          'Войдите в аккаунт, чтобы загрузить друзей.',
+        );
+      return const [];
+    }
 
     try {
       final rows = await client
@@ -167,9 +173,17 @@ class FriendService {
       debugPrint(
         '[FriendService] fetchFriends ${error.code}: ${error.message}',
       );
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось обновить друзей. Проверьте подключение.',
+        );
       return userId == id ? await loadCachedFriends() ?? const [] : const [];
     } catch (error) {
       debugPrint('[FriendService] fetchFriends failed: $error');
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось обновить друзей. Проверьте подключение.',
+        );
       return userId == id ? await loadCachedFriends() ?? const [] : const [];
     }
   }
@@ -209,8 +223,8 @@ class FriendService {
       _fetchRequests(incoming: true, strict: strict);
 
   /// Исходящие заявки (от меня, ещё не принятые).
-  Future<List<FriendRequest>> fetchOutgoingRequests() =>
-      _fetchRequests(incoming: false);
+  Future<List<FriendRequest>> fetchOutgoingRequests({bool strict = false}) =>
+      _fetchRequests(incoming: false, strict: strict);
 
   Future<List<FriendRequest>> _fetchRequests({
     required bool incoming,
@@ -218,7 +232,13 @@ class FriendService {
   }) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
-    if (client == null || id == null) return const [];
+    if (client == null || id == null) {
+      if (strict)
+        throw const FriendServiceException(
+          'Войдите в аккаунт, чтобы загрузить заявки.',
+        );
+      return const [];
+    }
 
     final meField = incoming ? 'to_user' : 'from_user';
     try {
@@ -267,11 +287,17 @@ class FriendService {
       }).toList();
     } on PostgrestException catch (error) {
       debugPrint('[FriendService] requests ${error.code}: ${error.message}');
-      if (strict) rethrow;
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось загрузить заявки. Проверьте подключение.',
+        );
       return const [];
     } catch (error) {
       debugPrint('[FriendService] requests failed: $error');
-      if (strict) rethrow;
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось загрузить заявки. Проверьте подключение.',
+        );
       return const [];
     }
   }
@@ -335,7 +361,8 @@ class FriendService {
   /// Отклонить (или отозвать) заявку.
   Future<void> declineRequest(FriendRequest request) async {
     final client = _client;
-    if (client == null) return;
+    if (client == null || userId == null)
+      throw const FriendServiceException('Войдите в аккаунт.');
     try {
       await client
           .from('friend_requests')
@@ -344,8 +371,14 @@ class FriendService {
           .timeout(const Duration(seconds: 12));
     } on PostgrestException catch (error) {
       debugPrint('[FriendService] decline ${error.code}: ${error.message}');
+      throw const FriendServiceException(
+        'Не удалось изменить заявку. Попробуйте ещё раз.',
+      );
     } catch (error) {
       debugPrint('[FriendService] decline failed: $error');
+      throw const FriendServiceException(
+        'Не удалось изменить заявку. Проверьте подключение.',
+      );
     }
   }
 
@@ -389,9 +422,16 @@ class FriendService {
   }
 
   /// Поиск райдеров по имени (публичная проекция `public_profiles`).
-  Future<List<FriendProfile>> searchUsers(String query) async {
+  Future<List<FriendProfile>> searchUsers(
+    String query, {
+    bool strict = false,
+  }) async {
     final client = _client;
-    if (client == null) return const [];
+    if (client == null) {
+      if (strict)
+        throw const FriendServiceException('Нет подключения к поиску.');
+      return const [];
+    }
     final cleaned = query.trim();
     if (cleaned.length < 2) return const [];
 
@@ -417,9 +457,17 @@ class FriendService {
           .toList();
     } on PostgrestException catch (error) {
       debugPrint('[FriendService] search ${error.code}: ${error.message}');
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось выполнить поиск. Проверьте подключение.',
+        );
       return const [];
     } catch (error) {
       debugPrint('[FriendService] search failed: $error');
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось выполнить поиск. Проверьте подключение.',
+        );
       return const [];
     }
   }
@@ -540,11 +588,14 @@ class FriendService {
     }
   }
 
-  /// Исправлено: теперь при удалении друга его Live-позиция также удаляется
-  Future<bool> removeFriend(String friendId) async {
+  /// Разрывает дружбу через RPC; чужая геопозиция не изменяется.
+  Future<bool> removeFriend(String friendId, {bool strict = false}) async {
     final client = _client;
     final id = client?.auth.currentUser?.id;
-    if (client == null || id == null) return false;
+    if (client == null || id == null) {
+      if (strict) throw const FriendServiceException('Войдите в аккаунт.');
+      return false;
+    }
 
     try {
       // Удаляем симметричные строки дружбы через RPC
@@ -552,19 +603,20 @@ class FriendService {
           .rpc('pulsepath_remove_friend', params: {'p_friend_id': friendId})
           .timeout(const Duration(seconds: 15));
 
-      // Исправлено: удаляем Live-позицию друга из таблицы live_positions
-      await client
-          .from('live_positions')
-          .delete()
-          .eq('user_id', friendId)
-          .timeout(const Duration(seconds: 12));
-
       return true;
     } on PostgrestException catch (error) {
       debugPrint('[FriendService] remove ${error.code}: ${error.message}');
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось удалить из друзей. Проверьте подключение.',
+        );
       return false;
     } catch (error) {
       debugPrint('[FriendService] remove failed: $error');
+      if (strict)
+        throw const FriendServiceException(
+          'Не удалось удалить из друзей. Проверьте подключение.',
+        );
       return false;
     }
   }

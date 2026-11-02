@@ -45,62 +45,69 @@ class SharedRouteCard extends StatelessWidget {
                 ),
                 child: IgnorePointer(
                   ignoring: !AppVariant.modernInterface,
-                  child: MainMapGateway(title: 'Маршрут из чата', autoOpen: false, map: FlutterMap(
-                    options: MapOptions(
-                      initialCameraFit: CameraFit.bounds(
-                        bounds: LatLngBounds.fromPoints(route.points),
-                        padding: const EdgeInsets.all(18),
-                        maxZoom: 16,
-                      ),
-                      interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.none,
-                      ),
-                    ),
-                    children: [
-                      if (tileProvider != null ||
-                          !NavigationPreferences.instance.cachedMapOnly ||
-                          OfflineMapsService.isAvailable)
-                        if (!AppVariant.modernInterface) TileLayer(
-                          tileProvider:
-                              tileProvider ??
-                              OfflineMapsService.tileProvider(
-                                offlineOnly: NavigationPreferences
-                                    .instance
-                                    .cachedMapOnly,
-                              ),
-                          urlTemplate: OfflineMapsService.routeTileUrl,
-                          userAgentPackageName: 'com.pulsepath.app',
+                  child: MainMapGateway(
+                    title: 'Прикреплённый маршрут',
+                    autoOpen: false,
+                    map: FlutterMap(
+                      options: MapOptions(
+                        initialCameraFit: CameraFit.bounds(
+                          bounds: LatLngBounds.fromPoints(route.points),
+                          padding: const EdgeInsets.all(18),
+                          maxZoom: 16,
                         ),
-                      PolylineLayer(
-                        polylines: [
-                          for (final segment in route.segments)
-                            Polyline(
-                              points: segment,
-                              color: Colors.deepOrange,
-                              strokeWidth: 3.5,
-                              borderStrokeWidth: 1.5,
-                              borderColor: Colors.white,
-                            ),
-                        ],
+                        interactionOptions: const InteractionOptions(
+                          flags: InteractiveFlag.none,
+                        ),
                       ),
-                      Align(
-                        alignment: Alignment.bottomRight,
-                        child: ColoredBox(
-                          color: Colors.white70,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 3),
-                            child: Text(
-                              '© OpenStreetMap',
-                              style: TextStyle(
-                                fontSize: 9,
-                                color: Theme.of(context).colorScheme.onSurface,
+                      children: [
+                        if (tileProvider != null ||
+                            !NavigationPreferences.instance.cachedMapOnly ||
+                            OfflineMapsService.isAvailable)
+                          if (!AppVariant.modernInterface)
+                            TileLayer(
+                              tileProvider:
+                                  tileProvider ??
+                                  OfflineMapsService.tileProvider(
+                                    offlineOnly: NavigationPreferences
+                                        .instance
+                                        .cachedMapOnly,
+                                  ),
+                              urlTemplate: OfflineMapsService.routeTileUrl,
+                              userAgentPackageName: 'com.pulsepath.app',
+                            ),
+                        PolylineLayer(
+                          polylines: [
+                            for (final segment in route.segments)
+                              Polyline(
+                                points: segment,
+                                color: Colors.deepOrange,
+                                strokeWidth: 3.5,
+                                borderStrokeWidth: 1.5,
+                                borderColor: Colors.white,
+                              ),
+                          ],
+                        ),
+                        Align(
+                          alignment: Alignment.bottomRight,
+                          child: ColoredBox(
+                            color: Colors.white70,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 3),
+                              child: Text(
+                                '© OpenStreetMap',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  )),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -216,65 +223,69 @@ class _SharedRouteScreenState extends State<SharedRouteScreen> {
               ? const Center(
                   child: Text('Статистика заезда · трек не прикреплён'),
                 )
-              : MainMapGateway(title: 'Маршрут из чата', autoOpen: false, map: FlutterMap(
-                  mapController: _map,
-                  options: MapOptions(
-                    onMapReady: () => _ready = true,
-                    onPositionChanged: (camera, _) {
-                      if ((camera.zoom - _zoom).abs() > .25 && mounted) {
-                        setState(() => _zoom = camera.zoom);
-                      }
-                    },
-                    initialCameraFit: CameraFit.bounds(
-                      bounds: LatLngBounds.fromPoints(route.points),
-                      padding: const EdgeInsets.all(40),
-                    ),
-                  ),
-                  children: [
-                    if (!NavigationPreferences.instance.cachedMapOnly ||
-                        OfflineMapsService.isAvailable)
-                      if (!AppVariant.modernInterface) TileLayer(
-                        tileProvider: OfflineMapsService.tileProvider(
-                          offlineOnly:
-                              NavigationPreferences.instance.cachedMapOnly,
-                        ),
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.pulsepath.app',
+              : MainMapGateway(
+                  title: 'Прикреплённый маршрут',
+                  autoOpen: false,
+                  map: FlutterMap(
+                    mapController: _map,
+                    options: MapOptions(
+                      onMapReady: () => _ready = true,
+                      onPositionChanged: (camera, _) {
+                        if ((camera.zoom - _zoom).abs() > .25 && mounted) {
+                          setState(() => _zoom = camera.zoom);
+                        }
+                      },
+                      initialCameraFit: CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints(route.points),
+                        padding: const EdgeInsets.all(40),
                       ),
-                    ActivityTrailLayer(
-                      segments: route.segments,
-                      activity: route.activity,
                     ),
-                    const RichAttributionWidget(
-                      attributions: [
-                        TextSourceAttribution('© OpenStreetMap contributors'),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        for (final group in groupTrackMedia(
-                          route.media,
-                          route.points,
-                          (item) => item.pointIndex,
-                          _zoom,
-                        ))
-                          Marker(
-                            point: route.points[group.first.pointIndex],
-                            width: 24,
-                            height: 24,
-                            rotate: true,
-                            child: TrackMediaThumbnail(
-                              shared: group.first,
-                              count: group.length,
-                              selected: group.any((m) => m.id == _selectedId),
-                              onTap: () => _group(group),
+                    children: [
+                      if (!NavigationPreferences.instance.cachedMapOnly ||
+                          OfflineMapsService.isAvailable)
+                        if (!AppVariant.modernInterface)
+                          TileLayer(
+                            tileProvider: OfflineMapsService.tileProvider(
+                              offlineOnly:
+                                  NavigationPreferences.instance.cachedMapOnly,
                             ),
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.pulsepath.app',
                           ),
-                      ],
-                    ),
-                  ],
-                )),
+                      ActivityTrailLayer(
+                        segments: route.segments,
+                        activity: route.activity,
+                      ),
+                      const RichAttributionWidget(
+                        attributions: [
+                          TextSourceAttribution('© OpenStreetMap contributors'),
+                        ],
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          for (final group in groupTrackMedia(
+                            route.media,
+                            route.points,
+                            (item) => item.pointIndex,
+                            _zoom,
+                          ))
+                            Marker(
+                              point: route.points[group.first.pointIndex],
+                              width: 24,
+                              height: 24,
+                              rotate: true,
+                              child: TrackMediaThumbnail(
+                                shared: group.first,
+                                count: group.length,
+                                selected: group.any((m) => m.id == _selectedId),
+                                onTap: () => _group(group),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
         ),
         if (route.media.isNotEmpty) ...[
           Padding(

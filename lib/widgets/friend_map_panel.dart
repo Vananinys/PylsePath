@@ -1,3 +1,6 @@
+import '../data/user_scope.dart';
+import 'community_photo_viewer.dart';
+
 import 'package:flutter/services.dart';
 
 import 'dart:async';
@@ -556,7 +559,7 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
                       // Фотографии поста.
                       if (post.photoUrls.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        _buildPostPhotos(post.photoUrls),
+                        _buildPostPhotos(post.photoUrls, post),
                       ],
                       if (post.rideDistanceKm != null) ...[
                         const SizedBox(height: 6),
@@ -654,16 +657,22 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
   }
 
   /// Мини-сетка фотографий поста (1 фото — широко, остальные — 2 колонки).
-  Widget _buildPostPhotos(List<String> urls) {
+  Widget _buildPostPhotos(List<String> urls, CommunityPost post) {
     if (urls.length == 1) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          urls.first,
-          width: double.infinity,
-          height: 140,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        child: _postPhotoTap(
+          post,
+          urls,
+          0,
+          Image.network(
+            urls.first,
+            width: double.infinity,
+            height: 140,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                const Center(child: Icon(Icons.refresh)),
+          ),
         ),
       );
     }
@@ -680,15 +689,56 @@ class _FriendMapPanelState extends State<FriendMapPanel> {
       itemBuilder: (context, index) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            urls[index],
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          child: _postPhotoTap(
+            post,
+            urls,
+            index,
+            Image.network(
+              urls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  const Center(child: Icon(Icons.refresh)),
+            ),
           ),
         );
       },
     );
   }
+
+  Widget _postPhotoTap(
+    CommunityPost post,
+    List<String> urls,
+    int index,
+    Widget child,
+  ) => Semantics(
+    button: true,
+    label: 'Открыть фото ${index + 1}',
+    child: GestureDetector(
+      onTap: () {
+        final owner = widget.currentUserId;
+        if (owner == null || UserScope.currentUserId() != owner) return;
+        Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => CommunityPhotoViewer(
+              urls: urls,
+              initialIndex: index,
+              onRefreshPhotoUrls: post.privatePhotoPaths.isEmpty
+                  ? null
+                  : () async {
+                      if (UserScope.currentUserId() != owner)
+                        throw StateError('Аккаунт изменился');
+                      return (await _communityService.resolvePostMedia(
+                        post,
+                        expectedOwner: owner,
+                      )).photoUrls;
+                    },
+            ),
+          ),
+        );
+      },
+      child: child,
+    ),
+  );
 
   // ── Друзья пользователя ───────────────────────────────────────────────
 

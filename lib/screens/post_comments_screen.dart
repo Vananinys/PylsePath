@@ -10,7 +10,6 @@ import '../models/friend_profile.dart';
 import '../models/post_comment.dart';
 import '../services/community_service.dart';
 import 'public_profile_screen.dart';
-import '../data/user_scope.dart';
 import '../services/moderation_service.dart';
 import '../widgets/moderation_dialogs.dart';
 
@@ -19,26 +18,44 @@ import '../widgets/moderation_dialogs.dart';
 class PostCommentsScreen extends StatefulWidget {
   final CommunityPost post;
 
-  const PostCommentsScreen({super.key, required this.post});
+  const PostCommentsScreen({super.key, required this.post, this.service});
+  final CommunityService? service;
 
   @override
   State<PostCommentsScreen> createState() => _PostCommentsScreenState();
 }
 
 class _PostCommentsScreenState extends State<PostCommentsScreen> {
-  final CommunityService _communityService = CommunityService();
+  late final CommunityService _communityService;
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   final FocusNode _inputFocus = FocusNode();
-  final String? _owner = UserScope.currentUserId();
+  late final String? _owner;
+  int _loadGeneration = 0, _sendGeneration = 0, _photoGeneration = 0;
+  bool _accountChanged = false;
+  bool _current() {
+    if (!mounted) return false;
+    if (_communityService.userId != _owner) {
+      if (!_accountChanged) setState(() => _accountChanged = true);
+      return false;
+    }
+    return true;
+  }
+
+  bool get _hasInput =>
+      _inputController.text.trim().isNotEmpty || _pendingPhotoPath != null;
+  void _inputChanged() {
+    if (mounted) setState(() {});
+  }
+
   ModerationStatus _moderation = const ModerationStatus();
   RealtimeChannel? _moderationChannel;
   Timer? _moderationDebounce;
   Future<void> _loadModeration() async {
     try {
       final status = await ModerationService().status();
-      if (!mounted || UserScope.currentUserId() != _owner) return;
+      if (!mounted || _communityService.userId != _owner) return;
       setState(() => _moderation = status);
       _moderationChannel ??= Supabase.instance.client
           .channel('comment-moderation-${identityHashCode(this)}')
@@ -77,6 +94,9 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   @override
   void initState() {
     super.initState();
+    _communityService = widget.service ?? CommunityService();
+    _owner = _communityService.userId;
+    _inputController.addListener(_inputChanged);
     _load();
   }
 
@@ -93,28 +113,38 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted || !_current()) return;
+    final generation = ++_loadGeneration;
     unawaited(_loadModeration());
     try {
       final comments = await _communityService.fetchComments(
         widget.post.id,
         strict: true,
       );
-      if (!mounted) return;
+      if (!mounted || !_current() || generation != _loadGeneration) return;
       setState(() {
         _comments = comments;
         _isLoading = false;
         _loadError = null;
       });
     } on CommunityServiceException catch (error) {
-      if (mounted)
+      if (mounted && _current() && generation == _loadGeneration)
         setState(() {
           _isLoading = false;
           _loadError = error.message;
+        });
+    } catch (_) {
+      if (mounted && _current() && generation == _loadGeneration)
+        setState(() {
+          _isLoading = false;
+          _loadError = 'Не удалось загрузить комментарии. Повторите попытку.';
         });
     }
   }
 
   Future<void> _pickPhoto() async {
+    if (_sending || !_current()) return;
+    final generation = ++_photoGeneration;
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -122,11 +152,15 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
         maxHeight: 1280,
         imageQuality: 85,
       );
-      if (picked == null) return;
-      if (!mounted) return;
+      if (picked == null ||
+          !_current() ||
+          generation != _photoGeneration ||
+          _sending)
+        return;
       setState(() => _pendingPhotoPath = picked.path);
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || !_current() || generation != _photoGeneration || _sending)
+        return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Не удалось выбрать фото')));
@@ -136,35 +170,51 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
   Future<void> _send() async {
     final text = _inputController.text.trim();
     if (text.isEmpty && _pendingPhotoPath == null) return;
-    if (_sending) return;
+    if (_sending || !_current() || _moderation.isBanned) return;
+    final generation = ++_sendGeneration;
+    ++_photoGeneration;
+    final photo = _pendingPhotoPath;
+    final reply = _replyTo;
 
     setState(() => _sending = true);
     try {
       await _communityService.addComment(
         widget.post.id,
         body: text,
-        parentCommentId: _replyTo?.id,
-        photoPath: _pendingPhotoPath,
+        parentCommentId: reply?.id,
+        photoPath: photo,
+        expectedOwner: _owner,
       );
-      if (!mounted) return;
+      if (!mounted || !_current() || generation != _sendGeneration) return;
       _inputController.clear();
       setState(() {
         _replyTo = null;
         _pendingPhotoPath = null;
       });
       await _load();
-      _scrollToBottom();
+      if (mounted && _current() && generation == _sendGeneration)
+        _scrollToBottom();
     } on CommunityServiceException catch (error) {
-      if (!mounted) return;
+      if (!mounted || !_current()) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (mounted && _current() && generation == _sendGeneration)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Не удалось отправить комментарий. Текст и вложение сохранены.',
+            ),
+          ),
+        );
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted && _current() && generation == _sendGeneration)
+        setState(() => _sending = false);
     }
   }
 
   Future<void> _deleteComment(PostComment comment) async {
-    if (_busyCommentId != null) return;
+    if (_busyCommentId != null || !_current()) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -181,17 +231,17 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !_current()) return;
     setState(() => _busyCommentId = comment.id);
     try {
       await _communityService.deleteComment(comment.id);
-      await _load();
+      if (mounted && _current()) await _load();
     } on CommunityServiceException catch (error) {
-      if (mounted)
+      if (mounted && _current())
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
-      if (mounted) setState(() => _busyCommentId = null);
+      if (mounted && _current()) setState(() => _busyCommentId = null);
     }
   }
 
@@ -203,7 +253,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (mounted && _current() && _scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
@@ -211,6 +261,13 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_accountChanged || _communityService.userId != _owner)
+      return Scaffold(
+        appBar: AppBar(title: const Text('Комментарии')),
+        body: const Center(
+          child: Text('Аккаунт изменился. Откройте комментарии заново.'),
+        ),
+      );
     final topLevel = _comments.where((comment) => !comment.isReply).toList();
     final me = _communityService.userId;
 
@@ -220,7 +277,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                if (_loadError != null)
+                if (_loadError != null && topLevel.isNotEmpty)
                   MaterialBanner(
                     content: Text(_loadError!),
                     actions: [
@@ -231,7 +288,28 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                     ],
                   ),
                 Expanded(
-                  child: topLevel.isEmpty
+                  child: _loadError != null && topLevel.isEmpty
+                      ? Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.cloud_off_outlined, size: 40),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  "Комментарии пока недоступны",
+                                  textAlign: TextAlign.center,
+                                ),
+                                TextButton(
+                                  onPressed: _load,
+                                  child: const Text("Повторить загрузку"),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : topLevel.isEmpty
                       ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -381,7 +459,28 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                           comment.photoUrl!,
                           width: 180,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          errorBuilder: (_, __, ___) => SizedBox(
+                            width: 180,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Фото недоступно',
+                                  textAlign: TextAlign.center,
+                                ),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    if (!_current()) return;
+                                    await NetworkImage(comment.photoUrl!)
+                                        .evict();
+                                    if (_current()) await _load();
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text('Повторить'),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -389,7 +488,8 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                 ),
               ),
               const SizedBox(height: 2),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     _formatTime(comment.createdAt),
@@ -407,10 +507,12 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                         minimumSize: Size.zero,
                         visualDensity: VisualDensity.compact,
                       ),
-                      onPressed: () {
-                        setState(() => _replyTo = comment);
-                        _inputFocus.requestFocus();
-                      },
+                      onPressed: _sending
+                          ? null
+                          : () {
+                              setState(() => _replyTo = comment);
+                              _inputFocus.requestFocus();
+                            },
                       child: const Text(
                         'Ответить',
                         style: TextStyle(fontSize: 11),
@@ -504,7 +606,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
           IconButton(
             tooltip: 'Отменить ответ',
             icon: const Icon(Icons.close, size: 16),
-            onPressed: () => setState(() => _replyTo = null),
+            onPressed: _sending ? null : () => setState(() => _replyTo = null),
           ),
         ],
       ),
@@ -535,7 +637,9 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
           IconButton(
             tooltip: 'Убрать вложение',
             icon: const Icon(Icons.close, size: 16),
-            onPressed: () => setState(() => _pendingPhotoPath = null),
+            onPressed: _sending
+                ? null
+                : () => setState(() => _pendingPhotoPath = null),
           ),
         ],
       ),
@@ -563,10 +667,12 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
                 Icons.image_outlined,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              onPressed: _pickPhoto,
+              onPressed: _sending ? null : _pickPhoto,
             ),
             Expanded(
               child: TextField(
+                enabled: !_sending,
+                focusNode: _inputFocus,
                 controller: _inputController,
                 minLines: 1,
                 maxLines: 4,
@@ -596,7 +702,7 @@ class _PostCommentsScreenState extends State<PostCommentsScreen> {
               child: IconButton(
                 tooltip: 'Отправить комментарий',
                 icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                onPressed: _sending ? null : _send,
+                onPressed: _sending || !_hasInput ? null : _send,
               ),
             ),
           ],

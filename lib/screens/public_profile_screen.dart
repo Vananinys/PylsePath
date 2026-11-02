@@ -376,6 +376,17 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               .map(
                 (post) => CommunityPostCard(
                   post: post,
+                  onRefreshPhotoUrls: post.privatePhotoPaths.isEmpty
+                      ? null
+                      : () async {
+                          if (_viewer == null ||
+                              UserScope.currentUserId() != _viewer)
+                            throw StateError('Аккаунт изменился');
+                          return (await _communityService.resolvePostMedia(
+                            post,
+                            expectedOwner: _viewer,
+                          )).photoUrls;
+                        },
                   currentUserId: _communityService.userId,
                   onModerate: _canModerate
                       ? () async {

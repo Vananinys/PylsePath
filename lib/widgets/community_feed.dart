@@ -1,3 +1,4 @@
+import '../data/community_draft_store.dart';
 import 'community_composer_frame.dart';
 import '../config/app_variant.dart';
 import '../data/ui_snapshot_cache.dart';
@@ -42,13 +43,15 @@ Future<bool> showCommunityComposer(
 /// Лента сообщества: композер «Что нового?» + карточки постов
 /// (лайки, комментарии, фото, GPX прикреплённого заезда).
 class CommunityFeed extends StatefulWidget {
-  const CommunityFeed({super.key});
+  const CommunityFeed({super.key, this.onFindFriends});
+  final VoidCallback? onFindFriends;
 
   @override
   State<CommunityFeed> createState() => _CommunityFeedState();
 }
 
-class _CommunityFeedState extends State<CommunityFeed> {
+class _CommunityFeedState extends State<CommunityFeed>
+    with WidgetsBindingObserver {
   final CommunityService _communityService = CommunityService();
   final String? _cacheOwner = UserScope.currentUserId();
   ModerationStatus _moderation = const ModerationStatus();
@@ -84,6 +87,7 @@ class _CommunityFeedState extends State<CommunityFeed> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _moderationDebounce?.cancel();
     final channel = _moderationChannel;
     if (channel != null)
@@ -91,9 +95,15 @@ class _CommunityFeedState extends State<CommunityFeed> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) unawaited(_load());
+  }
+
   bool _isLoading = true;
   bool _refreshing = false;
   String? _cacheNotice;
+  String? _loadError;
   int _loadGeneration = 0;
   List<CommunityPost> _posts = [];
   static const _pageSize = 20;
@@ -108,6 +118,7 @@ class _CommunityFeedState extends State<CommunityFeed> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
@@ -126,7 +137,14 @@ class _CommunityFeedState extends State<CommunityFeed> {
       if (!current()) return;
       if (rows != null) {
         try {
-          final posts = rows.map(CommunityPost.fromSnapshot).toList();
+          final posts = rows
+              .map(CommunityPost.fromSnapshot)
+              .where(
+                (p) =>
+                    p.audience == CommunityPostAudience.everyone &&
+                    p.privatePhotoPaths.isEmpty,
+              )
+              .toList();
           setState(() {
             _posts = posts;
             _isLoading = false;
@@ -150,11 +168,12 @@ class _CommunityFeedState extends State<CommunityFeed> {
         _posts = posts;
         _isLoading = false;
         _cacheNotice = null;
+        _loadError = null;
         _canLoadMore = posts.length == _pageSize;
         _loadingMore = false;
         _pageError = null;
       });
-      await cache.write(posts.map((post) => post.toSnapshot()).toList());
+      await _persistDisplayedPosts();
       if (!current()) return;
       final counts = await _communityService.commentsCount(
         posts.map((post) => post.id).toList(),
@@ -169,13 +188,14 @@ class _CommunityFeedState extends State<CommunityFeed> {
             )
             .toList();
       });
-      await cache.write(_posts.map((post) => post.toSnapshot()).toList());
+      await _persistDisplayedPosts();
     } catch (_) {
       if (!current()) return;
       setState(() {
         _isLoading = false;
         _loadingMore = false;
         _canLoadMore = false;
+        _loadError = 'Не удалось загрузить публикации. Проверьте подключение и повторите.';
         _cacheNotice = _posts.isEmpty
             ? 'Не удалось обновить ленту. Потяните вниз, чтобы повторить.'
             : 'Сохранённая лента · не удалось обновить';
@@ -188,10 +208,17 @@ class _CommunityFeedState extends State<CommunityFeed> {
   Future<void> _persistDisplayedPosts() async {
     final owner = _cacheOwner;
     if (UserScope.currentUserId() != owner) return;
-    await UiSnapshotCache(
-      _cacheName,
-      owner,
-    ).write(_posts.take(100).map((post) => post.toSnapshot()).toList());
+    await UiSnapshotCache(_cacheName, owner).write(
+      _posts
+          .where(
+            (p) =>
+                p.audience == CommunityPostAudience.everyone &&
+                p.privatePhotoPaths.isEmpty,
+          )
+          .take(100)
+          .map((post) => post.toSnapshot())
+          .toList(),
+    );
   }
 
   Future<void> _loadMore() async {
@@ -251,6 +278,7 @@ class _CommunityFeedState extends State<CommunityFeed> {
       _canLoadMore = false;
       _pageError = null;
       _cacheNotice = null;
+      _loadError = null;
       _loadingMore = false;
     });
     _load();
@@ -296,7 +324,7 @@ class _CommunityFeedState extends State<CommunityFeed> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Отмена'),
+            child: const Text('Закрыть'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
@@ -393,8 +421,8 @@ class _CommunityFeedState extends State<CommunityFeed> {
                           padding: const EdgeInsets.only(right: 6),
                           child: ChoiceChip(
                             label: Text(switch (scope) {
-                              CommunityFeedScope.everyone => 'Сообщество',
-                              CommunityFeedScope.friends => 'Друзья',
+                              CommunityFeedScope.everyone => 'Все публикации',
+                              CommunityFeedScope.friends => 'От друзей',
                               CommunityFeedScope.mine => 'Мои посты',
                             }),
                             selected: scope == _scope,
@@ -454,6 +482,23 @@ class _CommunityFeedState extends State<CommunityFeed> {
                     padding: EdgeInsets.all(40),
                     child: Center(child: CircularProgressIndicator()),
                   )
+                else if (_posts.isEmpty && _loadError != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.cloud_off_outlined, size: 40),
+                        const SizedBox(height: 12),
+                        Text(_loadError!, textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Повторить'),
+                        ),
+                      ],
+                    ),
+                  )
                 else if (_posts.isEmpty)
                   _buildEmptyState(),
               ],
@@ -470,7 +515,15 @@ class _CommunityFeedState extends State<CommunityFeed> {
                 key: ValueKey(post.id),
                 post: post,
                 currentUserId: _communityService.userId,
-                onLike: _moderation.isBanned ? null : () => _toggleLike(post),
+                onLike: _moderation.isBanned || _pendingLikes.contains(post.id)
+                    ? null
+                    : () => _toggleLike(post),
+                onRefreshPhotoUrls: post.privatePhotoPaths.isEmpty
+                    ? null
+                    : () async => (await _communityService.resolvePostMedia(
+                        post,
+                        expectedOwner: _cacheOwner,
+                      )).photoUrls,
                 onModerate: _moderation.isModerator
                     ? () async {
                         final changed = await showPostModeration(
@@ -578,6 +631,20 @@ class _CommunityFeedState extends State<CommunityFeed> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 16),
+          if (_scope == CommunityFeedScope.friends &&
+              widget.onFindFriends != null)
+            FilledButton.icon(
+              onPressed: widget.onFindFriends,
+              icon: const Icon(Icons.person_search_outlined),
+              label: const Text('Найти людей'),
+            )
+          else if (_scope != CommunityFeedScope.friends)
+            FilledButton.icon(
+              onPressed: _moderation.isBanned ? null : _openComposer,
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Написать публикацию'),
+            ),
         ],
       ),
     );
@@ -601,33 +668,123 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   bool _isLoadingRides = true;
   bool _publishing = false;
   bool _allowClose = false;
+  bool _draftReady = false, _draftPublished = false;
+  String? _draftNotice;
+  CommunityDraftStore? _draftStore;
+  CommunityPostAudience _audience = CommunityPostAudience.everyone;
+  bool get _sameOwner =>
+      _publicationOwner != null &&
+      _publicationOwner == _communityService.userId;
+  Future<bool> _saveDraft() async {
+    if (!_draftReady || _draftPublished || !_sameOwner) return true;
+    try {
+      await _draftStore?.write({
+        'body': _bodyController.text,
+        'photos': List<String>.of(_photoPaths),
+        'ride_id': _selectedRideId,
+        'audience': _audience.name,
+      });
+      if (mounted && _draftNotice == 'Не удалось сохранить черновик')
+        setState(() => _draftNotice = null);
+      return true;
+    } catch (_) {
+      if (mounted)
+        setState(() => _draftNotice = 'Не удалось сохранить черновик');
+      return false;
+    }
+  }
+
+  Future<void> _initializeDraft() async {
+    await _loadRecentRides();
+    if (!mounted || !_sameOwner) return;
+    _draftStore = CommunityDraftStore(_publicationOwner!);
+    try {
+      final draft = await _draftStore!.read();
+      if (!mounted || !_sameOwner) return;
+      var restore = draft != null;
+      if (draft != null && widget.route != null) {
+        restore =
+            await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Есть незаконченная публикация'),
+                content: const Text(
+                  'Восстановить черновик или начать новую публикацию выбранного заезда?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Восстановить'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Начать новую'),
+                  ),
+                ],
+              ),
+            ) ??
+            true;
+      }
+      if (!mounted || !_sameOwner) return;
+      if (restore && draft != null) {
+        _bodyController.text = (draft['body'] as String? ?? '').substring(
+          0,
+          ((draft['body'] as String? ?? '').length).clamp(0, 1000),
+        );
+        final savedPhotos = (draft['photos'] as List? ?? [])
+            .whereType<String>()
+            .take(4);
+        _photoPaths.clear();
+        for (final path in savedPhotos) {
+          if (await File(path).exists()) _photoPaths.add(path);
+        }
+        if (!mounted || !_sameOwner) return;
+        final rideId = draft['ride_id'] as String?;
+        _selectedRideId = _rideByLocalId.containsKey(rideId) ? rideId : null;
+        _audience = draft['audience'] == 'friends'
+            ? CommunityPostAudience.friends
+            : CommunityPostAudience.everyone;
+        _shareGpx = false;
+        _rideMediaIds = {};
+        _draftNotice = 'Черновик восстановлен. Проверьте вложения и доступ к треку перед публикацией.';
+      }
+    } catch (_) {
+      _draftNotice = 'Не удалось восстановить черновик. Его исходная копия сохранена на устройстве.';
+    }
+    if (!mounted || !_sameOwner) return;
+    setState(() => _draftReady = true);
+    await _saveDraft();
+  }
+
   bool get _hasDraft =>
       _bodyController.text.trim().isNotEmpty ||
       _photoPaths.isNotEmpty ||
       _selectedRideId != null;
   Future<void> _closeComposer() async {
     if (_publishing) return;
-    if (_hasDraft) {
-      final discard = await showDialog<bool>(
+    final saved = await _saveDraft();
+    if (!mounted) return;
+    if (!saved) {
+      final exit = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Выйти без публикации?"),
+        builder: (ctx) => AlertDialog(
+          title: const Text('Черновик не сохранён'),
           content: const Text(
-            "Текст и выбранные вложения не сохранятся. Сами заезды и фотографии останутся на месте.",
+            'Не удалось сохранить изменения на устройстве. Можно остаться в редакторе и повторить сохранение.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Продолжить писать"),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Остаться'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Выйти"),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Выйти без сохранения'),
             ),
           ],
         ),
       );
-      if (discard != true || !mounted) return;
+      if (exit != true || !mounted) return;
     }
     setState(() => _allowClose = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -657,25 +814,29 @@ class __ComposerDialogState extends State<_ComposerDialog> {
       _selectedRideId = route.localId;
       _rideByLocalId[route.localId] = route;
     }
-    _loadRecentRides();
+    unawaited(_initializeDraft());
   }
 
   @override
   void dispose() {
+    unawaited(_saveDraft());
     _bodyController.dispose();
     super.dispose();
   }
 
   /// Последние заезды для прикрепления (из локальной истории).
   void _contentChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      unawaited(_saveDraft());
+    }
   }
 
   Future<void> _loadRecentRides() async {
     try {
       final repo = CommunityRidesBridge();
-      final rides = await repo.recentRides(limit: 10);
-      if (!mounted) return;
+      final rides = await repo.recentRides(limit: null);
+      if (!mounted || !_sameOwner) return;
       setState(() {
         _recentRides = rides
             .map(
@@ -728,12 +889,15 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         maxHeight: 1280,
         imageQuality: 85,
       );
-      if (!mounted) return;
-      setState(() {
-        for (final image in picked.take(4 - _photoPaths.length)) {
-          _photoPaths.add(image.path);
-        }
-      });
+      if (!mounted || !_sameOwner) return;
+      final paths = <String>[];
+      _draftStore ??= CommunityDraftStore(_publicationOwner!);
+      for (final image in picked.take(4 - _photoPaths.length)) {
+        paths.add(await _draftStore!.stagePhoto(image.path));
+        if (!mounted || !_sameOwner) return;
+      }
+      setState(() => _photoPaths.addAll(paths));
+      await _saveDraft();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -743,7 +907,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   }
 
   Future<void> _publish() async {
-    if (_publishing) return;
+    if (_publishing || _draftPublished || !_sameOwner || !_draftReady) return;
     final body = _bodyController.text.trim();
     if (body.isEmpty && _photoPaths.isEmpty && _selectedRideId == null) return;
     setState(() => _publishing = true);
@@ -764,6 +928,8 @@ class __ComposerDialogState extends State<_ComposerDialog> {
       if (!mounted || owner != _communityService.userId) return;
       await _communityService.createPost(
         body,
+        audience: _audience,
+        expectedOwner: owner,
         rideId: _rideByLocalId[_selectedRideId]?.remoteId,
         routeAttachment: snapshot,
         photoPaths: _photoPaths,
@@ -771,6 +937,19 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         // grant the legacy RPC access to the original untrimmed ride.
         shareGpx: false,
       );
+      _draftPublished = true;
+      try {
+        await _draftStore?.clear();
+      } catch (_) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Публикация отправлена. Не удалось очистить локальный черновик.',
+              ),
+            ),
+          );
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } on CommunityServiceException catch (error) {
@@ -799,7 +978,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         if (!didPop) _closeComposer();
       },
       child: CommunityComposerFrame(
-        busy: _publishing,
+        busy: _publishing || !_draftReady || !_sameOwner,
         onClose: _publishing ? null : _closeComposer,
         title: const Text('Новая публикация'),
         content: SizedBox(
@@ -814,6 +993,39 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                     'Расскажите о поездке. Фото и заезд можно добавить по желанию.',
                   ),
                 ),
+                if (!_draftReady) const LinearProgressIndicator(),
+                if (_draftNotice != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(_draftNotice!),
+                  ),
+                DropdownButtonFormField<CommunityPostAudience>(
+                  initialValue: _audience,
+                  key: ValueKey(_audience),
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Кто увидит публикацию',
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: CommunityPostAudience.everyone,
+                      child: Text('Все пользователи'),
+                    ),
+                    DropdownMenuItem(
+                      value: CommunityPostAudience.friends,
+                      child: Text('Только друзья'),
+                    ),
+                  ],
+                  onChanged: _publishing
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _audience = value);
+                            unawaited(_saveDraft());
+                          }
+                        },
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   enabled: !_publishing,
                   controller: _bodyController,
@@ -849,8 +1061,10 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                                 right: 0,
                                 top: 0,
                                 child: GestureDetector(
-                                  onTap: () =>
-                                      setState(() => _photoPaths.remove(path)),
+                                  onTap: () => setState(() {
+                                    _photoPaths.remove(path);
+                                    unawaited(_saveDraft());
+                                  }),
                                   child: Container(
                                     decoration: const BoxDecoration(
                                       color: Colors.black54,
@@ -944,6 +1158,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                         _selectedRideId = id;
                         _rideMediaIds = {};
                         _shareGpx = false;
+                        unawaited(_saveDraft());
                       }),
                     ),
                   if (!AppVariant.modernInterface)
@@ -992,7 +1207,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         actions: [
           TextButton(
             onPressed: _publishing ? null : _closeComposer,
-            child: const Text('Отмена'),
+            child: const Text('Закрыть'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -1000,7 +1215,10 @@ class __ComposerDialogState extends State<_ComposerDialog> {
               foregroundColor: Colors.white,
             ),
             onPressed:
-                _publishing ||
+                !_draftReady ||
+                    !_sameOwner ||
+                    _draftPublished ||
+                    _publishing ||
                     (_bodyController.text.trim().isEmpty &&
                         _photoPaths.isEmpty &&
                         _selectedRideId == null)
@@ -1026,17 +1244,20 @@ class __ComposerDialogState extends State<_ComposerDialog> {
 /// Мост к истории заездов: композеру нужны последние заезды пользователя
 /// для прикрепления. Локальные заезды передаются снимком без cloud ID.
 class CommunityRidesBridge {
-  Future<List<RideSummary>> recentRides({int limit = 3}) async {
+  Future<List<RideSummary>> recentRides({int? limit = 3}) async {
     final repo = WorkoutHistoryRepository();
     await repo.load();
-    return repo.workoutHistoryDesc.take(limit).map((route) {
-      return RideSummary(
-        route: route,
-        remoteId: route.remoteId,
-        distanceKm: route.distanceKm,
-        duration: route.duration,
-      );
-    }).toList();
+    return repo.workoutHistoryDesc
+        .take(limit ?? repo.workoutHistoryDesc.length)
+        .map((route) {
+          return RideSummary(
+            route: route,
+            remoteId: route.remoteId,
+            distanceKm: route.distanceKm,
+            duration: route.duration,
+          );
+        })
+        .toList();
   }
 }
 

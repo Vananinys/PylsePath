@@ -1,7 +1,10 @@
 import 'shared_route.dart';
 
+enum CommunityPostAudience { everyone, friends }
+
 /// Пост сообщества (таблица `community_posts`) с агрегатами ленты.
 class CommunityPost {
+  final CommunityPostAudience audience;
   final SharedRoute? routeAttachment;
   final String id;
   final String authorId;
@@ -27,6 +30,7 @@ class CommunityPost {
 
   /// Фотографии поста (публичные URL из бакета `community`), до 4.
   final List<String> photoUrls;
+  final List<String> privatePhotoPaths;
 
   /// Разрешено ли скачивать GPX-трек прикреплённого заезда.
   final bool shareGpx;
@@ -36,6 +40,7 @@ class CommunityPost {
 
   const CommunityPost({
     this.routeAttachment,
+    this.audience = CommunityPostAudience.everyone,
     required this.id,
     required this.authorId,
     required this.authorName,
@@ -49,11 +54,13 @@ class CommunityPost {
     required this.likedByMe,
     required this.createdAt,
     this.photoUrls = const [],
+    this.privatePhotoPaths = const [],
     this.shareGpx = false,
     this.commentsCount = 0,
   });
 
   Map<String, dynamic> toSnapshot() => {
+    'audience': audience.name,
     'routeAttachment': routeAttachment?.toJson(),
     'id': id,
     'authorId': authorId,
@@ -67,12 +74,18 @@ class CommunityPost {
     'likeCount': likeCount,
     'likedByMe': likedByMe,
     'createdAt': createdAt.toIso8601String(),
-    'photoUrls': photoUrls,
+    'photoUrls': photoUrls
+        .where((url) => !url.contains('/object/sign/community_private/'))
+        .toList(),
+    'privatePhotoPaths': privatePhotoPaths,
     'shareGpx': shareGpx,
     'commentsCount': commentsCount,
   };
 
   factory CommunityPost.fromSnapshot(Map<String, dynamic> row) => CommunityPost(
+    audience: row['audience'] == 'friends'
+        ? CommunityPostAudience.friends
+        : CommunityPostAudience.everyone,
     routeAttachment: SharedRoute.tryParse(row['routeAttachment']),
     id: row['id'] as String,
     authorId: row['authorId'] as String,
@@ -87,16 +100,20 @@ class CommunityPost {
     likedByMe: row['likedByMe'] as bool,
     createdAt: DateTime.parse(row['createdAt'] as String),
     photoUrls: (row['photoUrls'] as List).cast<String>(),
+    privatePhotoPaths:
+        (row['privatePhotoPaths'] as List?)?.cast<String>() ?? const [],
     shareGpx: row['shareGpx'] as bool,
     commentsCount: row['commentsCount'] as int,
   );
 
   CommunityPost copyWith({
+    List<String>? photoUrls,
     int? likeCount,
     bool? likedByMe,
     int? commentsCount,
   }) {
     return CommunityPost(
+      audience: audience,
       routeAttachment: routeAttachment,
       id: id,
       authorId: authorId,
@@ -110,7 +127,8 @@ class CommunityPost {
       likeCount: likeCount ?? this.likeCount,
       likedByMe: likedByMe ?? this.likedByMe,
       createdAt: createdAt,
-      photoUrls: photoUrls,
+      photoUrls: photoUrls ?? this.photoUrls,
+      privatePhotoPaths: privatePhotoPaths,
       shareGpx: shareGpx,
       commentsCount: commentsCount ?? this.commentsCount,
     );
@@ -129,6 +147,9 @@ class CommunityPost {
     final ride = rideById[(row['ride_id'] ?? '').toString()] ?? {};
 
     return CommunityPost(
+      audience: row['audience'] == 'friends'
+          ? CommunityPostAudience.friends
+          : CommunityPostAudience.everyone,
       routeAttachment: SharedRoute.tryParse(row['route_attachment']),
       id: postId,
       authorId: authorId,
@@ -155,6 +176,8 @@ class CommunityPost {
       photoUrls:
           (row['photo_urls'] as List?)?.map((url) => url.toString()).toList() ??
           const [],
+      privatePhotoPaths:
+          (row['private_photo_paths'] as List?)?.cast<String>() ?? const [],
       shareGpx: row['share_gpx'] as bool? ?? false,
     );
   }

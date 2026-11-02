@@ -16,6 +16,7 @@ class PostComment {
 
   final String body;
   final String? photoUrl;
+  final String? privatePhotoPath;
   final DateTime createdAt;
 
   const PostComment({
@@ -27,8 +28,22 @@ class PostComment {
     this.parentCommentId,
     required this.body,
     this.photoUrl,
+    this.privatePhotoPath,
     required this.createdAt,
   });
+
+  PostComment withResolvedPhoto(String url) => PostComment(
+    id: id,
+    postId: postId,
+    authorId: authorId,
+    authorName: authorName,
+    authorAvatarUrl: authorAvatarUrl,
+    parentCommentId: parentCommentId,
+    body: body,
+    photoUrl: url,
+    privatePhotoPath: privatePhotoPath,
+    createdAt: createdAt,
+  );
 
   bool get isReply => parentCommentId != null;
 
@@ -51,6 +66,7 @@ class PostComment {
           : (row['parent_comment_id'] ?? '').toString(),
       body: row['body'] as String? ?? '',
       photoUrl: row['photo_url'] as String?,
+      privatePhotoPath: row['private_photo_path'] as String?,
       createdAt:
           DateTime.tryParse(row['created_at'] as String? ?? '') ??
           DateTime.now(),
