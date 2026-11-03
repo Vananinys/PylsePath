@@ -1764,19 +1764,35 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Защита от параллельных стартов через await-окно проверки черновика.
+  bool _startGuardBusy = false;
+
   /// Check durable recovery data before the UI starts a new recording.
+  ///
+  /// Проверка черновика содержит await — два одновременных старта могли бы
+  /// пройти её вместе, пока хранилище ещё не изменено. [_startGuardBusy]
+  /// выставляется синхронно до первого await: второй параллельный вызов
+  /// отклоняется сразу, а не после собственной проверки.
   Future<bool> startWorkoutSafely({String? groupRoomId}) async {
     if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
       return false;
     }
-    if (await loadInterruptedWorkout() != null) {
-      throw StateError('Сначала восстановите или сохраните прерванную поездку');
+    if (_startGuardBusy) {
+      throw StateError('Старт поездки уже выполняется');
     }
-    if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
-      return false;
+    _startGuardBusy = true;
+    try {
+      if (await loadInterruptedWorkout() != null) {
+        throw StateError('Сначала восстановите или сохраните прерванную поездку');
+      }
+      if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
+        return false;
+      }
+      startWorkout(groupRoomId: groupRoomId);
+      return _hasSession;
+    } finally {
+      _startGuardBusy = false;
     }
-    startWorkout(groupRoomId: groupRoomId);
-    return _hasSession;
   }
 
   void startWorkout({String? groupRoomId}) {
