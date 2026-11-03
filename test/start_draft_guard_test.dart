@@ -1,11 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pulsepath/controllers/map_navigation_controller.dart';
 import 'package:pulsepath/data/user_scope.dart';
@@ -13,8 +10,12 @@ import 'package:pulsepath/data/workout_draft_store.dart';
 import 'package:pulsepath/models/activity_type.dart';
 import 'package:pulsepath/data/workout_history_repository.dart';
 
-// Аутентификация как в offline_sync_test: без неё UserScope.currentUserId()
-// возвращает null и проверка черновика в loadInterruptedWorkout пропускается.
+// Владелец подменяется через ownerResolver вместо реального Supabase-сеанса:
+// в тестовой среде setUp() сбрасывает mock-хранилище shared_preferences, что
+// теряло персистентную сессию и делало контроллера гостем (см. поведение
+// loadInterruptedWorkout: гостевой черновик нечитаем). Репозиторий истории
+// остаётся гостевым (его owner берётся из UserScope напрямую), поэтому
+// конверт истории сеется под ключом _guest.
 const uid = '00000000-0000-4000-8000-000000000001';
 
 WorkoutDraft draft(String localId) => WorkoutDraft(
@@ -45,57 +46,10 @@ Map<String, dynamic> historyRide(String id) => {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late MapNavigationController controller;
-  setUpAll(() async {
-    SharedPreferences.setMockInitialValues({});
-    await Supabase.initialize(
-      url: 'https://guard-test.example.invalid',
-      publishableKey: 'test-only',
-      authOptions: const FlutterAuthClientOptions(
-        autoRefreshToken: false,
-        detectSessionInUri: false,
-      ),
-      httpClient: MockClient((request) async {
-        const headers = {'content-type': 'application/json'};
-        if (request.url.path.endsWith('/token')) {
-          String part(Object value) => base64Url
-              .encode(utf8.encode(jsonEncode(value)))
-              .replaceAll('=', '');
-          final expiry = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
-          return http.Response(
-            jsonEncode({
-              'access_token':
-                  '${part({'alg': 'HS256'})}.${part({'sub': uid, 'exp': expiry})}.signature',
-              'refresh_token': 'test-refresh',
-              'token_type': 'bearer',
-              'expires_in': 3600,
-              'user': {
-                'id': uid,
-                'aud': 'authenticated',
-                'role': 'authenticated',
-                'email': 'test@example.invalid',
-                'created_at': '2026-11-04T00:00:00Z',
-                'app_metadata': {},
-                'user_metadata': {},
-              },
-            }),
-            200,
-            headers: headers,
-            request: request,
-          );
-        }
-        return http.Response('[]', 200, headers: headers, request: request);
-      }),
-    );
-    await Supabase.instance.client.auth.signInWithPassword(
-      email: 'test@example.invalid',
-      password: 'test-only',
-    );
-  });
-  tearDownAll(() => Supabase.instance.dispose());
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     WorkoutHistoryRepository.resetInstancesForTesting();
-    controller = MapNavigationController();
+    controller = MapNavigationController(ownerResolver: () => uid);
   });
   tearDown(() => controller.dispose());
 
@@ -133,7 +87,7 @@ void main() {
     final draftKey = UserScope.keyFor('workout_draft', uid);
     await prefs.setString(draftKey, jsonEncode(draft('done-ride').toJson()));
     await prefs.setString(
-      UserScope.keyFor('workout_history', uid),
+      'workout_history_guest',
       jsonEncode({
         'version': 2,
         'workouts': [historyRide('done-ride')],
@@ -145,6 +99,22 @@ void main() {
     // Проверка прошла (устаревший черновик удалён), старт выполнен.
     expect(await controller.startWorkoutSafely(), isTrue);
     expect(prefs.getString(draftKey), isNull);
+    expect(controller.workoutSessionId, isNotNull);
+  });
+
+  test('Damaged draft does not block the start and is backed up', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final draftKey = UserScope.keyFor('workout_draft', uid);
+    const original = '{unfinished-gps';
+    await prefs.setString(draftKey, original);
+
+    expect(await controller.startWorkoutSafely(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final backupKey = prefs.getKeys().singleWhere(
+      (key) => key.startsWith('${draftKey}_damaged_'),
+    );
+    expect(prefs.getString(backupKey), original);
+    expect(prefs.getString(draftKey), isNot(original));
     expect(controller.workoutSessionId, isNotNull);
   });
 

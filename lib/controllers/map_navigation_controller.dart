@@ -1650,12 +1650,13 @@ class MapNavigationController extends ChangeNotifier {
   Future<WorkoutDraft?> loadInterruptedWorkout() async {
     if (laboratoryActive) return null;
     if (_ownerId == null || !_hasCurrentOwner || _hasSession) return null;
-    WorkoutDraft? draft;
+    WorkoutDraft? loaded;
     try {
-      draft = await _draftStore.load();
+      loaded = await _draftStore.load();
     } on FormatException {
       return null;
     }
+    final draft = loaded;
     if (draft == null) return null;
     final history = await _workoutHistoryRepository.getWorkoutHistory();
     if (history.any((ride) => ride.localId == draft.localId)) {
