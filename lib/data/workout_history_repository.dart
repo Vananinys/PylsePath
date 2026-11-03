@@ -291,13 +291,34 @@ class WorkoutHistoryRepository {
     await _read();
     await _write();
   });
+  /// Подмена фиксации достижений в тестах; в продакшене всегда null.
+  @visibleForTesting
+  Future<void> Function(List<SavedRoute> rides)? captureProgressForTesting;
+
+  /// Последняя ошибка фиксации достижений после успешной записи истории.
+  /// null — последняя попытка удалась или не требовалась. Сама запись поездки
+  /// при этой ошибке не откатывается и завершение не считается проваленным:
+  /// фиксация повторяется в очереди синхронизации.
+  Object? lastAchievementsError;
+
   Future<void> addWorkout(SavedRoute workout) => _serial(() async {
     await _read();
     if (!_workoutHistory.any((r) => r.localId == workout.localId)) {
       _workoutHistory.add(workout);
       await _write();
       if (UserScope.currentUserId() == _owner && recoveryNotice == null) {
-        await AchievementsService.captureProgress(_workoutHistory);
+        try {
+          await (captureProgressForTesting ?? AchievementsService.captureProgress)(
+            _workoutHistory,
+          );
+          lastAchievementsError = null;
+        } catch (error) {
+          // Награды не отменяют уже записанную поездку и не проваливают
+          // завершение: ошибка остаётся наблюдаемой, повтор происходит в
+          // следующем окне синхронизации.
+          lastAchievementsError = error;
+          debugPrint('[WorkoutHistory] achievements capture deferred: $error');
+        }
       }
     }
   });
