@@ -18,6 +18,7 @@ Flutter-приложение для карт, маршрутов, записи �
 | Чаты и вложения | `lib/services/chat_service.dart`, `lib/data/chat_local_store.dart`, `lib/screens/chat_screen.dart` |
 | Черновик публикации и фотографии сообщества | `lib/data/community_draft_store.dart`, `lib/widgets/community_photo_viewer.dart`; черновик раздельно по аккаунтам, аудитория и приватные фото — `community_service.dart` |
 | Статистика сообщества и события реакций | `lib/widgets/community_activity_panel.dart`, `lib/services/community_activity_service.dart`, `lib/services/community_inbox_service.dart`, `lib/screens/community_post_screen.dart` |
+| Вложения и отправка постов | `lib/widgets/community_route_picker.dart`, `lib/services/community_route_choices.dart`, `lib/widgets/community_post_share_sheet.dart`, `lib/widgets/community_post_chat_link.dart`, `lib/models/community_post_topic.dart` |
 | Сообщество и события | `lib/services/community_service.dart`, `lib/services/events_service.dart`, `lib/screens/events_screen.dart` |
 | Совместные поездки и клубы | `lib/services/group_ride_service.dart`, `lib/services/club_service.dart` |
 | Гараж и обслуживание | `lib/services/garage_service.dart`; связанные экраны и виджеты искать по `garage`/`bike` |

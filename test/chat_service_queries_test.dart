@@ -126,6 +126,40 @@ void main() {
   });
   setUp(requests.clear);
 
+  test(
+    'Post sharing sends only a reference and rejects a different account',
+    () async {
+      const postId = '00000000-0000-4000-8000-000000000009';
+      await ChatService().shareCommunityPost(
+        friend,
+        postId,
+        expectedOwner: me,
+        messageId: messageId,
+      );
+      final payload = jsonDecode(
+        requests.singleWhere((r) => r.method == 'POST').body,
+      ) as Map<String, dynamic>;
+      expect(payload, {
+        'id': messageId,
+        'sender_id': me,
+        'receiver_id': friend,
+        'body': 'Публикация сообщества',
+        'community_post_id': postId,
+      });
+      requests.clear();
+      await expectLater(
+        ChatService().shareCommunityPost(
+          friend,
+          postId,
+          expectedOwner: 'old-account',
+          messageId: messageId,
+        ),
+        throwsA(isA<ChatServiceException>()),
+      );
+      expect(requests, isEmpty);
+    },
+  );
+
   test('History pagination uses a stable timestamp and id cursor in both directions', () async {
     final cursor = ChatMessage(
       id: messageId,

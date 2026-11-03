@@ -522,7 +522,7 @@ class _CommunityFeedState extends State<CommunityFeed>
                 const SizedBox(height: 8),
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   for (final topic in CommunityPostTopic.values)
-                    FilterChip(label: Text(topic.label), selected: _topics.contains(topic.id),
+                    FilterChip(label: ConstrainedBox(constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).width - 80).clamp(90, 400).toDouble()), child: Text(topic.label, softWrap: true, maxLines: 4, overflow: TextOverflow.visible)), selected: _topics.contains(topic.id),
                       onSelected: (selected) {
                         setState(() { selected ? _topics.add(topic.id) : _topics.remove(topic.id); _posts = []; _isLoading = true; _loadingMore = false; _canLoadMore = false; });
                         _load();
@@ -1242,7 +1242,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                 const Text('Темы публикации · можно выбрать несколько'),
                 Wrap(spacing: 6, runSpacing: 4, children: [
                   for (final topic in CommunityPostTopic.values)
-                    FilterChip(label: Text(topic.label), selected: _selectedTopics.contains(topic.id),
+                    FilterChip(label: ConstrainedBox(constraints: BoxConstraints(maxWidth: (MediaQuery.sizeOf(context).width - 80).clamp(90, 400).toDouble()), child: Text(topic.label, softWrap: true, maxLines: 4, overflow: TextOverflow.visible)), selected: _selectedTopics.contains(topic.id),
                       onSelected: _publishing ? null : (selected) {setState(() => selected ? _selectedTopics.add(topic.id) : _selectedTopics.remove(topic.id)); unawaited(_saveDraft());}),
                 ]),
                 if (_ridesError != null)

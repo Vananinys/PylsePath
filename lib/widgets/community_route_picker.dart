@@ -90,7 +90,7 @@ class _CommunityRoutePickerState extends State<CommunityRoutePicker> {
     final date = route.recordedDateTime;
     final stamp = date == null
         ? 'Дата не указана'
-        : MaterialLocalizations.of(context).formatMediumDate(date);
+        : '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
     return '${route.distanceKm.toStringAsFixed(1)} км · ${route.activityType.label} · $stamp';
   }
 
