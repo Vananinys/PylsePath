@@ -175,6 +175,16 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
       return;
     }
     _startingRide = true;
+    // Прерванная поездка не должна молча затираться новым стартом: пока
+    // существует невосстановленный черновик (в том числе пока загрузка
+    // восстановления ещё идёт), запись не начинаем.
+    try {
+      await _navigationController.ensureNoUnresolvedDraft();
+    } catch (error) {
+      _startingRide = false;
+      if (mounted) _showSnackBar('$error');
+      return;
+    }
     final group = GroupRideService();
     final selectedRoom = _preRideGroupRoomId;
     if (AppVariant.modernInterface && selectedRoom != null && group.ownFinished) {

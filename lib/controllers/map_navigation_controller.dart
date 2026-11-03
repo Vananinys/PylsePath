@@ -56,6 +56,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// `vehicle` — на технике из гаража (тип заезда берётся из техники);
 /// `walking` / `running` — без техники, тип заезда hiking/running.
+/// Старт новой поездки отклонён, пока существует невосстановленный черновик
+/// прерванной поездки: первый чекпоинт новой сессии иначе затёр бы его.
+class InterruptedWorkoutBlockedException implements Exception {
+  const InterruptedWorkoutBlockedException();
+
+  @override
+  String toString() =>
+      'Сначала восстановите или завершите прерванную тренировку';
+}
+
 enum SportMode {
   vehicle('Вело'),
   walking('Пешком'),
@@ -370,11 +380,13 @@ class MapNavigationController extends ChangeNotifier {
     RoutingService? routingService,
     WorkoutStepTracker? stepTracker,
     GroupRideService? groupRideService,
+    @visibleForTesting String? Function()? ownerResolver,
   }) : _gpsNow = gpsNow ?? DateTime.now,
        _activeClock = activeClock ?? Stopwatch(),
        _stepTracker = stepTracker ?? WorkoutStepTracker(),
        _routingService = routingService ?? RoutingService(),
-       _groupRideService = groupRideService ?? GroupRideService() {
+       _groupRideService = groupRideService ?? GroupRideService(),
+       _ownerResolver = ownerResolver ?? UserScope.currentUserId {
     gpsSignal.addListener(_onTelemetryQualityChanged);
     _stepTracker.addListener(_onWorkoutStepsChanged);
   }
@@ -817,10 +829,11 @@ class MapNavigationController extends ChangeNotifier {
   LatLng? _lastMotionPoint;
   DateTime? _lastMotionTime;
   bool _breakTrackSegment = false;
-  final String? _ownerId = UserScope.currentUserId();
+  final String? Function() _ownerResolver;
+  late final String? _ownerId = _ownerResolver();
   late final WorkoutDraftStore _draftStore = WorkoutDraftStore(_ownerId);
   bool get _hasSession => _isWorkoutActive || _isWorkoutPaused;
-  bool get _hasCurrentOwner => UserScope.currentUserId() == _ownerId;
+  bool get _hasCurrentOwner => _ownerResolver() == _ownerId;
   double get currentGpsHeading => _currentHeading;
   @override
   void notifyListeners() {
@@ -1621,6 +1634,37 @@ class MapNavigationController extends ChangeNotifier {
       return null;
     }
     return draft;
+  }
+
+  /// Старт новой поездки не должен затирать черновик прерванной: первый же
+  /// чекпоинт новой сессии перезаписал бы его без резервной копии.
+  ///
+  /// Бросает [InterruptedWorkoutBlockedException], пока существует валидный
+  /// черновик, который пользователь не восстановил и не удалил. Устаревший
+  /// черновик (поездка уже сохранилась в историю до остановки приложения)
+  /// удаляется — восстановление ему не нужно. Повреждённый или нечитаемый
+  /// черновик не блокирует: при первой записи новой поездки его байты уйдут
+  /// в резервную копию хранилища. Ошибка чтения истории наружу не глотается:
+  /// пока неизвестно, сохранена ли старая поездка, старт блокируется.
+  ///
+  /// Проверка перечитывает хранилище на каждый вызов, поэтому безопасна и
+  /// при ещё не завершённой загрузке восстановления (_offerWorkoutRecovery).
+  Future<void> ensureNoUnresolvedDraft() async {
+    if (_disposed || !_hasCurrentOwner || _hasSession) return;
+    WorkoutDraft? loaded;
+    try {
+      loaded = await _draftStore.load();
+    } catch (_) {
+      return;
+    }
+    final draft = loaded;
+    if (draft == null) return;
+    final history = await _workoutHistoryRepository.getWorkoutHistory();
+    if (history.any((ride) => ride.localId == draft.localId)) {
+      await _draftStore.delete();
+      return;
+    }
+    throw const InterruptedWorkoutBlockedException();
   }
 
   void restoreInterruptedWorkout(WorkoutDraft draft) {
