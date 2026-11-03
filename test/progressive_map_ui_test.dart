@@ -1,9 +1,11 @@
 import 'dart:io';
+
+import 'support/load_ui_fonts.dart';
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsepath/controllers/map_navigation_controller.dart';
@@ -23,19 +25,7 @@ void main() {
     SavedRoutesRepository.resetInstancesForTesting();
     WorkoutHistoryRepository.resetInstancesForTesting();
   });
-  setUpAll(() async {
-    for (final font in const {
-      'Roboto': 'C:/Windows/Fonts/arial.ttf',
-      'MaterialIcons': 'C:/src/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-    }.entries) {
-      final file = File(font.value);
-      if (await file.exists()) {
-        await (FontLoader(
-          font.key,
-        )..addFont(file.readAsBytes().then(ByteData.sublistView))).load();
-      }
-    }
-  });
+  setUpAll(loadUiFonts);
 
   for (final width in [320.0, 360.0]) {
     for (final scale in [1.0, 1.5, 2.0]) {

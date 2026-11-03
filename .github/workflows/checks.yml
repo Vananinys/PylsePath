@@ -29,7 +29,7 @@ jobs:
         run: node tools/test_club_push.mjs
       - name: Interface themes and isolated UI beta
         run: |
-          flutter test --no-pub test/interface_beta_test.dart test/inside_menu_ui_test.dart test/group_ride_flow_test.dart test/saved_places_test.dart test/progressive_map_ui_test.dart test/notification_config_test.dart
+          flutter test --no-pub test/interface_beta_test.dart test/inside_menu_ui_test.dart test/group_ride_flow_test.dart test/saved_places_test.dart test/progressive_map_ui_test.dart test/map_accessibility_test.dart test/notification_config_test.dart
           flutter test --no-pub test/interface_beta_test.dart --dart-define=UI_BETA=true
           flutter test --no-pub test/clubs_invitation_flow_test.dart test/club_service_test.dart
           flutter test --no-pub test/group_journey_test.dart test/friend_direction_test.dart

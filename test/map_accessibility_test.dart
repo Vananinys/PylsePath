@@ -1,8 +1,7 @@
-import 'dart:io';
+import 'support/load_ui_fonts.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsepath/models/gps_signal.dart';
@@ -18,14 +17,7 @@ import 'progressive_map_ui_test.dart' show resize, snapshot;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
-  setUpAll(() async {
-    final file = File('C:/Windows/Fonts/arial.ttf');
-    if (await file.exists()) {
-      await (FontLoader(
-        'Roboto',
-      )..addFont(file.readAsBytes().then(ByteData.sublistView))).load();
-    }
-  });
+  setUpAll(loadUiFonts);
   for (final scale in [1.5, 2.0]) {
     for (final dark in [false, true]) {
       testWidgets('map controls remain legible at 360/$scale/dark=$dark', (
