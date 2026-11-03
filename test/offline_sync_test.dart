@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import 'package:pulsepath/controllers/map_navigation_controller.dart';
+import 'package:pulsepath/data/workout_draft_store.dart';
+
 import 'package:flutter/material.dart';
 import 'package:pulsepath/screens/profile_screen.dart';
 import 'package:pulsepath/state/profile_provider.dart';
@@ -27,6 +30,7 @@ void main() {
   const uid = '00000000-0000-4000-8000-000000000001';
   final uploaded = <Map<String, dynamic>>[];
   var failing = false;
+  String? failedRideId;
   var awardsOffline = false;
   var profileOffline = false;
   final awardRows = <Map<String, dynamic>>[];
@@ -82,8 +86,10 @@ void main() {
           );
           uploaded.add(row);
           return http.Response(
-            failing ? '{"message":"offline"}' : jsonEncode({'id': row['id']}),
-            failing ? 503 : 201,
+            (failing || row['id'] == failedRideId)
+                ? '{"message":"offline"}'
+                : jsonEncode({'id': row['id']}),
+            (failing || row['id'] == failedRideId) ? 503 : 201,
             headers: headers,
             request: request,
           );
@@ -108,6 +114,7 @@ void main() {
   setUp(() async {
     uploaded.clear();
     failing = false;
+    failedRideId = null;
     awardsOffline = false;
     profileOffline = false;
     awardRows.clear();
@@ -259,7 +266,7 @@ void main() {
     },
   );
   test(
-    'one failed upload stops a batch and reconnect retries the same stable id',
+    'failed uploads remain queued and reconnect retries the same stable ids',
     () async {
       final repo = WorkoutHistoryRepository();
       for (var i = 0; i < 3; i++) {
@@ -267,15 +274,46 @@ void main() {
       }
       failing = true;
       expect(await repo.retryUnsynced(), 0);
-      expect(uploaded.length, 1);
+      expect(uploaded.length, 3);
       await repo.load();
       expect(repo.unsyncedWorkouts.length, 3);
       failing = false;
+      failedRideId = null;
       expect(await repo.retryUnsynced(), 3);
-      expect(uploaded[0]['id'], uploaded[1]['id']);
+      expect(uploaded[0]['id'], uploaded[3]['id']);
       expect(repo.hasPendingSync, isFalse);
     },
   );
+  test('safe start preserves an interrupted workout', () async {
+    final store = WorkoutDraftStore(uid);
+    final draft = WorkoutDraft(
+      ownerId: uid,
+      localId: 'interrupted',
+      startedAt: DateTime.now(),
+      activeMilliseconds: 60000,
+      distanceMeters: 1000,
+      elevationGainMeters: 0,
+      activity: ActivityType.cycling,
+      path: const [],
+    );
+    await store.save(draft);
+    final controller = MapNavigationController();
+    try {
+      await expectLater(controller.startWorkoutSafely(), throwsStateError);
+      expect(controller.isWorkoutActive, isFalse);
+      expect((await store.load())!.localId, 'interrupted');
+    } finally {
+      controller.dispose();
+    }
+  });
+  test('a failed oldest ride does not block newer uploads', () async {
+    final repo = WorkoutHistoryRepository();
+    await repo.addWorkout(ride('poisoned'));
+    await repo.addWorkout(ride('healthy'));
+    failedRideId = 'poisoned';
+    expect(await repo.retryUnsynced(), 1);
+    expect(repo.unsyncedWorkouts.map((r) => r.localId), ['poisoned']);
+  });
   test(
     'A stale history repository cannot clear or save after logout',
     () async {

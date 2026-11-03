@@ -621,7 +621,7 @@ class WorkoutHistoryRepository {
         await _write();
         synced++;
       } else {
-        break;
+        continue;
       }
     }
     debugPrint('[WorkoutHistory] synced=$synced');

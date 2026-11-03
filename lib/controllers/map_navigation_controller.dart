@@ -1764,6 +1764,21 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Check durable recovery data before the UI starts a new recording.
+  Future<bool> startWorkoutSafely({String? groupRoomId}) async {
+    if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
+      return false;
+    }
+    if (await loadInterruptedWorkout() != null) {
+      throw StateError('Сначала восстановите или сохраните прерванную поездку');
+    }
+    if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
+      return false;
+    }
+    startWorkout(groupRoomId: groupRoomId);
+    return _hasSession;
+  }
+
   void startWorkout({String? groupRoomId}) {
     if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
       return;

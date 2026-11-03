@@ -967,7 +967,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
       if (!mounted) return;
       if (choice == 'discard') {
         await _navigationController.discardInterruptedWorkout();
-      } else if (choice == 'restore' || choice == 'save') {
+      } else if (choice == 'restore' || choice == 'save' || choice == null) {
         _navigationController.restoreInterruptedWorkout(draft);
         if (_navigationController.workoutSessionId != draft.localId) {
           _showSnackBar(
@@ -975,7 +975,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
           );
           return;
         }
-        if (choice == 'save') {
+        if (choice == 'save' || choice == null) {
           final saved = await _navigationController.finishAndSaveWorkout();
           if (mounted)
             _showSnackBar(

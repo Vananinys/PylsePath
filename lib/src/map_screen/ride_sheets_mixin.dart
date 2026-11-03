@@ -177,7 +177,9 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
     _startingRide = true;
     final group = GroupRideService();
     final selectedRoom = _preRideGroupRoomId;
-    if (AppVariant.modernInterface && selectedRoom != null && group.ownFinished) {
+    if (AppVariant.modernInterface &&
+        selectedRoom != null &&
+        group.ownFinished) {
       _startingRide = false;
       _showSnackBar(
         'Этот заезд уже завершён для вас. Создайте новый заезд с новыми приглашениями.',
@@ -275,7 +277,15 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
           !_navigationController.isNavigating) {
         _navigationController.toggleNavigation();
       }
-      _navigationController.startWorkout(groupRoomId: selectedRoom);
+      try {
+        final started = await _navigationController.startWorkoutSafely(
+          groupRoomId: selectedRoom,
+        );
+        if (!mounted || !started) return;
+      } catch (error) {
+        if (mounted) _showSnackBar('Не удалось начать поездку: $error');
+        return;
+      }
       setState(() => _isPreRideOpen = false);
       _setCameraLockMode(CameraLockMode.followAndHeading);
       if (_isMapReady) _mapController.move(_displayPosition.value, 17);
@@ -293,7 +303,8 @@ mixin _RideSheetsMixin on _MapScreenStateBase {
     _finishingRide = true;
     final group = GroupRideService();
     final groupedRoom =
-        AppVariant.modernInterface && _navigationController.groupWorkoutConnected
+        AppVariant.modernInterface &&
+            _navigationController.groupWorkoutConnected
         ? group.activeRoomId
         : null;
     final participantsAtFinish = List<GroupMember>.of(group.members);
