@@ -354,8 +354,8 @@ class WorkoutStatsBottomSheet extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       autoLap == null
-                          ? 'Отсечки по ${c.autoLapMeters ~/ 1000} км · первая впереди'
-                          : 'Отсечка ${autoLap.number} · ${workoutTime(Duration(seconds: autoLap.activeSeconds))} · ${autoLap.speedKmh.toStringAsFixed(1)} км/ч',
+                          ? 'Круги по ${c.autoLapMeters ~/ 1000} км · первая впереди'
+                          : 'Круг ${autoLap.number} · ${workoutTime(Duration(seconds: autoLap.activeSeconds))} · ${autoLap.speedKmh.toStringAsFixed(1)} км/ч',
                       style: TextStyle(
                         color: colors.primary,
                         fontWeight: FontWeight.w600,

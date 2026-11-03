@@ -17,28 +17,38 @@ class MapHomeActions extends StatelessWidget {
     borderRadius: BorderRadius.circular(24),
     child: Padding(
       padding: const EdgeInsets.all(8),
-      child: Row(
-        children: [
-          Expanded(
-            child: _action(
-              context,
-              'Начать тренировку',
-              Icons.play_circle_outline,
-              onWorkout,
-              true,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _action(
-              context,
-              'Построить маршрут',
-              Icons.route_outlined,
-              onRoute,
-              false,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final vertical =
+              constraints.maxWidth < 440 &&
+              MediaQuery.textScalerOf(context).scale(14) > 17;
+          final workout = _action(
+            context,
+            'Начать тренировку',
+            Icons.play_circle_outline,
+            onWorkout,
+            true,
+          );
+          final route = _action(
+            context,
+            'Построить маршрут',
+            Icons.route_outlined,
+            onRoute,
+            false,
+          );
+          return vertical
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [workout, const SizedBox(height: 8), route],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: workout),
+                    const SizedBox(width: 8),
+                    Expanded(child: route),
+                  ],
+                );
+        },
       ),
     ),
   );

@@ -301,6 +301,7 @@ abstract class _MapScreenStateBase extends State<PulsePathMapScreen>
   Timer? _achievementPollTimer;
   final _achievementBanner = AchievementBannerController();
   double _workoutHudHeight = 220;
+  double _mapStatusHeight = 56;
   double _preRideHudHeight = 380;
   double _homeActionsHeight = 88;
   double _homeDockHeight = 200;
@@ -859,11 +860,14 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
       )..start();
       PushService.instance.onCommunityOpen = (postId) async {
         if (!mounted || _chatService.userId == null) return;
-        await Navigator.push(context, MaterialPageRoute(
-          builder: (_) => postId == null
-              ? const NotificationsScreen()
-              : CommunityPostScreen(postId: postId),
-        ));
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => postId == null
+                ? const NotificationsScreen()
+                : CommunityPostScreen(postId: postId),
+          ),
+        );
         if (mounted) unawaited(NotificationService.instance.refresh());
       };
       PushService.instance.onChatOpen = _openChatFromPush;
@@ -1607,7 +1611,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                                     insets: EdgeInsets.fromLTRB(
                                       12,
                                       MediaQuery.paddingOf(context).top +
-                                          (showNavigationCard ? 260 : 136),
+                                          (80 + _mapStatusHeight + 12),
                                       72,
                                       bottomPanelHeight + 12,
                                     ),
@@ -1680,104 +1684,105 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                   onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
               ),
-            if (showNavigationCard &&
-                (!_isPreRideOpen || isTracking) &&
-                _searchResults.isEmpty &&
-                MediaQuery.viewInsetsOf(context).bottom == 0)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 76,
-                left: 16,
-                right: 12,
-                child: ValueListenableBuilder<LatLng>(
-                  valueListenable: _navigationController.positionNotifier,
-                  builder: (context, position, _) => NavigationCard(
-                    onReconnectAhead: () async {
-                      try {
-                        await _navigationController.reconnectAhead();
-                      } catch (error) {
-                        if (mounted) _showSnackBar(error.toString());
-                      }
-                    },
-                    offRoute: _navigationController.isOffRoute,
-                    preserveTrack: _navigationController.followsSavedTrack,
-                    deviationMeters: _navigationController.routeDeviationMeters,
-                    activeStep: activeStep,
-                    distanceToNextStepMeters:
-                        _navigationController.distanceToNextTurnMeters,
-                    remainingMeters: _navigationController.remainingRouteMeters,
-                    remainingMinutes:
-                        _navigationController.remainingRouteMinutes,
-                    isRerouting: _navigationController.isLoadingRoute,
-                  ),
-                ),
-              ),
             if ((!_isPreRideOpen || isTracking) &&
                 _searchResults.isEmpty &&
                 MediaQuery.viewInsetsOf(context).bottom == 0 &&
                 !_searchFocusNode.hasFocus)
               Positioned(
-                top:
-                    MediaQuery.paddingOf(context).top +
-                    (showNavigationCard ? 204 : 80),
+                top: MediaQuery.paddingOf(context).top + 80,
                 left: 16,
                 right: 16,
-                child: Row(
-                  children: [
-                    Flexible(
-                      flex: 0,
-                      child: GpsSignalIndicator(
-                        signal: _navigationController.gpsSignal,
-                        compact: true,
-                        refreshing: _refreshingGps,
-                        onTap: _refreshGpsAndCenter,
+                child: WidgetSizeObserver(
+                  onSize: (size) {
+                    if (mounted && (size.height - _mapStatusHeight).abs() > 1) {
+                      setState(() => _mapStatusHeight = size.height);
+                    }
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (showNavigationCard) ...[
+                        ValueListenableBuilder<LatLng>(
+                          valueListenable:
+                              _navigationController.positionNotifier,
+                          builder: (context, position, _) => NavigationCard(
+                            onReconnectAhead: () async {
+                              try {
+                                await _navigationController.reconnectAhead();
+                              } catch (error) {
+                                if (mounted) _showSnackBar(error.toString());
+                              }
+                            },
+                            offRoute: _navigationController.isOffRoute,
+                            preserveTrack:
+                                _navigationController.followsSavedTrack,
+                            deviationMeters:
+                                _navigationController.routeDeviationMeters,
+                            activeStep: activeStep,
+                            distanceToNextStepMeters:
+                                _navigationController.distanceToNextTurnMeters,
+                            remainingMeters:
+                                _navigationController.remainingRouteMeters,
+                            remainingMinutes:
+                                _navigationController.remainingRouteMinutes,
+                            isRerouting: _navigationController.isLoadingRoute,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          GpsSignalIndicator(
+                            signal: _navigationController.gpsSignal,
+                            compact: true,
+                            refreshing: _refreshingGps,
+                            onTap: _refreshGpsAndCenter,
+                          ),
+                          MapWeatherPill(
+                            weather: _preRideWeather,
+                            isLoading: _weatherLoading,
+                            onTap: _loadPreRideWeather,
+                          ),
+                          const HomeStepsPill(),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      flex: 3,
-                      child: MapWeatherPill(
-                        weather: _preRideWeather,
-                        isLoading: _weatherLoading,
-                        onTap: _loadPreRideWeather,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const HomeStepsPill(),
-                  ],
-                ),
-              ),
-
-            Positioned(
-              right: 12,
-              bottom: bottomPanelHeight + 8,
-              child: IgnorePointer(
-                ignoring: _isScreenLocked,
-                child: MapCredits(
-                  layer: _usePreparedMapSource ? 0 : _mapLayerIndex,
-                ),
-              ),
-            ),
-            // Баннер входящего сообщения: тап — открыть чат с отправителем.
-            if (_heatMode != 0 && _heatStatus.isNotEmpty)
-              Positioned(
-                top:
-                    MediaQuery.paddingOf(context).top +
-                    (showNavigationCard ? 280 : 135),
-                left: 16,
-                right: 100,
-                child: Material(
-                  color: Theme.of(context).colorScheme.surface
-                      .withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Text(
-                      _heatStatus,
-                      style: const TextStyle(fontSize: 11),
-                    ),
+                      if (_heatMode != 0 && _heatStatus.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Material(
+                          color: Theme.of(context).colorScheme.surface
+                              .withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              _heatStatus,
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
+            Positioned(
+              right: 82,
+              left: 12,
+              bottom: bottomPanelHeight + 8,
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: IgnorePointer(
+                  ignoring: _isScreenLocked,
+                  child: MapCredits(
+                    layer: _usePreparedMapSource ? 0 : _mapLayerIndex,
+                  ),
+                ),
+              ),
+            ),
             MapOverlays(
               mapController: _mapController,
               autoRotateMap: _cameraLockMode.isRotating,

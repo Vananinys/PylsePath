@@ -28,7 +28,7 @@ class MapHomeNavigation extends StatelessWidget {
         NavigationDestination(
           icon: Icon(Icons.explore_outlined),
           selectedIcon: Icon(Icons.explore),
-          label: 'Сообщество',
+          label: 'Лента',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline),

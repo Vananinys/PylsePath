@@ -38,25 +38,54 @@ void main() {
   });
 
   for (final width in [320.0, 360.0]) {
-    testWidgets('two main journeys remain readable at $width and large text', (
-      tester,
-    ) async {
-      resize(tester, Size(width, 780));
-      var workouts = 0, routes = 0;
-      await tester.pumpWidget(
-        shell(
-          MapHomeActions(onWorkout: () => workouts++, onRoute: () => routes++),
-          scale: 1.5,
-        ),
-      );
-      expect(tester.takeException(), isNull);
-      expect(find.text('Начать тренировку'), findsOneWidget);
-      expect(find.text('Построить маршрут'), findsOneWidget);
-      await tester.tap(find.text('Начать тренировку'));
-      await tester.tap(find.text('Построить маршрут'));
-      expect(workouts, 1);
-      expect(routes, 1);
-    });
+    for (final scale in [1.0, 1.5, 2.0]) {
+      testWidgets('two main journeys remain readable at $width and $scale', (
+        tester,
+      ) async {
+        resize(tester, Size(width, 780));
+        var workouts = 0, routes = 0;
+        await tester.pumpWidget(
+          shell(
+            MapHomeActions(
+              onWorkout: () => workouts++,
+              onRoute: () => routes++,
+            ),
+            scale: scale,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.text('Начать тренировку'), findsOneWidget);
+        expect(find.text('Построить маршрут'), findsOneWidget);
+        for (final label in ['Начать тренировку', 'Построить маршрут']) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.text(label),
+              matching: find.byType(RichText),
+            ),
+          );
+          var offset = 0;
+          for (final word in label.split(' ')) {
+            final boxes = paragraph.getBoxesForSelection(
+              TextSelection(
+                baseOffset: offset,
+                extentOffset: offset + word.length,
+              ),
+            );
+            expect(
+              boxes.map((b) => b.top).toSet().length,
+              1,
+              reason: 'Word $word must remain on a single line',
+            );
+            offset += word.length + 1;
+          }
+        }
+
+        await tester.tap(find.text('Начать тренировку'));
+        await tester.tap(find.text('Построить маршрут'));
+        expect(workouts, 1);
+        expect(routes, 1);
+      });
+    }
   }
 
   testWidgets('route entry keeps search, map, library and loop accessible', (

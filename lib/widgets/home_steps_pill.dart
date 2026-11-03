@@ -77,68 +77,66 @@ class _HomeStepsPillState extends State<HomeStepsPill> {
     valueListenable: HomeStepsPreference.instance,
     builder: (context, visible, _) => !visible
         ? const SizedBox.shrink()
-        : Flexible(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: ListenableBuilder(
-                listenable: DailyActivityService.instance,
-                builder: (context, _) {
-                  final service = DailyActivityService.instance;
-                  final label = !service.ready
-                      ? 'Шаги…'
-                      : service.enabled
-                      ? '${service.steps}'
-                      : 'Включить';
-                  return Tooltip(
-                    message: 'Шаги за сегодня · открыть шагомер',
-                    child: Material(
-                      color: Theme.of(context).colorScheme.surface
-                          .withValues(alpha: .95),
+        : Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: ListenableBuilder(
+              listenable: DailyActivityService.instance,
+              builder: (context, _) {
+                final service = DailyActivityService.instance;
+                final label = !service.ready
+                    ? 'Шаги…'
+                    : service.enabled
+                    ? '${service.steps}'
+                    : 'Включить';
+                return Tooltip(
+                  message: 'Шаги за сегодня · открыть шагомер',
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface
+                        .withValues(alpha: .95),
+                    borderRadius: BorderRadius.circular(24),
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(24),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => DailyActivityScreen(
-                              weightKg: context
-                                  .read<ProfileProvider>()
-                                  .profile
-                                  .weightKg,
-                            ),
-                          ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.directions_walk_rounded,
-                                size: 18,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DailyActivityScreen(
+                            weightKg: context
+                                .read<ProfileProvider>()
+                                .profile
+                                .weightKg,
                           ),
                         ),
                       ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.directions_walk_rounded,
+                              size: 18,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
   );

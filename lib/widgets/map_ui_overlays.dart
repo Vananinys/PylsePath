@@ -691,8 +691,8 @@ class _LockButtonState extends State<LockButton> {
           clipBehavior: Clip.antiAlias,
           elevation: _holding ? 6 : 0,
           child: SizedBox(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             child: Center(
               child: AnimatedScale(
                 scale: _holding ? 1.25 : 1.0,
