@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
-/// Use the same SDK fonts on Windows and CI instead of test-only Ahem metrics.
+/// Load a licensed test font consistently instead of test-only Ahem metrics.
 Future<void> loadUiFonts() async {
   final config = File('.dart_tool/package_config.json');
   final packages =
@@ -19,10 +18,17 @@ Future<void> loadUiFonts() async {
     '../../bin/cache/artifacts/material_fonts/',
   );
   for (final entry in {
-    'Roboto': 'roboto-regular.ttf',
-    'MaterialIcons': 'materialicons-regular.otf',
+    'Roboto': File('test/support/fonts/roboto-regular.ttf'),
+    'MaterialIcons': Directory.fromUri(fonts)
+        .listSync()
+        .whereType<File>()
+        .singleWhere(
+          (file) =>
+              file.uri.pathSegments.last.toLowerCase() ==
+              'materialicons-regular.otf',
+        ),
   }.entries) {
-    final file = File.fromUri(fonts.resolve(entry.value));
+    final file = entry.value;
     await (FontLoader(
       entry.key,
     )..addFont(file.readAsBytes().then(ByteData.sublistView))).load();
