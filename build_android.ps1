@@ -2,7 +2,7 @@
 #
 # Why this exists: the project folder path contains Cyrillic characters, which
 # breaks Gradle/AAPT. The proven workaround is to build from the ASCII working
-# copy C:\src\pulsepath-build: sync sources there, build, copy the APK back.
+# copy D:\pulsepath-worktrees\build-archive: sync sources there, build, copy the APK back.
 #
 # Usage (from the project folder):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .\build_android.ps1              # release build
@@ -24,9 +24,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Project  = $PSScriptRoot
-$BuildRoot = 'C:\src\pulsepath-build'
-$Flutter  = 'C:\src\flutter\bin\flutter.bat'
-$Adb      = Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe'
+$BuildRoot = 'D:\pulsepath-worktrees\build-archive'
+$Flutter  = 'D:\dev\flutter\bin\flutter.bat'
+$Adb      = 'D:\Android\Sdk\platform-tools\adb.exe'
 $Mode     = if ($DebugBuild) { 'debug' } else { 'release' }
 
 function Fail([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -60,7 +60,13 @@ foreach ($f in @('pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml')) {
 if ($Clean) {
   Step 'Cleaning previous app intermediates'
   foreach ($p in @("$BuildRoot\build\app", "$BuildRoot\.dart_tool\flutter_build")) {
-    if (Test-Path $p) { & cmd /c "rd /s /q `"$p`"" ; if (Test-Path $p) { Fail "cannot remove $p" } }
+    if (Test-Path -LiteralPath $p) {
+      $taskCleanPath = [IO.Path]::GetFullPath($p)
+      $taskBuildPath = [IO.Path]::GetFullPath($BuildRoot).TrimEnd('\') + '\'
+      if (-not $taskCleanPath.StartsWith($taskBuildPath, [StringComparison]::OrdinalIgnoreCase)) { Fail "clean path is outside build root" }
+      Remove-Item -LiteralPath $taskCleanPath -Recurse -Force
+      if (Test-Path -LiteralPath $taskCleanPath) { Fail "cannot remove $taskCleanPath" }
+    }
   }
 }
 
@@ -71,7 +77,7 @@ if ($Clean) {
 if ($Offline) {
   Step 'Enabling offline mode (recorded Maven mirror + Gradle offline)'
   Add-Content -Path "$BuildRoot\android\gradle.properties" -Value "`npulsepath.offline=true"
-  $mavenUrl = 'file:///C:/src/pulsepath-build/build/test_dependencies/recording-maven'
+  $mavenUrl = 'file:///D:/pulsepath-worktrees/build-archive/build/test_dependencies/recording-maven'
   if (Test-Path "$BuildRoot\build\test_dependencies\recording-maven") {
     $settingsPath = "$BuildRoot\android\settings.gradle.kts"
     $txt = [IO.File]::ReadAllText($settingsPath)
@@ -103,7 +109,7 @@ $env:TMP = $taskJavaTemp
 # Java .properties readers cannot reliably decode a Cyrillic SDK path.
 $taskSdkAlias = Join-Path (Split-Path -Parent $BuildRoot) 'pulsepath-sdk'
 if (-not (Test-Path -LiteralPath $taskSdkAlias)) {
-  New-Item -ItemType Junction -Path $taskSdkAlias -Target (Join-Path $env:LOCALAPPDATA 'Android\Sdk') | Out-Null
+  New-Item -ItemType Junction -Path $taskSdkAlias -Target 'D:\Android\Sdk' | Out-Null
 }
 $env:ANDROID_HOME = $taskSdkAlias
 $env:ANDROID_SDK_ROOT = $taskSdkAlias
