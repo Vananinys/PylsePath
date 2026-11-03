@@ -44,6 +44,7 @@ class _CommunityPostEditSheetState extends State<CommunityPostEditSheet> {
   bool get _owned => widget.currentUserId() == widget.post.authorId;
   bool get _dirty => _body.text != widget.post.body;
   bool get _hasAttachments =>
+      widget.post.hasVideo ||
       widget.post.photoUrls.isNotEmpty ||
       widget.post.privatePhotoPaths.isNotEmpty ||
       widget.post.rideId != null ||

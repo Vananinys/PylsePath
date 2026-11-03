@@ -1,3 +1,6 @@
+import '../models/community_post_topic.dart';
+import 'chat_video_player.dart';
+
 import 'package:flutter/material.dart';
 
 import '../models/community_post.dart';
@@ -11,6 +14,8 @@ class CommunityPostCard extends StatelessWidget {
   /// Действующий пользователь (для показа корзины на своих постах).
   final String? currentUserId;
   final VoidCallback? onLike;
+  final VoidCallback? onShare;
+  final Future<String?> Function()? onRefreshVideoUrl;
   final VoidCallback onAuthorTap;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
@@ -29,6 +34,8 @@ class CommunityPostCard extends StatelessWidget {
     required this.currentUserId,
     required this.onLike,
     required this.onAuthorTap,
+    this.onShare,
+    this.onRefreshVideoUrl,
     this.onDelete,
     this.onEdit,
     this.onModerate,
@@ -255,6 +262,28 @@ class CommunityPostCard extends StatelessWidget {
             // Текст поста.
             if (post.body.isNotEmpty)
               _ExpandablePostText(key: ValueKey(post.id), text: post.body),
+            if (post.topics.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    for (final topic in CommunityPostTopic.values)
+                      if (post.topics.contains(topic.id))
+                        Chip(label: Text(topic.label)),
+                  ],
+                ),
+              ),
+            if (post.hasVideo) ...[
+              const SizedBox(height: 10),
+              ChatVideoPlayer(
+                source: post.videoUrl ?? '',
+                embedded: true,
+                autoPlay: false,
+                onRefresh: onRefreshVideoUrl,
+              ),
+            ],
             // Фотографии поста (до 4, сетка 2 колонки).
             if (post.photoUrls.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -340,6 +369,15 @@ class CommunityPostCard extends StatelessWidget {
                     '${post.likedByMe ? 'Нравится' : 'Поддержать'} · ${post.likeCount}',
                   ),
                 ),
+                if (onShare != null)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    onPressed: onShare,
+                    icon: const Icon(Icons.send_outlined),
+                    label: const Text('Поделиться'),
+                  ),
                 if (onOpenComments != null)
                   TextButton.icon(
                     style: TextButton.styleFrom(

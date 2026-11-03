@@ -67,7 +67,7 @@ void main() {
           if (request.url.path.contains('/sign/'))
             return response({
               'signedURL':
-                  '/object/sign/community_private/$me/test.jpg?token=test',
+                  '${request.url.path.replaceFirst('/storage/v1', '')}?token=test',
             });
           return response({'Key': 'test'});
         }
@@ -201,5 +201,81 @@ void main() {
     final restored = CommunityPost.fromSnapshot(snapshot);
     expect(restored.audience, CommunityPostAudience.friends);
     expect(restored.privatePhotoPaths, p.privatePhotoPaths);
+  });
+  test(
+    'video uses private bucket, signed runtime URL and no signed cache',
+    () async {
+      final video = '${temp.path}/video.mp4';
+      await File(video).writeAsBytes([0, 0, 0, 24]);
+      await CommunityService().createPost(
+        '',
+        videoPath: video,
+        topics: ['travel', 'memes', 'travel', 'unknown'],
+      );
+      final upload = requests.firstWhere(
+        (r) => r.url.path.contains('/community_videos/'),
+      );
+      expect(upload.headers['x-upsert'], isNot('true'));
+      final row = jsonDecode(
+        requests
+            .firstWhere(
+              (r) =>
+                  r.method == 'POST' && r.url.path.endsWith('/community_posts'),
+            )
+            .body,
+      ) as Map;
+      expect(row['video_path'], startsWith('$me/video_'));
+      expect(row['topics'], ['travel', 'memes']);
+      final post = CommunityPost(
+        id: 'p',
+        authorId: me,
+        authorName: 'A',
+        body: '',
+        likeCount: 0,
+        likedByMe: false,
+        createdAt: DateTime(2026),
+        videoPath: row['video_path'] as String,
+        topics: ['travel'],
+      );
+      final resolved = await CommunityService().resolvePostMedia(post);
+      expect(resolved.videoUrl, contains('/object/sign/community_videos/'));
+      final restored = CommunityPost.fromSnapshot(resolved.toSnapshot());
+      expect(restored.videoUrl, isNull);
+      expect(restored.videoPath, post.videoPath);
+      expect(restored.topics, ['travel']);
+    },
+  );
+  test('changed account during video upload prevents post insertion', () async {
+    final video = '${temp.path}/video-switch.mp4';
+    await File(video).writeAsBytes([0, 0, 0, 24]);
+    changeDuringUpload = true;
+    await expectLater(
+      CommunityService().createPost('', videoPath: video),
+      throwsA(isA<CommunityServiceException>()),
+    );
+    expect(
+      requests.where(
+        (r) => r.method == 'POST' && r.url.path.endsWith('/community_posts'),
+      ),
+      isEmpty,
+    );
+  });
+  test('unsupported video format fails before network upload', () async {
+    await expectLater(
+      CommunityService().uploadVideo(photo),
+      throwsA(isA<CommunityServiceException>()),
+    );
+    expect(requests, isEmpty);
+  });
+  test('oversized video is rejected before Storage writes', () async {
+    final video = File('${temp.path}/oversize.mp4');
+    final handle = await video.open(mode: FileMode.write);
+    await handle.truncate(CommunityService.maxVideoBytes + 1);
+    await handle.close();
+    await expectLater(
+      CommunityService().uploadVideo(video.path),
+      throwsA(isA<CommunityServiceException>()),
+    );
+    expect(requests, isEmpty);
   });
 }

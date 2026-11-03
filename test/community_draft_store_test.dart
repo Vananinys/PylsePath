@@ -145,4 +145,70 @@ void main() {
       expect(await unknown.readAsBytes(), [1, 2, 3]);
     },
   );
+  test('video draft survives a new store with topics and namespaced route selection', () async {
+    final root = Directory(
+      'audit/draft-video-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    await root.create(recursive: true);
+    final previous = PathProviderPlatform.instance;
+    PathProviderPlatform.instance = DraftPaths(root.absolute.path);
+    addTearDown(() => PathProviderPlatform.instance = previous);
+    final store = CommunityDraftStore('owner-a');
+    for (final suffix in ['MP4', 'mov', 'm4v', 'webm']) {
+      final original = File('${root.path}/clip.$suffix');
+      await original.writeAsBytes([1, 2, 3, 4]);
+      final staged = await store.stageVideo(original.path);
+      expect(staged, endsWith('.${suffix.toLowerCase()}'));
+      expect(staged, contains('community_drafts/owner-a'));
+      await store.write({
+        'body': 'Маршрут и видео',
+        'video': staged,
+        'topics': ['cycling', 'route'],
+        'ride_id': 'route:local-plan',
+        'audience': 'friends',
+        'photos': <String>[],
+      });
+      await original.writeAsBytes([0]);
+      final restored = (await CommunityDraftStore('owner-a').read())!;
+      expect(restored['ride_id'], 'route:local-plan');
+      expect(restored['topics'], ['cycling', 'route']);
+      expect(await File(restored['video'] as String).readAsBytes(), [
+        1,
+        2,
+        3,
+        4,
+      ]);
+      expect(await CommunityDraftStore('owner-b').read(), isNull);
+      expect(restored.containsKey('shareGpx'), isFalse);
+    }
+  });
+  test(
+    'video staging enforces the 50 MiB boundary and rejects unsupported files',
+    () async {
+      final root = Directory(
+        'audit/draft-video-limit-${DateTime.now().microsecondsSinceEpoch}',
+      );
+      await root.create(recursive: true);
+      final previous = PathProviderPlatform.instance;
+      PathProviderPlatform.instance = DraftPaths(root.absolute.path);
+      addTearDown(() => PathProviderPlatform.instance = previous);
+      final store = CommunityDraftStore('owner-a');
+      final exact = File('${root.path}/exact.mp4');
+      final handle = await exact.open(mode: FileMode.write);
+      await handle.setPosition(50 * 1024 * 1024 - 1);
+      await handle.writeByte(0);
+      await handle.close();
+      final staged = await store.stageVideo(exact.path);
+      expect(await File(staged).length(), 50 * 1024 * 1024);
+      final append = await exact.open(mode: FileMode.append);
+      await append.writeByte(0);
+      await append.close();
+      await expectLater(store.stageVideo(exact.path), throwsFormatException);
+      expect(await exact.length(), 50 * 1024 * 1024 + 1);
+      final bad = File('${root.path}/clip.avi');
+      await bad.writeAsBytes([1]);
+      await expectLater(store.stageVideo(bad.path), throwsFormatException);
+      expect(await bad.readAsBytes(), [1]);
+    },
+  );
 }

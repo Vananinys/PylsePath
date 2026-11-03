@@ -1,3 +1,4 @@
+import '../models/community_post_topic.dart';
 import '../utils/ride_id.dart';
 
 import 'package:flutter/foundation.dart';
@@ -24,7 +25,7 @@ class CommunityServiceException implements Exception {
 
 enum CommunityFeedScope { everyone, friends, mine }
 
-enum CommunityPostType { all, text, photos, rides }
+enum CommunityPostType { all, text, photos, rides, videos }
 
 /// Лента сообщества: посты с прикреплёнными заездами и лайками
 /// (таблицы `community_posts` / `community_post_likes`).
@@ -70,6 +71,7 @@ class CommunityService {
     CommunityPostType type = CommunityPostType.all,
     DateTime? before,
     String? beforeId,
+    List<String> topics = const [],
   }) async {
     final client = _client;
     if (client == null) {
@@ -98,16 +100,25 @@ class CommunityService {
         if (ids.isEmpty) return const [];
         query = query.inFilter('author_id', ids);
       }
+      final selectedTopics = CommunityPostTopic.normalize(topics);
+      if (selectedTopics.isNotEmpty)
+        query = query.overlaps('topics', selectedTopics);
       switch (type) {
         case CommunityPostType.all:
           break;
         case CommunityPostType.text:
-          query = query.isFilter('ride_id', null)
+          query = query
+              .isFilter('video_path', null)
+              .isFilter('ride_id', null)
               .isFilter('route_attachment', null)
               .or('photo_urls.is.null,photo_urls.eq.{}')
               .or('private_photo_paths.is.null,private_photo_paths.eq.{}');
         case CommunityPostType.photos:
-          query = query.or('photo_urls.not.eq.{},private_photo_paths.not.eq.{}');
+          query = query.or(
+            'photo_urls.not.eq.{},private_photo_paths.not.eq.{}',
+          );
+        case CommunityPostType.videos:
+          query = query.not('video_path', 'is', null);
         case CommunityPostType.rides:
           query = query.or('ride_id.not.is.null,route_attachment.not.is.null');
       }
@@ -146,8 +157,12 @@ class CommunityService {
   Future<CommunityPost?> fetchPost(String id, {bool strict = true}) async {
     final owner = _requireOwner();
     try {
-      final rows = await _client!.from('community_posts').select()
-          .eq('id', id).limit(1).timeout(const Duration(seconds: 12));
+      final rows = await _client!
+          .from('community_posts')
+          .select()
+          .eq('id', id)
+          .limit(1)
+          .timeout(const Duration(seconds: 12));
       _requireOwner(owner);
       if (rows.isEmpty) return null;
       final posts = await _hydrate(rows);
@@ -159,31 +174,45 @@ class CommunityService {
     }
   }
 
-  Future<void> updatePostBody(String postId, String body,
-      {String? expectedOwner}) async {
+  Future<void> updatePostBody(
+    String postId,
+    String body, {
+    String? expectedOwner,
+  }) async {
     final owner = _requireOwner(expectedOwner);
     final clean = body.trim();
     if (clean.characters.length > 1000) {
       throw const CommunityServiceException('Максимум 1000 символов в посте');
     }
     try {
-      final rows = await _client!.from('community_posts').select()
-          .eq('id', postId).eq('author_id', owner).limit(1)
+      final rows = await _client!
+          .from('community_posts')
+          .select()
+          .eq('id', postId)
+          .eq('author_id', owner)
+          .limit(1)
           .timeout(const Duration(seconds: 12));
       _requireOwner(owner);
       if (rows.isEmpty) {
         throw const CommunityServiceException('Пост удалён или недоступен');
       }
       final row = rows.first;
-      final hasAttachment = row['ride_id'] != null || row['route_attachment'] != null ||
+      final hasAttachment =
+          row['video_path'] != null ||
+          row['ride_id'] != null ||
+          row['route_attachment'] != null ||
           (row['photo_urls'] as List? ?? []).isNotEmpty ||
           (row['private_photo_paths'] as List? ?? []).isNotEmpty;
       if (clean.isEmpty && !hasAttachment) {
         throw const CommunityServiceException('Добавьте текст публикации');
       }
-      final updated = await _client!.from('community_posts')
-          .update({'body': clean}).eq('id', postId).eq('author_id', owner)
-          .select('id').timeout(const Duration(seconds: 15));
+      final updated = await _client!
+          .from('community_posts')
+          .update({'body': clean})
+          .eq('id', postId)
+          .eq('author_id', owner)
+          .select('id')
+          .timeout(const Duration(seconds: 15));
       _requireOwner(owner);
       if (updated.isEmpty) {
         throw const CommunityServiceException('Пост удалён или недоступен');
@@ -192,9 +221,13 @@ class CommunityService {
       rethrow;
     } on PostgrestException catch (error) {
       await _explainModerationDenial(error);
-      throw const CommunityServiceException('Не удалось сохранить изменения. Повторите попытку.');
+      throw const CommunityServiceException(
+        'Не удалось сохранить изменения. Повторите попытку.',
+      );
     } catch (_) {
-      throw const CommunityServiceException('Нет связи с сообществом. Повторите попытку.');
+      throw const CommunityServiceException(
+        'Нет связи с сообществом. Повторите попытку.',
+      );
     }
   }
 
@@ -317,7 +350,7 @@ class CommunityService {
     String? expectedOwner,
   }) async {
     final owner = _requireOwner(expectedOwner);
-    if (post.privatePhotoPaths.isEmpty) return post;
+    if (post.privatePhotoPaths.isEmpty && !post.hasVideo) return post;
     final urls = <String>[
       ...post.photoUrls.where(
         (u) => !u.contains('/object/sign/community_private/'),
@@ -332,7 +365,13 @@ class CommunityService {
       );
     }
     _requireOwner(owner);
-    return post.copyWith(photoUrls: urls);
+    final videoUrl = post.hasVideo
+        ? await _client!.storage
+              .from('community_videos')
+              .createSignedUrl(post.videoPath!, 300)
+        : null;
+    _requireOwner(owner);
+    return post.copyWith(photoUrls: urls, videoUrl: videoUrl);
   }
 
   Future<PostComment> resolveCommentMedia(
@@ -410,12 +449,72 @@ class CommunityService {
     }
   }
 
+  /// One private video; never return a public or persistent signed URL.
+  static const maxVideoBytes = 50 * 1024 * 1024;
+  Future<String> uploadVideo(
+    String localFilePath, {
+    String? expectedOwner,
+  }) async {
+    final owner = _requireOwner(expectedOwner);
+    final extension = _extensionOf(localFilePath);
+    final mime = switch (extension) {
+      '.mp4' || '.m4v' => 'video/mp4',
+      '.mov' => 'video/quicktime',
+      '.webm' => 'video/webm',
+      _ => null,
+    };
+    if (mime == null)
+      throw const CommunityServiceException('Выберите видео MP4, MOV или WebM');
+    try {
+      final bytes = await readBytesFromPath(localFilePath);
+      _requireOwner(owner);
+      if (bytes.isEmpty || bytes.length > maxVideoBytes) {
+        throw const CommunityServiceException(
+          'Видео должно быть не больше 50 МБ',
+        );
+      }
+      final path = '$owner/video_${newRideId()}$extension';
+      await _client!.storage
+          .from('community_videos')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: mime,
+              cacheControl: '300',
+            ),
+          )
+          .timeout(const Duration(minutes: 3));
+      _requireOwner(owner);
+      return path;
+    } on CommunityServiceException {
+      rethrow;
+    } on StorageException catch (error) {
+      throw CommunityServiceException(
+        error.statusCode == '413'
+            ? 'Видео превышает допустимый размер сервера'
+            : 'Не удалось загрузить видео. Проверьте связь и повторите.',
+      );
+    } on FileReadException {
+      throw const CommunityServiceException(
+        'Не удалось прочитать видео. Выберите его заново.',
+      );
+    } catch (_) {
+      throw const CommunityServiceException(
+        'Не удалось загрузить видео. Проверьте связь и повторите.',
+      );
+    }
+  }
+
   /// Создаёт пост: текст до 1000 символов, до 4 фото, опционально заезд
   /// и разрешение на скачивание его GPX-трека.
   Future<void> createPost(
     String body, {
     String? rideId,
     List<String> photoPaths = const [],
+    String? videoPath,
+    List<String> topics = const [],
     bool shareGpx = false,
     SharedRoute? routeAttachment,
     String? expectedOwner,
@@ -431,9 +530,12 @@ class CommunityService {
     final clean = body.trim().isEmpty && routeAttachment != null
         ? '${routeAttachment.label}: ${routeAttachment.title}'
         : body.trim();
-    if (clean.isEmpty && photoPaths.isEmpty) {
+    if (clean.isEmpty &&
+        photoPaths.isEmpty &&
+        videoPath == null &&
+        rideId == null) {
       throw const CommunityServiceException(
-        'Пост не может быть пустым: добавьте текст или фото',
+        'Добавьте текст, фото, видео или заезд',
       );
     }
     if (clean.characters.length > 1000) {
@@ -441,6 +543,9 @@ class CommunityService {
     }
 
     try {
+      final uploadedVideo = videoPath == null
+          ? null
+          : await uploadVideo(videoPath, expectedOwner: id);
       final photoUrls = <String>[];
       final privatePaths = <String>[];
       for (final path in paths) {
@@ -462,6 +567,8 @@ class CommunityService {
           .from('community_posts')
           .insert({
             'audience': audience.name,
+            'topics': CommunityPostTopic.normalize(topics),
+            if (uploadedVideo != null) 'video_path': uploadedVideo,
             if (privatePaths.isNotEmpty) 'private_photo_paths': privatePaths,
             'author_id': id,
             'body': clean,

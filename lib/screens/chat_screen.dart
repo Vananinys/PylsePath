@@ -1,3 +1,4 @@
+import '../widgets/community_post_chat_link.dart';
 import '../widgets/swipe_to_reply.dart';
 import '../widgets/chat_message_text.dart';
 import '../data/chat_local_store.dart';
@@ -50,6 +51,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+  late final String? _screenOwner = UserScope.currentUserId();
   late final ChatService _chatService = widget.service ?? ChatService();
   late final ChatLocalStore _store = ChatLocalStore(
     UserScope.currentUserId(),
@@ -1611,7 +1613,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      if (message.groupInvitation != null)
+                      if (message.communityPostId != null)
+                        CommunityPostChatLink(
+                          postId: message.communityPostId!,
+                          expectedOwner: _screenOwner,
+                        )
+                      else if (message.groupInvitation != null)
                         GroupInvitationCard(message: message)
                       else if (message.routeAttachment != null)
                         SharedRouteCard(route: message.routeAttachment!)
@@ -1874,7 +1881,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 onTap: () => Navigator.pop(sheetContext, 'discard'),
               ),
             ],
-            if (canDelete && canCopy && message.groupInvitation == null)
+            if (canDelete &&
+                canCopy &&
+                message.groupInvitation == null &&
+                message.communityPostId == null)
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
                 title: const Text('Изменить'),

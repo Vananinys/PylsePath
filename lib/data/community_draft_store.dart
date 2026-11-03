@@ -40,6 +40,21 @@ class CommunityDraftStore {
   }
 
   Future<void> clear() => write({'cleared': true});
+  Future<String> stageVideo(String source) async {
+    final suffix = source.split('.').last.toLowerCase();
+    if (!const ['mp4', 'mov', 'm4v', 'webm'].contains(suffix)) {
+      throw const FormatException('Выберите видео MP4, MOV или WebM');
+    }
+    if (await File(source).length() > 50 * 1024 * 1024) {
+      throw const FormatException('Видео должно быть не больше 50 МБ');
+    }
+    final root = await getApplicationSupportDirectory();
+    final folder = Directory('${root.path}/community_drafts/${Uri.encodeComponent(owner)}');
+    await folder.create(recursive: true);
+    final path = '${folder.path}/${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}.$suffix';
+    await File(source).copy(path);
+    return path;
+  }
   Future<String> stagePhoto(String source) async {
     final root = await getApplicationSupportDirectory();
     final folder = Directory(

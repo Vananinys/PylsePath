@@ -1,3 +1,4 @@
+import 'community_post_topic.dart';
 import 'shared_route.dart';
 
 enum CommunityPostAudience { everyone, friends }
@@ -14,6 +15,10 @@ class CommunityPost {
   final String? authorAvatarUrl;
 
   final String body;
+  final String? videoPath;
+  final String? videoUrl;
+  final List<String> topics;
+  bool get hasVideo => videoPath != null && videoPath!.isNotEmpty;
 
   /// Прикреплённый заезд (id из `rides`), может отсутствовать.
   final String? rideId;
@@ -46,6 +51,9 @@ class CommunityPost {
     required this.authorName,
     this.authorAvatarUrl,
     required this.body,
+    this.videoPath,
+    this.videoUrl,
+    this.topics = const [],
     this.rideId,
     this.rideDistanceKm,
     this.rideDurationSeconds,
@@ -67,6 +75,8 @@ class CommunityPost {
     'authorName': authorName,
     'authorAvatarUrl': authorAvatarUrl,
     'body': body,
+    'videoPath': videoPath,
+    'topics': topics,
     'rideId': rideId,
     'rideDistanceKm': rideDistanceKm,
     'rideDurationSeconds': rideDurationSeconds,
@@ -92,6 +102,10 @@ class CommunityPost {
     authorName: row['authorName'] as String,
     authorAvatarUrl: row['authorAvatarUrl'] as String?,
     body: row['body'] as String,
+    videoPath: row['videoPath'] as String?,
+    topics: CommunityPostTopic.normalize(
+      (row['topics'] as List? ?? []).cast<String>(),
+    ),
     rideId: row['rideId'] as String?,
     rideDistanceKm: (row['rideDistanceKm'] as num?)?.toDouble(),
     rideDurationSeconds: (row['rideDurationSeconds'] as num?)?.toInt(),
@@ -108,6 +122,7 @@ class CommunityPost {
 
   CommunityPost copyWith({
     List<String>? photoUrls,
+    String? videoUrl,
     int? likeCount,
     bool? likedByMe,
     int? commentsCount,
@@ -120,6 +135,9 @@ class CommunityPost {
       authorName: authorName,
       authorAvatarUrl: authorAvatarUrl,
       body: body,
+      videoPath: videoPath,
+      videoUrl: videoUrl ?? this.videoUrl,
+      topics: topics,
       rideId: rideId,
       rideDistanceKm: rideDistanceKm,
       rideDurationSeconds: rideDurationSeconds,
@@ -158,6 +176,10 @@ class CommunityPost {
           : 'Райдер',
       authorAvatarUrl: author['avatar_url'] as String?,
       body: row['body'] as String? ?? '',
+      videoPath: row['video_path'] as String?,
+      topics: CommunityPostTopic.normalize(
+        (row['topics'] as List? ?? []).cast<String>(),
+      ),
       rideId: (row['ride_id'] ?? '').toString().isEmpty
           ? null
           : (row['ride_id'] ?? '').toString(),

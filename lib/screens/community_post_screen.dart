@@ -4,6 +4,7 @@ import '../models/community_post.dart';
 import '../models/friend_profile.dart';
 import '../services/community_service.dart';
 import '../widgets/community_post_card.dart';
+import '../widgets/community_post_share_sheet.dart';
 import '../widgets/community_post_edit_sheet.dart';
 import '../utils/gpx_share.dart';
 import 'post_comments_screen.dart';
@@ -117,6 +118,9 @@ class _CommunityPostScreenState extends State<CommunityPostScreen> {
               CommunityPostCard(
                 post: p,
                 currentUserId: _owner,
+                onShare: () => showCommunityPostShare(context, post: p),
+                onRefreshVideoUrl: p.videoPath == null ? null : () async =>
+                    (await _service.resolvePostMedia(p, expectedOwner: _owner)).videoUrl,
                 onLike: _busy ? null : () => _like(p),
                 onEdit: p.authorId != _owner ? null : () async {
                   final changed = await showCommunityPostEditor(context,

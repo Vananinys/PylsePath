@@ -330,6 +330,60 @@ class ChatService {
     }
   }
 
+  /// Sends only a reference. The database checks both users' current post access.
+  Future<ChatMessage> shareCommunityPost(
+    String receiverId,
+    String postId, {
+    required String expectedOwner,
+    required String messageId,
+  }) async {
+    final client = _client;
+    if (client == null || userId != expectedOwner) {
+      throw const ChatServiceException(
+        'Аккаунт изменился. Откройте отправку заново.',
+      );
+    }
+    try {
+      final row = await client
+          .from('chat_messages')
+          .insert({
+            'id': messageId,
+            'sender_id': expectedOwner,
+            'receiver_id': receiverId,
+            'body': 'Публикация сообщества',
+            'community_post_id': postId,
+          })
+          .select()
+          .single()
+          .timeout(const Duration(seconds: 15));
+      if (userId != expectedOwner) {
+        throw const ChatServiceException(
+          'Аккаунт изменился. Откройте отправку заново.',
+        );
+      }
+      return ChatMessage.fromRow(row);
+    } on PostgrestException catch (error) {
+      if (error.code == '23505' && userId == expectedOwner) {
+        final existing = await fetchMessage(messageId);
+        if (userId == expectedOwner &&
+            existing?.senderId == expectedOwner &&
+            existing?.receiverId == receiverId &&
+            existing?.communityPostId == postId) {
+          return existing!;
+        }
+      }
+      throw const ChatServiceException(
+        'Не удалось отправить. Проверьте, доступен ли пост другу, и повторите.',
+      );
+    } on ChatServiceException {
+      rethrow;
+    } catch (_) {
+      throw const ChatServiceException(
+        'Не удалось отправить. Проверьте интернет и повторите.',
+      );
+    }
+  }
+
   final List<void Function(ChatMessage message)> _listeners = [];
   final Set<void Function(String)> deletionListeners = {};
   final ValueNotifier<bool> connected = ValueNotifier(false);

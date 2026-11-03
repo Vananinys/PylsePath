@@ -1,5 +1,6 @@
 import '../data/community_draft_store.dart';
 import 'community_composer_frame.dart';
+// ignore: unused_import
 import '../config/app_variant.dart';
 import '../data/ui_snapshot_cache.dart';
 import '../data/user_scope.dart';
@@ -26,6 +27,10 @@ import '../screens/public_profile_screen.dart';
 import 'community_post_card.dart';
 import 'community_post_edit_sheet.dart';
 import 'community_activity_panel.dart';
+import '../models/community_post_topic.dart';
+import 'community_route_picker.dart';
+import 'community_post_share_sheet.dart';
+import '../services/community_route_choices.dart';
 import '../screens/community_post_screen.dart';
 import '../screens/workout_history_screen.dart';
 import '../screens/notifications_screen.dart';
@@ -114,11 +119,12 @@ class _CommunityFeedState extends State<CommunityFeed>
   List<CommunityPost> _posts = [];
   static const _pageSize = 20;
   CommunityFeedScope _scope = CommunityFeedScope.everyone;
+  final Set<String> _topics = {};
   CommunityPostType _type = CommunityPostType.all;
   bool _canLoadMore = false, _loadingMore = false;
   String? _pageError;
   final _pendingLikes = <String>{};
-  String get _cacheName => 'community_feed_${_scope.name}_${_type.name}';
+  String get _cacheName => 'community_feed_${_scope.name}_${_type.name}_${(_topics.toList()..sort()).join('_')}';
 
   @override
   void initState() {
@@ -147,7 +153,7 @@ class _CommunityFeedState extends State<CommunityFeed>
               .where(
                 (p) =>
                     p.audience == CommunityPostAudience.everyone &&
-                    p.privatePhotoPaths.isEmpty,
+                    p.privatePhotoPaths.isEmpty && p.videoPath == null,
               )
               .toList();
           setState(() {
@@ -168,6 +174,7 @@ class _CommunityFeedState extends State<CommunityFeed>
         limit: _pageSize,
         scope: scope,
         type: _type,
+        topics: _topics.toList(),
       );
       if (!current()) return;
       setState(() {
@@ -219,7 +226,7 @@ class _CommunityFeedState extends State<CommunityFeed>
           .where(
             (p) =>
                 p.audience == CommunityPostAudience.everyone &&
-                p.privatePhotoPaths.isEmpty,
+                p.privatePhotoPaths.isEmpty && p.videoPath == null,
           )
           .take(100)
           .map((post) => post.toSnapshot())
@@ -246,6 +253,7 @@ class _CommunityFeedState extends State<CommunityFeed>
         limit: _pageSize,
         scope: scope,
         type: _type,
+        topics: _topics.toList(),
         before: cursor.createdAt,
         beforeId: cursor.id,
       );
@@ -502,6 +510,7 @@ class _CommunityFeedState extends State<CommunityFeed>
                             CommunityPostType.all => 'Все форматы',
                             CommunityPostType.text => 'Текст',
                             CommunityPostType.photos => 'Фото',
+                            CommunityPostType.videos => 'Видео',
                             CommunityPostType.rides => 'Заезды',
                           }),
                           selected: type == _type,
@@ -511,6 +520,14 @@ class _CommunityFeedState extends State<CommunityFeed>
                   ]),
                 ),
                 const SizedBox(height: 8),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  for (final topic in CommunityPostTopic.values)
+                    FilterChip(label: Text(topic.label), selected: _topics.contains(topic.id),
+                      onSelected: (selected) {
+                        setState(() { selected ? _topics.add(topic.id) : _topics.remove(topic.id); _posts = []; _isLoading = true; _loadingMore = false; _canLoadMore = false; });
+                        _load();
+                      }),
+                ]),
                 if (_moderation.isModerator)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -532,15 +549,11 @@ class _CommunityFeedState extends State<CommunityFeed>
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(_moderation.banDescription),
                   ),
-                OutlinedButton.icon(
+                FilledButton.icon(
                   onPressed: _moderation.isBanned ? null : _openComposer,
                   icon: const Icon(Icons.edit_note),
-                  label: const Text('Поделиться поездкой'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.deepOrange,
-                    side: BorderSide(
-                      color: Colors.deepOrange.withValues(alpha: .4),
-                    ),
+                  label: const Text('Создать публикацию'),
+                  style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     alignment: Alignment.centerLeft,
                   ),
@@ -593,6 +606,9 @@ class _CommunityFeedState extends State<CommunityFeed>
                 key: ValueKey(post.id),
                 post: post,
                 currentUserId: _communityService.userId,
+                onShare: () => showCommunityPostShare(context, post: post),
+                onRefreshVideoUrl: post.videoPath == null ? null : () async =>
+                    (await _communityService.resolvePostMedia(post, expectedOwner: _cacheOwner)).videoUrl,
                 onLike: _moderation.isBanned || _pendingLikes.contains(post.id)
                     ? null
                     : () => _toggleLike(post),
@@ -762,6 +778,8 @@ class __ComposerDialogState extends State<_ComposerDialog> {
       await _draftStore?.write({
         'body': _bodyController.text,
         'photos': List<String>.of(_photoPaths),
+        'video': _videoPath,
+        'topics': _selectedTopics.toList(),
         'ride_id': _selectedRideId,
         'audience': _audience.name,
       });
@@ -820,6 +838,9 @@ class __ComposerDialogState extends State<_ComposerDialog> {
           if (await File(path).exists()) _photoPaths.add(path);
         }
         if (!mounted || !_sameOwner) return;
+        final savedVideo = draft['video'] as String?;
+        _videoPath = savedVideo != null && await File(savedVideo).exists() ? savedVideo : null;
+        _selectedTopics.addAll((draft['topics'] as List? ?? []).whereType<String>());
         final rideId = draft['ride_id'] as String?;
         _selectedRideId = _rideByLocalId.containsKey(rideId) ? rideId : null;
         _audience = draft['audience'] == 'friends'
@@ -839,7 +860,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
 
   bool get _hasDraft =>
       _bodyController.text.trim().isNotEmpty ||
-      _photoPaths.isNotEmpty ||
+      _photoPaths.isNotEmpty || _videoPath != null ||
       _selectedRideId != null;
   Future<void> _closeComposer() async {
     if (_publishing) return;
@@ -880,6 +901,9 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   bool _shareGpx = false;
   int _hideRadius = 200;
   final List<String> _photoPaths = [];
+  String? _videoPath;
+  final Set<String> _selectedTopics = {};
+  final Set<String> _plannedRouteIds = {};
   Set<String> _rideMediaIds = {};
   late final String? _publicationOwner;
 
@@ -915,50 +939,55 @@ class __ComposerDialogState extends State<_ComposerDialog> {
 
   Future<void> _loadRecentRides() async {
     try {
-      final repo = CommunityRidesBridge();
-      final rides = await repo.recentRides(limit: null);
+      final choices = await CommunityRouteChoices().loadChoices();
       if (!mounted || !_sameOwner) return;
       setState(() {
-        _recentRides = rides
-            .map(
-              (ride) => (
-                id: ride.route.localId,
-                label:
-                    '${ride.distanceKm.toStringAsFixed(1)} км · ${ride.duration}',
-              ),
-            )
-            .where((ride) => ride.id.isNotEmpty)
-            .toList();
+        for (final choice in choices) {
+          final key = '${choice.kind}:${choice.route.localId}';
+          _rideByLocalId[key] = choice.route;
+          if (choice.kind == 'route') _plannedRouteIds.add(key);
+          if (choice.kind == 'ride') _rideByLocalId[choice.route.localId] = choice.route;
+        }
+        _recentRides = choices.map((c) => (id: '${c.kind}:${c.route.localId}', label: c.route.title)).toList();
         _isLoadingRides = false;
         _ridesError = null;
-        _rideByLocalId.addEntries(
-          rides.map((ride) => MapEntry(ride.route.localId, ride.route)),
-        );
-        final initial = widget.route;
-        if (initial != null &&
-            !_recentRides.any((r) => r.id == initial.localId)) {
-          _recentRides.insert(0, (
-            id: initial.localId,
-            label:
-                '${initial.distanceKm.toStringAsFixed(1)} км · ${initial.duration}',
-          ));
-        }
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingRides = false;
-        _ridesError = 'Не удалось прочитать историю заездов';
-        final initial = widget.route;
-        if (initial != null)
-          _recentRides = [
-            (
-              id: initial.localId,
-              label:
-                  '${initial.distanceKm.toStringAsFixed(1)} км · ${initial.duration}',
-            ),
-          ];
-      });
+      if (!mounted || !_sameOwner) return;
+      setState(() { _isLoadingRides = false; _ridesError = 'Не удалось прочитать маршруты и тренировки'; });
+    }
+  }
+
+  Future<void> _chooseRoute() async {
+    await showCommunityRoutePicker(context,
+      selected: _rideByLocalId[_selectedRideId],
+      source: _selectedRideId == null ? null : _plannedRouteIds.contains(_selectedRideId) ? CommunityRouteSource.saved : CommunityRouteSource.workout,
+      onSelectedChoice: (choice) {
+        if (!mounted || !_sameOwner) return;
+        final key = '${choice.kind}:${choice.route.localId}';
+        setState(() {
+          _rideByLocalId[key] = choice.route;
+          choice.kind == 'route' ? _plannedRouteIds.add(key) : _plannedRouteIds.remove(key);
+          _selectedRideId = key;
+          _shareGpx = false;
+          _rideMediaIds = {};
+        });
+        unawaited(_saveDraft());
+      },
+    );
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final file = await _picker.pickVideo(source: ImageSource.gallery);
+      if (file == null || !mounted || !_sameOwner) return;
+      _draftStore ??= CommunityDraftStore(_publicationOwner!);
+      final path = await _draftStore!.stageVideo(file.path);
+      if (!mounted || !_sameOwner) return;
+      setState(() => _videoPath = path);
+      await _saveDraft();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error is FormatException ? error.message : 'Не удалось выбрать видео')));
     }
   }
 
@@ -990,7 +1019,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
   Future<void> _publish() async {
     if (_publishing || _draftPublished || !_sameOwner || !_draftReady) return;
     final body = _bodyController.text.trim();
-    if (body.isEmpty && _photoPaths.isEmpty && _selectedRideId == null) return;
+    if (body.isEmpty && _photoPaths.isEmpty && _videoPath == null && _selectedRideId == null) return;
     setState(() => _publishing = true);
     try {
       final owner = _publicationOwner;
@@ -1002,6 +1031,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
           ? null
           : await RideMediaService.prepareShare(
               selectedRoute,
+              kind: _plannedRouteIds.contains(_selectedRideId) ? 'route' : 'ride',
               selectedIds: _shareGpx ? _rideMediaIds : {},
               includeTrack: _shareGpx,
               hideRadiusMeters: _hideRadius.toDouble(),
@@ -1011,9 +1041,11 @@ class __ComposerDialogState extends State<_ComposerDialog> {
         body,
         audience: _audience,
         expectedOwner: owner,
-        rideId: _rideByLocalId[_selectedRideId]?.remoteId,
+        rideId: _plannedRouteIds.contains(_selectedRideId) ? null : _rideByLocalId[_selectedRideId]?.remoteId,
         routeAttachment: snapshot,
         photoPaths: _photoPaths,
+        videoPath: _videoPath,
+        topics: _selectedTopics.toList(),
         // Snapshot GPX includes only the points visible in the post. Do not
         // grant the legacy RPC access to the original untrimmed ride.
         shareGpx: false,
@@ -1201,6 +1233,18 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                       ),
                     ),
                   ),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  OutlinedButton.icon(onPressed: _publishing ? null : _pickVideo,
+                    icon: const Icon(Icons.video_library_outlined), label: Text(_videoPath == null ? 'Добавить видео · до 50 МБ' : 'Заменить видео')),
+                  if (_videoPath != null) InputChip(label: const Text('Видео прикреплено'), onDeleted: _publishing ? null : () {setState(() => _videoPath = null); unawaited(_saveDraft());}),
+                ]),
+                const SizedBox(height: 12),
+                const Text('Темы публикации · можно выбрать несколько'),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  for (final topic in CommunityPostTopic.values)
+                    FilterChip(label: Text(topic.label), selected: _selectedTopics.contains(topic.id),
+                      onSelected: _publishing ? null : (selected) {setState(() => selected ? _selectedTopics.add(topic.id) : _selectedTopics.remove(topic.id)); unawaited(_saveDraft());}),
+                ]),
                 if (_ridesError != null)
                   TextButton(
                     onPressed: _loadRecentRides,
@@ -1215,12 +1259,12 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   )
-                else if (_recentRides.isNotEmpty) ...[
+                else ...[
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Прикрепить заезд:',
+                      'Маршруты и тренировки · ${_recentRides.length}',
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1228,40 +1272,17 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  if (AppVariant.modernInterface)
-                    CommunityRidePicker(
-                      rides: _recentRides
-                          .map((r) => _rideByLocalId[r.id]!)
-                          .toList(),
-                      selectedId: _selectedRideId,
-                      busy: _publishing,
-                      onChanged: (id) => setState(() {
-                        _selectedRideId = id;
-                        _rideMediaIds = {};
-                        _shareGpx = false;
-                        unawaited(_saveDraft());
-                      }),
-                    ),
-                  if (!AppVariant.modernInterface)
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: _recentRides.map((ride) {
-                        final selected = _selectedRideId == ride.id;
-                        return FilterChip(
-                          label: Text(ride.label),
-                          selected: selected,
-                          onSelected: (_) => setState(() {
-                            _selectedRideId = selected ? null : ride.id;
-                            _rideMediaIds = {};
-                          }),
-                          selectedColor: Colors.deepOrange.withValues(
-                            alpha: 0.2,
-                          ),
-                          checkmarkColor: Colors.deepOrange,
-                        );
-                      }).toList(),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: _publishing ? null : _chooseRoute,
+                    icon: const Icon(Icons.route_outlined),
+                    label: Text(_selectedRideId == null ? 'Выбрать маршрут или тренировку' : 'Изменить прикреплённый маршрут'),
+                  ),
+                  if (_selectedRideId != null) ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(_rideByLocalId[_selectedRideId]!.title),
+                    subtitle: Text(_plannedRouteIds.contains(_selectedRideId) ? 'Сохранённый маршрут' : 'Тренировка'),
+                    trailing: IconButton(tooltip: 'Убрать вложение', icon: const Icon(Icons.close), onPressed: _publishing ? null : () {setState(() { _selectedRideId = null; _shareGpx = false; _rideMediaIds = {}; }); unawaited(_saveDraft());}),
+                  ),
                   // Приватность трека: GPX уедет в пост только с согласия.
                   if (_selectedRideId != null)
                     TrackPrivacyPicker(
@@ -1275,7 +1296,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                   if (_selectedRideId != null)
                     RideMediaSelection(
                       key: ValueKey('media_$_selectedRideId'),
-                      rideId: _selectedRideId!,
+                      rideId: _rideByLocalId[_selectedRideId]!.localId,
                       enabled: _shareGpx,
                       busy: _publishing,
                       onChanged: (ids) => _rideMediaIds = ids,
@@ -1302,6 +1323,7 @@ class __ComposerDialogState extends State<_ComposerDialog> {
                     _publishing ||
                     (_bodyController.text.trim().isEmpty &&
                         _photoPaths.isEmpty &&
+                        _videoPath == null &&
                         _selectedRideId == null)
                 ? null
                 : _publish,

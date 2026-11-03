@@ -10,6 +10,7 @@ enum MessageDelivery { sending, failed, sent }
 class ChatMessage {
   final Map<String, dynamic>? groupInvitation;
   final SharedRoute? routeAttachment;
+  final String? communityPostId;
   final MessageDelivery delivery;
   final String? photoReference;
   final String? audioReference;
@@ -42,6 +43,7 @@ class ChatMessage {
   const ChatMessage({
     this.groupInvitation,
     this.routeAttachment,
+    this.communityPostId,
     this.delivery = MessageDelivery.sent,
     this.photoReference,
     this.audioReference,
@@ -66,6 +68,7 @@ class ChatMessage {
   });
 
   bool get isStickerOnly =>
+      communityPostId == null &&
       groupInvitation == null &&
       routeAttachment == null &&
       !isPhoto &&
@@ -106,11 +109,13 @@ class ChatMessage {
         videoMetadata: videoMetadata,
         editedAt: editedAt,
         routeAttachment: routeAttachment,
+        communityPostId: communityPostId,
         groupInvitation: groupInvitation,
       );
   ChatMessage withDelivery(MessageDelivery value) => copyWith(delivery: value);
 
   Map<String, dynamic> toRow() => {
+    'community_post_id': communityPostId,
     'group_invitation': groupInvitation,
     'route_attachment': routeAttachment?.toJson(),
     'id': id,
@@ -134,6 +139,7 @@ class ChatMessage {
 
   factory ChatMessage.fromRow(Map<String, dynamic> row) {
     return ChatMessage(
+      communityPostId: row['community_post_id'] as String?,
       groupInvitation: row['group_invitation'] is Map
           ? Map<String, dynamic>.from(row['group_invitation'] as Map)
           : null,

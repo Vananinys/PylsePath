@@ -1,3 +1,4 @@
+import '../widgets/community_post_share_sheet.dart';
 import '../services/profile_presentation_service.dart';
 import '../widgets/profile_identity_card.dart';
 import '../services/activity_service.dart';
@@ -376,6 +377,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               .map(
                 (post) => CommunityPostCard(
                   post: post,
+                  onShare: () => showCommunityPostShare(context, post: post),
+                  onRefreshVideoUrl: post.videoPath == null ? null : () async {
+                    if (_viewer == null || UserScope.currentUserId() != _viewer) throw StateError('Аккаунт изменился');
+                    return (await _communityService.resolvePostMedia(post, expectedOwner: _viewer)).videoUrl;
+                  },
                   onRefreshPhotoUrls: post.privatePhotoPaths.isEmpty
                       ? null
                       : () async {
