@@ -1301,6 +1301,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                         if (_navigationController.routePoints.isNotEmpty)
                           ActivityTrailLayer(
                             segments: _navigationController.routeSegments,
+                            immutableSegments: true,
                             activity: _navigationController.workoutActivity,
                             transport: _navigationController
                                 .gearVehicle
@@ -1461,6 +1462,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                         if (_navigationController.recordedPath.isNotEmpty)
                           ActivityTrailLayer(
                             segments: _navigationController.recordedSegments,
+                            immutableSegments: true,
                             activity: _navigationController.workoutActivity,
                             transport: _navigationController
                                 .gearVehicle

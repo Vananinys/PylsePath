@@ -952,8 +952,22 @@ class MapNavigationController extends ChangeNotifier {
   final List<WorkoutLap> _workoutLaps = [];
   final List<int> _trackSegmentStarts = [];
   bool _isDiscardingWorkout = false;
-  List<List<LatLng>> get recordedSegments =>
-      WorkoutDetails.splitTrack(_recordedPath, _trackSegmentStarts);
+  List<List<LatLng>>? _recordedSegmentsCache;
+  int _recordedSegmentsPointCount = -1;
+  int _recordedSegmentsStartCount = -1;
+  List<List<LatLng>> get recordedSegments {
+    if (_recordedSegmentsCache == null ||
+        _recordedSegmentsPointCount != _recordedPath.length ||
+        _recordedSegmentsStartCount != _trackSegmentStarts.length) {
+      _recordedSegmentsCache = List<List<LatLng>>.unmodifiable(
+        WorkoutDetails.splitTrack(_recordedPath, _trackSegmentStarts)
+            .map(List<LatLng>.unmodifiable),
+      );
+      _recordedSegmentsPointCount = _recordedPath.length;
+      _recordedSegmentsStartCount = _trackSegmentStarts.length;
+    }
+    return _recordedSegmentsCache!;
+  }
   final List<WorkoutSample> _workoutSamples = [];
   double _maxWorkoutSpeed = 0;
   int _lastLapSeconds = 0;
@@ -1675,6 +1689,7 @@ class MapNavigationController extends ChangeNotifier {
       return;
     }
     _workoutGroupRoomId = draft.groupRoomId;
+    _recordedSegmentsCache = null;
     _trackSegmentStarts
       ..clear()
       ..addAll(draft.details.segmentStarts);
@@ -1878,6 +1893,7 @@ class MapNavigationController extends ChangeNotifier {
     _speedWindowDistances.clear();
     _lastSpeedSampleAt = null;
     _lastAcceptedPointAt = null;
+    _recordedSegmentsCache = null;
     _recordedPath.clear();
     _totalDistanceMeters = 0.0;
     _workoutSpeedKmh = 0.0;
@@ -2285,6 +2301,7 @@ class MapNavigationController extends ChangeNotifier {
       ..reset();
     _stopWorkoutTimer();
     _startLivePublishTimer();
+    _recordedSegmentsCache = null;
     _recordedPath.clear();
     _totalDistanceMeters = 0;
     _workoutSpeedKmh = 0;

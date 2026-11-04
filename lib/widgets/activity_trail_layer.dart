@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -9,6 +7,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import '../data/trail_appearance.dart';
 import '../models/activity_type.dart';
 import '../models/live_trail_style.dart';
+import '../utils/trail_projection_cache.dart';
 
 class TrailStamp {
   const TrailStamp(
@@ -113,7 +112,9 @@ class ActivityTrailLayer extends StatefulWidget {
     this.liveAppearance,
     this.preview = false,
     this.maxStamps,
+    this.immutableSegments = false,
   });
+  final bool immutableSegments;
   final List<List<LatLng>> segments;
   final ActivityType activity;
   final String? transport;
@@ -141,9 +142,9 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
     super.dispose();
   }
 
-  List<List<LatLng>>? _source;
+  final _projection = TrailProjectionCache();
+  Object? _projectionCrs;
   List<List<Offset>> _world = [];
-  double? _zoom;
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: TrailAppearance.instance,
@@ -171,26 +172,15 @@ class _ActivityTrailLayerState extends State<ActivityTrailLayer>
           (style != TrailStyle.line ||
               (widget.live && personal.effect != MotionEffect.none)) &&
           camera.zoom >= 12;
-      if (decorated &&
-          (_source == null ||
-              _source!.length != widget.segments.length ||
-              List.generate(
-                widget.segments.length,
-                (i) => !listEquals(_source![i], widget.segments[i]),
-              ).any((v) => v) ||
-              _zoom != 16)) {
-        _source = [for (final segment in widget.segments) List.of(segment)];
-        _zoom = 16;
-        _world = [
-          for (final segment in widget.segments)
-            [
-              for (final p in segment)
-                (() {
-                  final q = camera.project(p, 16);
-                  return Offset(q.x, q.y);
-                })(),
-            ],
-        ];
+      if (decorated) {
+        if (!identical(_projectionCrs, camera.crs)) {
+          _projection.clear();
+          _projectionCrs = camera.crs;
+        }
+        _world = _projection.update(widget.segments, (p) {
+          final q = camera.project(p, 16);
+          return Offset(q.x, q.y);
+        }, immutable: widget.immutableSegments);
       }
       final animate =
           decorated &&

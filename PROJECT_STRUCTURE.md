@@ -13,7 +13,7 @@ Flutter-приложение для карт, маршрутов, записи �
 | Офлайн-карта и готовность маршрута | `lib/services/offline_maps_service.dart`, `lib/models/offline_route_tiles.dart`, `lib/widgets/offline_route_coverage.dart` |
 | Запись, GPS, восстановление тренировки | `lib/controllers/map_navigation_controller.dart`, `lib/services/background_location_service.dart`, `lib/data/workout_draft_store.dart` |
 | История и повторная синхронизация | `lib/data/workout_history_repository.dart`, `lib/services/rides_service.dart`, `lib/services/network_recovery_sync.dart` |
-| Друзья, геопозиции и следы на карте | `lib/services/friend_service.dart`, `lib/widgets/friend_motion_layer.dart`, `lib/widgets/friend_trails_layer.dart`, `lib/services/owned_trail_style_service.dart` |
+| Друзья, геопозиции и следы на карте | `lib/services/friend_service.dart`, `lib/widgets/friend_motion_layer.dart`, `lib/widgets/friend_trails_layer.dart`, `lib/services/owned_trail_style_service.dart`; кэш проекции геометрии — `lib/utils/trail_projection_cache.dart` |
 | Профиль, оформление и настройки | `lib/state/profile_provider.dart`, `lib/screens/profile_screen.dart`, `lib/screens/public_profile_screen.dart`, `lib/screens/customization_screen.dart`, `lib/screens/settings_screen.dart` |
 | Чаты и вложения | `lib/services/chat_service.dart`, `lib/data/chat_local_store.dart`, `lib/screens/chat_screen.dart` |
 | Черновик публикации и фотографии сообщества | `lib/data/community_draft_store.dart`, `lib/widgets/community_photo_viewer.dart`; черновик раздельно по аккаунтам, аудитория и приватные фото — `community_service.dart` |
