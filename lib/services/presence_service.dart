@@ -7,6 +7,31 @@ class UserPresence {
   const UserPresence(this.online, this.lastSeen);
   final bool online;
   final DateTime? lastSeen;
+  DateTime? nextChangeAt(DateTime now) {
+    final seen = lastSeen;
+    if (seen == null) return null;
+    if (isOnlineAt(now)) return seen.add(const Duration(seconds: 70));
+    final age = now.difference(seen);
+    final labelChange = seen.add(
+      age.inMinutes < 1
+          ? const Duration(minutes: 1)
+          : age.inMinutes < 60
+          ? Duration(minutes: age.inMinutes + 1)
+          : age.inHours < 24
+          ? Duration(hours: age.inHours + 1)
+          : Duration(days: age.inDays + 1),
+    );
+    // Preserve the existing tolerance for a server timestamp in the future.
+    final onlineStart = seen
+        .subtract(const Duration(seconds: 70))
+        .add(const Duration(microseconds: 1));
+    return online &&
+            onlineStart.isAfter(now) &&
+            onlineStart.isBefore(labelChange)
+        ? onlineStart
+        : labelChange;
+  }
+
   bool isOnlineAt(DateTime now) =>
       online &&
       lastSeen != null &&
@@ -27,6 +52,18 @@ class ChatActivity {
   const ChatActivity(this.state, this.updatedAt);
   final String state;
   final DateTime? updatedAt;
+  DateTime? nextChangeAt(DateTime now) {
+    final updated = updatedAt;
+    if (updated == null || (state != 'typing' && state != 'recording')) {
+      return null;
+    }
+    if (textAt(now) != null) return updated.add(const Duration(seconds: 8));
+    final start = updated
+        .subtract(const Duration(seconds: 8))
+        .add(const Duration(microseconds: 1));
+    return start.isAfter(now) ? start : null;
+  }
+
   String? textAt(DateTime now) {
     if (updatedAt == null ||
         now.difference(updatedAt!).abs() >= const Duration(seconds: 8)) {
@@ -61,7 +98,44 @@ class PresenceService extends ChangeNotifier {
   Timer? _expiry;
   final _presence = <String, UserPresence>{};
   final _activity = <String, ChatActivity>{};
+  Map<String, (bool, String, String)> _displayed = {};
   Future<void> _writes = Future.value();
+
+  void _updateVisibleStatuses() {
+    _expiry?.cancel();
+    _expiry = null;
+    if (!_foreground || _owner == null) return;
+    final now = DateTime.now();
+    final displayed = <String, (bool, String, String)>{};
+    DateTime? next;
+    for (final id in {..._presence.keys, ..._activity.keys}) {
+      final presence = _presence[id] ?? const UserPresence(false, null);
+      final activity = _activity[id];
+      final status = presence.textAt(now);
+      displayed[id] = (
+        presence.isOnlineAt(now),
+        status,
+        activity?.textAt(now) ?? status,
+      );
+      for (final date in [
+        presence.nextChangeAt(now),
+        activity?.nextChangeAt(now),
+      ]) {
+        if (date != null &&
+            date.isAfter(now) &&
+            (next == null || date.isBefore(next))) {
+          next = date;
+        }
+      }
+    }
+    if (!mapEquals(_displayed, displayed)) {
+      _displayed = displayed;
+      notifyListeners();
+    }
+    if (next != null) {
+      _expiry = Timer(next.difference(now), _updateVisibleStatuses);
+    }
+  }
 
   String statusText(String id) =>
       (_presence[id] ?? const UserPresence(false, null)).textAt(DateTime.now());
@@ -104,14 +178,11 @@ class PresenceService extends ChangeNotifier {
     _poll = Timer.periodic(const Duration(seconds: 10), (_) {
       if (_foreground) unawaited(refresh());
     });
-    _expiry = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => notifyListeners(),
-    );
   }
 
   void setForeground(bool value) {
     _foreground = value;
+    _updateVisibleStatuses();
     unawaited(_pulse());
     if (value) unawaited(refresh());
   }
@@ -141,7 +212,9 @@ class PresenceService extends ChangeNotifier {
     // стареют за секунды).
     final now = DateTime.now();
     if (_lastRefreshAt != null &&
-        now.difference(_lastRefreshAt!) < const Duration(seconds: 3)) return;
+        now.difference(_lastRefreshAt!) < const Duration(seconds: 3)) {
+      return;
+    }
     _lastRefreshAt = now;
     _refreshing = true;
     try {
@@ -169,7 +242,7 @@ class PresenceService extends ChangeNotifier {
           DateTime.tryParse(row['updated_at']?.toString() ?? ''),
         );
       }
-      notifyListeners();
+      _updateVisibleStatuses();
     } catch (error) {
       debugPrint('[Presence] refresh failed: $error');
     } finally {
@@ -215,6 +288,9 @@ class PresenceService extends ChangeNotifier {
     _heartbeat?.cancel();
     _poll?.cancel();
     _expiry?.cancel();
+    _expiry = null;
+    _lastRefreshAt = null;
+    _displayed = {};
     final channel = _channel;
     _channel = null;
     if (channel != null) unawaited(channel.unsubscribe());

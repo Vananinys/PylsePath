@@ -31,6 +31,7 @@ void main() {
   final uploaded = <Map<String, dynamic>>[];
   var failing = false;
   String? failedRideId;
+  String? emptyResponseRideId;
   var awardsOffline = false;
   var profileOffline = false;
   final awardRows = <Map<String, dynamic>>[];
@@ -88,7 +89,7 @@ void main() {
           return http.Response(
             (failing || row['id'] == failedRideId)
                 ? '{"message":"offline"}'
-                : jsonEncode({'id': row['id']}),
+                : jsonEncode({'id': row['id'] == emptyResponseRideId ? '  ' : row['id']}),
             (failing || row['id'] == failedRideId) ? 503 : 201,
             headers: headers,
             request: request,
@@ -115,6 +116,7 @@ void main() {
     uploaded.clear();
     failing = false;
     failedRideId = null;
+    emptyResponseRideId = null;
     awardsOffline = false;
     profileOffline = false;
     awardRows.clear();
@@ -134,6 +136,18 @@ void main() {
     cloudSynced: synced,
     createdAt: DateTime(2026, 10, 18),
   );
+
+  test('Empty remote id leaves the ride queued for a successful retry', () async {
+    final repository = WorkoutHistoryRepository();
+    await repository.addWorkout(ride('empty-response'));
+    emptyResponseRideId = 'empty-response';
+    expect(await repository.retryUnsynced(), 0);
+    expect(repository.unsyncedWorkouts.single.localId, 'empty-response');
+    emptyResponseRideId = null;
+    expect(await repository.retryUnsynced(), 1);
+    expect(repository.unsyncedWorkouts, isEmpty);
+    expect(repository.workoutHistory, hasLength(1));
+  });
 
   testWidgets('customized profile is present on its very first visible frame', (
     tester,

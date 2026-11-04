@@ -634,7 +634,7 @@ class WorkoutHistoryRepository {
       );
       // Обновляем состояние синхронизации после успешного сохранения в облако
       if (UserScope.currentUserId() != _owner) break;
-      if (id != null) {
+      if (id != null && id.trim().isNotEmpty) {
         _workoutHistory[i] = route.withSyncState(
           remoteId: id,
           cloudSynced: true,
