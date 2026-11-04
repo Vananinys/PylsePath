@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
@@ -32,31 +33,45 @@ class _RouteDrawingLayerState extends State<RouteDrawingLayer> {
   }
 
   @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (event) {
-      _pointers.add(event.pointer);
-      if (_pointers.length > 1) {
-        _cancelled = true;
-        setState(_points.clear);
-      }
+  Widget build(BuildContext context) => RawGestureDetector(
+    // Own this pointer sequence before FlutterMap's drag/scale/long-press team.
+    // Raw samples also preserve slow strokes and the initial contact position.
+    gestures: {
+      EagerGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+            () => EagerGestureRecognizer(),
+            (_) {},
+          ),
     },
-    onPointerUp: (event) => _pointers.remove(event.pointer),
-    onPointerCancel: (event) => _pointers.remove(event.pointer),
-    child: GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    child: Listener(
       key: const ValueKey('route-drawing-canvas'),
       behavior: HitTestBehavior.opaque,
-      onPanDown: (details) {
-        if (_pointers.length > 1) return;
+      onPointerDown: (event) {
+        _pointers.add(event.pointer);
+        if (_pointers.length > 1) {
+          _cancelled = true;
+          setState(_points.clear);
+          return;
+        }
         _cancelled = false;
         _camera = MapCamera.of(context);
         _points.clear();
         _overflow = false;
-        _add(details.localPosition);
+        _add(event.localPosition);
       },
-      onPanStart: (details) => _add(details.localPosition),
-      onPanUpdate: (details) => _add(details.localPosition),
-      onPanCancel: () => setState(_points.clear),
-      onPanEnd: (_) {
+      onPointerMove: (event) {
+        if (_pointers.length == 1) _add(event.localPosition);
+      },
+      onPointerCancel: (event) {
+        _pointers.remove(event.pointer);
+        _cancelled = true;
+        setState(_points.clear);
+      },
+      onPointerUp: (event) {
+        _pointers.remove(event.pointer);
+        if (_pointers.isNotEmpty) return;
+        if (!_cancelled) _add(event.localPosition);
         final camera = _camera;
         if (_cancelled) {
           _points.clear();
