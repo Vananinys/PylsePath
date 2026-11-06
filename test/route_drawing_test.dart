@@ -13,7 +13,7 @@ import 'package:pulsepath/models/saved_route.dart';
 import 'package:pulsepath/services/routing_service.dart';
 import 'package:pulsepath/data/navigation_preferences.dart';
 import 'package:pulsepath/data/saved_routes_repository.dart';
-import 'package:pulsepath/screens/route_builder_screen.dart';
+import 'package:pulsepath/screens/route_geometry_editor_screen.dart';
 import 'package:pulsepath/utils/drawn_route_geometry.dart';
 import 'package:pulsepath/widgets/route_drawing_layer.dart';
 
@@ -123,7 +123,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: MainMapTestHost(
-            child: RouteBuilderScreen(source: original, routingService: roads),
+            child: RouteGeometryEditorScreen(
+              source: original,
+              routingService: roads,
+            ),
           ),
         ),
       );
@@ -176,7 +179,7 @@ void main() {
                     saved = await Navigator.push<bool>(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const RouteBuilderScreen(),
+                        builder: (_) => const RouteGeometryEditorScreen(),
                       ),
                     );
                   },
@@ -248,7 +251,7 @@ void main() {
                   .copyWith(textScaler: TextScaler.linear(large ? 2 : 1)),
               child: child!,
             ),
-            home: const MainMapTestHost(child: RouteBuilderScreen()),
+            home: const MainMapTestHost(child: RouteGeometryEditorScreen()),
           ),
         ),
       );

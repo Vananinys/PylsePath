@@ -9,7 +9,7 @@ Flutter-приложение для карт, маршрутов, записи �
 | Функция | Где начать изучение |
 |---|---|
 | Запуск, основная карта, переходы между разделами | `lib/main.dart`, `lib/src/map_screen/`, `lib/controllers/map_navigation_controller.dart` |
-| Построение маршрута и следование ему | `lib/screens/route_builder_screen.dart`, `lib/services/routing_service.dart`, `lib/services/trail_guidance.dart`; рисование жестом — `lib/widgets/route_drawing_layer.dart`, сглаживание — `lib/utils/drawn_route_geometry.dart`, геометрия копии — `lib/models/route_edit_state.dart`. Отдельный флаг `ROUTE_DRAWING_ENABLED` не зависит от UI_BETA. |
+| Построение маршрута и следование ему | `lib/screens/route_builder_screen.dart` (остановки, поиск и черновик), `lib/screens/route_geometry_editor_screen.dart` (рисование и точная правка трека), `lib/services/routing_service.dart`, `lib/services/trail_guidance.dart`; рисование жестом — `lib/widgets/route_drawing_layer.dart`, сглаживание — `lib/utils/drawn_route_geometry.dart`, геометрия копии — `lib/models/route_edit_state.dart`. Отдельный флаг `ROUTE_DRAWING_ENABLED` не зависит от UI_BETA. |
 | Офлайн-карта и готовность маршрута | `lib/services/offline_maps_service.dart`, `lib/models/offline_route_tiles.dart`, `lib/widgets/offline_route_coverage.dart` |
 | Запись, GPS, восстановление тренировки | `lib/controllers/map_navigation_controller.dart`, `lib/services/background_location_service.dart`, `lib/data/workout_draft_store.dart` |
 | История и повторная синхронизация | `lib/data/workout_history_repository.dart`, `lib/services/rides_service.dart`, `lib/services/network_recovery_sync.dart` |

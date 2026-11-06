@@ -9,6 +9,10 @@ import '../utils/ride_id.dart';
 class SavedRoute {
   final List<RouteStep> navigationSteps;
   final List<LatLng> viaPoints;
+
+  /// User-selected anchors, independent from snapped road geometry.
+  final List<LatLng> planningPoints;
+  final List<String> planningLabels;
   final bool isFavorite;
   final String collection;
   final String routeNotes;
@@ -49,6 +53,8 @@ class SavedRoute {
 
   SavedRoute({
     this.viaPoints = const [],
+    this.planningPoints = const [],
+    this.planningLabels = const [],
     this.isFavorite = false,
     this.collection = '',
     this.routeNotes = '',
@@ -150,6 +156,10 @@ class SavedRoute {
   );
 
   Map<String, dynamic> toJson() => {
+    'planningPoints': planningPoints
+        .map((p) => [p.latitude, p.longitude])
+        .toList(),
+    'planningLabels': planningLabels,
     'viaPoints': viaPoints.map((p) => [p.latitude, p.longitude]).toList(),
     'isFavorite': isFavorite,
     'collection': collection,
@@ -225,6 +235,26 @@ class SavedRoute {
       finish = pointsList.last;
     }
     return SavedRoute(
+      planningPoints: (json['planningPoints'] as List? ?? [])
+          .where(
+            (p) =>
+                p is List &&
+                p.length == 2 &&
+                p[0] is num &&
+                p[1] is num &&
+                (p[0] as num).isFinite &&
+                (p[1] as num).isFinite &&
+                (p[0] as num).abs() <= 90 &&
+                (p[1] as num).abs() <= 180,
+          )
+          .take(10)
+          .map(
+            (p) => LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+          )
+          .toList(),
+      planningLabels: (json['planningLabels'] as List? ?? [])
+          .whereType<String>()
+          .toList(),
       viaPoints: (json['viaPoints'] as List? ?? [])
           .where(
             (p) =>
@@ -296,6 +326,8 @@ class SavedRoute {
   SavedRoute withSyncState({String? remoteId, required bool cloudSynced}) {
     return SavedRoute(
       viaPoints: viaPoints,
+      planningPoints: planningPoints,
+      planningLabels: planningLabels,
       isFavorite: isFavorite,
       collection: collection,
       routeNotes: routeNotes,
@@ -340,6 +372,8 @@ class SavedRoute {
     navigationSteps: navigationSteps,
     workoutDetails: workoutDetails,
     viaPoints: viaPoints,
+    planningPoints: planningPoints,
+    planningLabels: planningLabels,
     distanceMeters: distanceMeters,
     durationSeconds: durationSeconds,
     calories: calories,

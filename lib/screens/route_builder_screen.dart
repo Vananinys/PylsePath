@@ -1,7 +1,10 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:geolocator/geolocator.dart' hide ActivityType;
 
 import '../config/app_variant.dart';
 import '../data/navigation_preferences.dart';
@@ -40,13 +43,146 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   final _redo = <({List<LatLng> points, List<String> labels})>[];
   RoutingResult? _route;
   bool _roads = true, _busy = false, _changed = false;
+  Map<String, dynamic>? _recovery;
+  Future<void> _writes = Future.value();
+  bool get _useGeometryEditor =>
+      widget.source != null &&
+      (widget.source!.workoutDetails.segmentStarts.length > 1 ||
+          (widget.source!.planningPoints.isEmpty &&
+              widget.source!.viaPoints.isEmpty &&
+              widget.source!.routePoints.length > 10) ||
+          widget.source!.routePoints.length < 2);
+  String get _draftKey => UserScope.keyFor(
+    'route_planner_draft_v1${widget.source == null ? "" : "_${widget.source!.localId}"}',
+    _owner,
+  );
+  @override
+  void initState() {
+    super.initState();
+    final source = widget.source;
+    if (source == null) {
+      _busy = true;
+      _loadDraft();
+    } else if (!_useGeometryEditor) {
+      _stops.addAll(
+        source.planningPoints.isNotEmpty
+            ? source.planningPoints
+            : source.viaPoints.isNotEmpty
+            ? [
+                source.routePoints.first,
+                ...source.viaPoints,
+                source.routePoints.last,
+              ]
+            : source.routePoints,
+      );
+      _labels.addAll(
+        source.planningLabels.length == _stops.length
+            ? source.planningLabels
+            : _stops.map(
+                (p) =>
+                    '${p.latitude.toStringAsFixed(4)}, ${p.longitude.toStringAsFixed(4)}',
+              ),
+      );
+      _activity = source.activityType;
+      _roads = (source.durationSeconds ?? 0) > 0;
+      if (_roads) {
+        _route = RoutingResult(
+          points: source.routePoints,
+          steps: source.navigationSteps,
+          distanceKm: (source.distanceMeters ?? 0) / 1000,
+          durationMin: source.durationSeconds! / 60,
+        );
+      }
+      _busy = true;
+      _loadDraft();
+    }
+  }
+
+  Future<void> _loadDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty || !mounted || !_owned || _changed) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final points = (data["points"] as List)
+          .map(
+            (p) => LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+          )
+          .toList();
+      if (points.isEmpty ||
+          points.length > 10 ||
+          points.any((p) => !RoutingService.validPoint(p))) {
+        return;
+      }
+      if ((data["labels"] as List).length != points.length) return;
+      if (!ActivityType.values.any((a) => a.name == data["activity"])) return;
+      _recovery = data;
+      _refresh();
+    } catch (_) {
+      /* Keep unreadable drafts intact. */
+    } finally {
+      _busy = false;
+      _refresh();
+    }
+  }
+
+  Future<void> _persist({bool clear = false}) {
+    final raw = clear
+        ? ""
+        : jsonEncode({
+            "points": [
+              for (final p in _stops) [p.latitude, p.longitude],
+            ],
+            "labels": _labels,
+            "roads": _roads,
+            "activity": _activity.name,
+          });
+    final next = _writes.then((_) async {
+      if (!_owned) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (!_owned) return;
+      if (!await prefs.setString(_draftKey, raw)) {
+        throw StateError("draft write failed");
+      }
+    });
+    _writes = next.catchError((Object _) {
+      _message(
+        "Черновик не удалось сохранить. Сохраните маршрут перед выходом.",
+      );
+    });
+    return _writes;
+  }
+
+  Future<void> _resume() async {
+    final d = _recovery;
+    if (d == null || !_owned) return;
+    _stops.clear();
+    _labels.clear();
+    _stops.addAll(
+      (d["points"] as List).map(
+        (p) => LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+      ),
+    );
+    _labels.addAll((d["labels"] as List).cast<String>());
+    _roads = d["roads"] == true;
+    _activity = ActivityType.values.firstWhere((a) => a.name == d["activity"]);
+    _recovery = null;
+    _changed = true;
+    await _persist();
+    await _calculate();
+  }
+
   String? _error;
   int? _replace;
   ActivityType _activity = ActivityType.cycling;
   MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   bool get _owned => UserScope.currentUserId() == _owner;
   bool get _canSave =>
-      !_busy && _stops.length >= 2 && (!_roads || _route != null);
+      _owned &&
+      !_busy &&
+      _recovery == null &&
+      _stops.length >= 2 &&
+      (!_roads || _route != null);
   @override
   void dispose() {
     _localMap.dispose();
@@ -54,8 +190,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   }
 
   void _message(String text) {
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
   }
 
   void _refresh() {
@@ -68,19 +205,23 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   ({List<LatLng> points, List<String> labels}) _snapshot() =>
       (points: List.of(_stops), labels: List.of(_labels));
   Future<void> _change(VoidCallback edit) async {
-    if (_busy || !_owned) return;
+    if (_busy || !_owned || _recovery != null) return;
     _undo.add(_snapshot());
     if (_undo.length > 30) _undo.removeAt(0);
     _redo.clear();
+    _busy = true;
     edit();
     _changed = true;
     _replace = null;
+    await _persist();
     await _calculate();
   }
 
   Future<void> _calculate() async {
+    if (!_owned || !mounted) return;
     _route = null;
     _error = null;
+    _busy = false;
     if (!_roads || _stops.length < 2) {
       _refresh();
       return;
@@ -107,7 +248,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     }
   }
 
-  Future<void> _point(LatLng point, [String? name]) async {
+  Future<void> _point(
+    LatLng point, [
+    String? name,
+    bool appendEnd = false,
+  ]) async {
     if (_busy) return;
     if (_replace == null && _stops.length >= 10) {
       _message('Можно добавить до 8 остановок между стартом и финишем.');
@@ -121,8 +266,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         _stops[index] = point;
         _labels[index] = label;
       } else {
-        _stops.add(point);
-        _labels.add(label);
+        final index = !appendEnd && _stops.length >= 2
+            ? _stops.length - 1
+            : _stops.length;
+        _stops.insert(index, point);
+        _labels.insert(index, label);
       }
     });
   }
@@ -131,6 +279,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     if (_busy || !_owned) return;
     final from = redo ? _redo : _undo, to = redo ? _undo : _redo;
     if (from.isEmpty) return;
+    _busy = true;
     to.add(_snapshot());
     final next = from.removeLast();
     _stops
@@ -141,6 +290,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
       ..addAll(next.labels);
     _replace = null;
     _changed = true;
+    await _persist();
     await _calculate();
   }
 
@@ -150,17 +300,16 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     _refresh();
     try {
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied)
+      if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+      }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
         _message('Разрешите геопозицию или выберите точку на карте.');
         return;
       }
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          timeLimit: Duration(seconds: 15),
-        ),
+        timeLimit: const Duration(seconds: 15),
       );
       if (!mounted || !_owned) return;
       _busy = false;
@@ -206,8 +355,10 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   );
   Future<void> _save() async {
     if (!_canSave || !_owned) return;
-    final name = TextEditingController(text: 'Мой маршрут');
-    final notes = TextEditingController();
+    var name = widget.source == null
+        ? 'Мой маршрут'
+        : '${widget.source!.title} — копия';
+    var notes = widget.source?.routeNotes ?? '';
     final form = GlobalKey<FormState>();
     final details = await showModalBottomSheet<({String title, String notes})>(
       context: context,
@@ -233,14 +384,16 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: name,
+                  initialValue: name,
+                  onChanged: (v) => name = v,
                   maxLength: 120,
                   decoration: const InputDecoration(labelText: 'Название'),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Введите название' : null,
                 ),
                 TextFormField(
-                  controller: notes,
+                  initialValue: notes,
+                  onChanged: (v) => notes = v,
                   maxLength: 2000,
                   maxLines: 3,
                   decoration: const InputDecoration(
@@ -249,11 +402,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                 ),
                 FilledButton(
                   onPressed: () {
-                    if (form.currentState!.validate())
-                      Navigator.pop(sheet, (
-                        title: name.text.trim(),
-                        notes: notes.text,
-                      ));
+                    if (form.currentState!.validate()) {
+                      Navigator.pop(sheet, (title: name.trim(), notes: notes));
+                    }
                   },
                   child: const Text('Сохранить'),
                 ),
@@ -263,7 +414,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         ),
       ),
     );
-    // Controllers belong to the sheet until its closing animation completes.
+
     if (!mounted || !_owned || details == null) return;
     _busy = true;
     _refresh();
@@ -273,11 +424,19 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
           title: details.title,
           notes: details.notes,
           activity: _activity,
+          waypointLabels: _labels,
+          collection: widget.source?.collection ?? '',
         ),
       );
       if (mounted && _owned) {
-        _changed = false;
-        Navigator.of(context).pop(true);
+        _busy = false;
+        setState(() => _changed = false);
+        await _persist(clear: true);
+        if (mounted) {
+          final ownRoute = ModalRoute.of(context);
+          Navigator.of(context).popUntil((r) => r == ownRoute);
+          Navigator.of(context).pop(true);
+        }
       }
     } catch (_) {
       _message(
@@ -299,7 +458,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Выйти из конструктора?'),
-        content: const Text('Маршрут ещё не сохранён.'),
+        content: const Text(
+          'Черновик останется на устройстве. Его можно продолжить при следующем открытии.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -307,7 +468,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Выйти без сохранения'),
+            child: const Text('Выйти с черновиком'),
           ),
         ],
       ),
@@ -323,18 +484,50 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
       : i == _stops.length - 1
       ? 'Финиш'
       : 'Остановка $i';
+  Widget _saveButton(BuildContext context) => FilledButton.icon(
+    onPressed: _canSave ? _save : null,
+    icon: const Icon(Icons.bookmark_add_outlined),
+    label: const Text('Сохранить маршрут'),
+  );
   Widget _panel(BuildContext context) {
+    if (!_owned) {
+      return const Text('Аккаунт изменился. Откройте конструктор заново.');
+    }
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (_recovery != null)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Есть незавершённый маршрут'),
+                  FilledButton(
+                    onPressed: _resume,
+                    child: const Text('Продолжить черновик'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await _persist(clear: true);
+                      _recovery = null;
+                      _refresh();
+                    },
+                    child: const Text('Начать новый маршрут'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         Row(
           children: [
             Expanded(
               child: Text(
                 _stops.isEmpty
-                    ? 'Куда отправимся?'
+                    ? 'Маршрут'
                     : '${(_geometry.meters / 1000).toStringAsFixed(1)} км',
                 style: theme.textTheme.titleLarge,
               ),
@@ -403,10 +596,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             itemCount: _stops.length,
-            onReorder: (oldIndex, newIndex) {
+            onReorderItem: (oldIndex, newIndex) {
               if (_busy) return;
               _change(() {
-                if (newIndex > oldIndex) newIndex--;
                 final point = _stops.removeAt(oldIndex),
                     label = _labels.removeAt(oldIndex);
                 _stops.insert(newIndex, point);
@@ -466,7 +658,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
           ),
         if (_stops.length >= 2)
           Text(
-            'Следующее нажатие добавит новую точку в конец пути. Для остановки по пути измените порядок в списке.',
+            'Нажмите на карту, чтобы добавить остановку перед финишем. Нажмите на точку для переноса, удерживайте ≡ для изменения порядка.',
             style: theme.textTheme.bodySmall,
           ),
         const SizedBox(height: 12),
@@ -482,6 +674,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   : (_) {
                       _roads = true;
                       _changed = true;
+                      _persist();
                       _calculate();
                     },
             ),
@@ -493,6 +686,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   : (_) {
                       _roads = false;
                       _changed = true;
+                      _persist();
                       _calculate();
                     },
             ),
@@ -519,7 +713,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                 avatar: const Icon(Icons.loop),
                 onPressed: _busy
                     ? null
-                    : () => _point(_stops.first, _labels.first),
+                    : () => _point(_stops.first, _labels.first, true),
               ),
           ],
         ),
@@ -538,6 +732,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   if (a != null) {
                     _activity = a;
                     _changed = true;
+                    _persist();
                     _calculate();
                   }
                 },
@@ -557,11 +752,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             label: const Text('Повторить построение'),
           ),
         const SizedBox(height: 16),
-        FilledButton.icon(
-          onPressed: _canSave ? _save : null,
-          icon: const Icon(Icons.bookmark_add_outlined),
-          label: const Text('Сохранить маршрут'),
-        ),
+        if (!PrimaryMapNavigation.instance.active) _saveButton(context),
       ],
     );
   }
@@ -569,17 +760,27 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     // Preserve precise editing of imported/recorded tracks and all legacy tools.
-    if (widget.source != null)
+    if (_useGeometryEditor) {
       return RouteGeometryEditorScreen(
         source: widget.source,
         initialCenter: widget.initialCenter,
         routingService: widget.routingService,
       );
+    }
     final colors = Theme.of(context).colorScheme;
     final map = FlutterMap(
       mapController: _map,
       options: MapOptions(
-        initialCenter: widget.initialCenter ?? const LatLng(55.75, 37.61),
+        initialCenter: _stops.isEmpty
+            ? widget.initialCenter ?? const LatLng(55.75, 37.61)
+            : _stops.first,
+        initialCameraFit: _stops.length < 2
+            ? null
+            : CameraFit.bounds(
+                bounds: LatLngBounds.fromPoints(_stops),
+                padding: const EdgeInsets.all(80),
+                maxZoom: 16,
+              ),
         initialZoom: 13,
         onTap: (_, p) => _point(p),
       ),
@@ -652,7 +853,31 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         if (!didPop) _leave();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Новый маршрут')),
+        appBar: AppBar(
+          title: const Text('Новый маршрут'),
+          actions: [
+            IconButton(
+              tooltip: 'Нарисовать маршрут',
+              icon: const Icon(Icons.gesture),
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final saved = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RouteGeometryEditorScreen(
+                            initialCenter: widget.initialCenter,
+                            routingService: widget.routingService,
+                          ),
+                        ),
+                      );
+                      if (mounted && saved == true) {
+                        _message('Нарисованный маршрут сохранён в библиотеке');
+                      }
+                    },
+            ),
+          ],
+        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -662,7 +887,8 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   map: map,
                   title: 'Новый маршрут',
                   controls: _panel,
-                  autoOpen: false,
+                  autoOpen: true,
+                  footer: _saveButton,
                   keepCamera: true,
                 ),
               ),
@@ -677,206 +903,8 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
           ),
         ),
       ),
-      children: [
-        if ((!NavigationPreferences.instance.cachedMapOnly ||
-                OfflineMapsService.isAvailable) &&
-            !AppVariant.modernInterface)
-          TileLayer(
-            urlTemplate: OfflineMapsService.routeTileUrl,
-            tileProvider: OfflineMapsService.tileProvider(
-              offlineOnly: NavigationPreferences.instance.cachedMapOnly,
-            ),
-            userAgentPackageName: 'com.pulsepath.app',
-          ),
-        PolylineLayer(
-          polylines: [
-            for (final segment in WorkoutDetails.splitTrack(
-              points,
-              _draft.starts,
-            ))
-              Polyline(
-                points: segment,
-                color: _roadPreview != null ? scheme.outline : scheme.primary,
-                strokeWidth: 5,
-              ),
-            if (_rawStroke != null && _smooth)
-              Polyline(
-                points: _rawStroke!,
-                color: scheme.outline.withValues(alpha: .65),
-                strokeWidth: 2,
-              ),
-            if (stroke != null)
-              Polyline(
-                points: [
-                  if (_connectStroke && points.isNotEmpty) points.last,
-                  ...stroke,
-                ],
-                color: Colors.teal,
-                strokeWidth: 5,
-              ),
-            if (_roadPreview != null)
-              Polyline(
-                points: _roadPreview!.points,
-                color: Colors.teal,
-                strokeWidth: 6,
-              ),
-          ],
-        ),
-        MarkerLayer(
-          markers: [
-            for (final index in {
-              if (points.isNotEmpty) 0,
-              if (points.length > 1) points.length - 1,
-              if (_selected >= 0 && _selected < points.length) _selected,
-            })
-              Marker(
-                point: points[index],
-                width: 38,
-                height: 38,
-                child: Tooltip(
-                  message: 'Точка ${index + 1}',
-                  child: Icon(
-                    index == 0 ? Icons.trip_origin : Icons.location_on,
-                    color: index == _selected
-                        ? scheme.secondary
-                        : scheme.primary,
-                    size: 32,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        if (AppVariant.routeDrawing &&
-            _action == _PointAction.draw &&
-            !_busy &&
-            _rawStroke == null &&
-            _roadPreview == null)
-          RouteDrawingLayer(
-            onStroke: _receiveStroke,
-            onLimit: () => _message(
-              'Рисунок слишком длинный. Нарисуйте маршрут несколькими частями.',
-            ),
-          ),
-        const RichAttributionWidget(
-          attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
-        ),
-      ],
     );
   }
-
-  Widget _details() => SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Сохраните свой маршрут',
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Название, вид активности и заметка — всё в одном месте.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _name,
-          enabled: !_busy,
-          maxLength: 120,
-          onChanged: (_) => setState(() => _changed = true),
-          decoration: const InputDecoration(
-            labelText: 'Название маршрута',
-            prefixIcon: Icon(Icons.edit_road_outlined),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<ActivityType>(
-          isExpanded: true,
-          initialValue: _activity,
-          decoration: const InputDecoration(
-            labelText: 'Вид активности',
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            for (final activity in ActivityType.values)
-              DropdownMenuItem(value: activity, child: Text(activity.label)),
-          ],
-          onChanged: _busy
-              ? null
-              : (value) => setState(() {
-                  _activity = value!;
-                  _draft = RouteEditState(_draft.points, starts: _draft.starts);
-                  _roadPreview = null;
-                  _changed = true;
-                }),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _notes,
-          enabled: !_busy,
-          maxLength: 2000,
-          minLines: 1,
-          maxLines: 3,
-          onChanged: (_) => setState(() => _changed = true),
-          decoration: const InputDecoration(
-            labelText: 'Заметка (необязательно)',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          onPressed:
-              _busy ||
-                  _draft.points.length < 2 ||
-                  _rawStroke != null ||
-                  _roadPreview != null
-              ? null
-              : _save,
-          icon: const Icon(Icons.bookmark_add_outlined),
-          label: Text(_busy ? 'Сохранение…' : 'Сохранить отдельный маршрут'),
-        ),
-        if (_rawStroke != null || _roadPreview != null)
-          const Text('Сначала подтвердите или отмените предпросмотр на карте.'),
-        const SizedBox(height: 8),
-        Text(
-          _draft.estimatedSeconds == null
-              ? 'Свободный трек: проходимость не проверена, время не рассчитано.'
-              : 'По дорогам · около ${_draft.estimatedSeconds! ~/ 60} мин. Учитывайте реальные ограничения на месте.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy && !_changed,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && !_busy) _leave();
-    },
-    child: Scaffold(
-      appBar: AppBar(title: const Text('Мой маршрут')),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              flex: 4,
-              child: MainMapGateway(
-                controls: (_) => _mapTools(),
-                keepCamera: widget.source == null && _draft.points.isEmpty,
-                title: 'Рисуйте свой маршрут',
-                autoOpen: true,
-                map: _editorMap(context),
-              ),
-            ),
-            Expanded(flex: 3, child: _details()),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _PlaceSearch extends SearchDelegate<Map<String, dynamic>?> {
@@ -912,9 +940,10 @@ class _PlaceSearch extends SearchDelegate<Map<String, dynamic>?> {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _results,
       builder: (ctx, state) {
-        if (state.connectionState != ConnectionState.done)
+        if (state.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
-        if (state.hasError)
+        }
+        if (state.hasError) {
           return Center(
             child: TextButton(
               onPressed: () {
@@ -924,11 +953,13 @@ class _PlaceSearch extends SearchDelegate<Map<String, dynamic>?> {
               child: const Text('Поиск недоступен. Повторить'),
             ),
           );
+        }
         final rows = state.data ?? [];
-        if (rows.isEmpty)
+        if (rows.isEmpty) {
           return const Center(
             child: Text('Места не найдены. Уточните запрос.'),
           );
+        }
         return ListView.builder(
           itemCount: rows.length,
           itemBuilder: (ctx, i) => ListTile(

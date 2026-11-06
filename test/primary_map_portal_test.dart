@@ -5,7 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:pulsepath/widgets/primary_map_portal.dart';
 import 'package:pulsepath/screens/group_meeting_editor.dart';
 import 'package:pulsepath/models/group_coordination.dart';
-import 'package:pulsepath/screens/route_builder_screen.dart';
+import 'package:pulsepath/screens/route_geometry_editor_screen.dart';
 import 'package:pulsepath/data/saved_routes_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -355,7 +355,7 @@ void main() {
                         saved = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const RouteBuilderScreen(
+                            builder: (_) => const RouteGeometryEditorScreen(
                               initialCenter: LatLng(0, 0),
                             ),
                           ),

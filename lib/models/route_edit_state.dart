@@ -179,6 +179,7 @@ class RouteEditState {
     required ActivityType activity,
     String notes = '',
     String collection = '',
+    List<String> waypointLabels = const [],
   }) {
     final clean = title.trim();
     if (clean.isEmpty ||
@@ -208,6 +209,8 @@ class RouteEditState {
       collection: collection,
       workoutDetails: WorkoutDetails(segmentStarts: starts),
       navigationSteps: steps,
+      planningPoints: controls,
+      planningLabels: waypointLabels,
       viaPoints: controls.length > 2
           ? controls.sublist(1, controls.length - 1)
           : const [],

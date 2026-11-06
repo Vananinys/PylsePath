@@ -42,8 +42,9 @@ class PrimaryMapNavigation extends ChangeNotifier {
 
   bool longPress(TapPosition position, LatLng point) {
     if (_task == null) return false;
-    if (_task!.owner == UserScope.currentUserId())
+    if (_task!.owner == UserScope.currentUserId()) {
       _task!.config().options.onLongPress?.call(position, point);
+    }
     return true;
   }
 
@@ -59,6 +60,7 @@ class PrimaryMapNavigation extends ChangeNotifier {
     required String title,
     required FlutterMap Function() config,
     WidgetBuilder? controls,
+    WidgetBuilder? footer,
     bool keepCamera = false,
   }) async {
     final host = _host;
@@ -72,7 +74,13 @@ class PrimaryMapNavigation extends ChangeNotifier {
       );
       return;
     }
-    final task = _MapTask(title, config, controls, UserScope.currentUserId());
+    final task = _MapTask(
+      title,
+      config,
+      controls,
+      footer,
+      UserScope.currentUserId(),
+    );
     task.keepCamera = keepCamera;
     FocusManager.instance.primaryFocus?.unfocus();
     task.previous = _task;
@@ -112,11 +120,12 @@ class PrimaryMapNavigation extends ChangeNotifier {
 }
 
 class _MapTask {
-  _MapTask(this.title, this.config, this.controls, this.owner);
+  _MapTask(this.title, this.config, this.controls, this.footer, this.owner);
   final String title;
   final String? owner;
   final FlutterMap Function() config;
   final WidgetBuilder? controls;
+  final WidgetBuilder? footer;
   _MapTask? previous;
   MapCamera? previousCamera;
   bool keepCamera = false;
@@ -188,6 +197,7 @@ class _PrimaryMapTask extends StatefulWidget {
 class _PrimaryMapTaskState extends State<_PrimaryMapTask> {
   final _navigation = PrimaryMapNavigation.instance;
   double _headerHeight = 96;
+  bool _panelExpanded = false;
   @override
   void initState() {
     super.initState();
@@ -281,7 +291,13 @@ class _PrimaryMapTaskState extends State<_PrimaryMapTask> {
                           ),
                           Row(
                             children: [
-                              const Expanded(child: Text('Основная карта')),
+                              Expanded(
+                                child: Text(
+                                  task.footer == null
+                                      ? 'Основная карта'
+                                      : 'Выберите точки',
+                                ),
+                              ),
                               TextButton(
                                 onPressed: _close,
                                 child: const Text('Готово'),
@@ -361,17 +377,54 @@ class _PrimaryMapTaskState extends State<_PrimaryMapTask> {
                     ),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.sizeOf(context).height * .42,
+                        maxHeight:
+                            MediaQuery.sizeOf(context).height *
+                            (task.footer != null && _panelExpanded ? .72 : .42),
                       ),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child:
-                            task.controls?.call(context) ??
-                            Text(
-                              task.config().options.onTap == null
-                                  ? 'Перемещайте и масштабируйте карту. Нажмите «Готово», чтобы вернуться.'
-                                  : 'Нажмите на карте, чтобы выбрать точку. Затем нажмите «Готово» и продолжите настройку.',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (task.footer != null)
+                            SizedBox(
+                              height: 36,
+                              child: Center(
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  tooltip: _panelExpanded
+                                      ? 'Свернуть панель'
+                                      : 'Развернуть панель',
+                                  onPressed: () => setState(
+                                    () => _panelExpanded = !_panelExpanded,
+                                  ),
+                                  icon: Icon(
+                                    _panelExpanded
+                                        ? Icons.keyboard_arrow_down
+                                        : Icons.keyboard_arrow_up,
+                                  ),
+                                ),
+                              ),
                             ),
+                          Flexible(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(16),
+                              child:
+                                  task.controls?.call(context) ??
+                                  Text(
+                                    task.config().options.onTap == null
+                                        ? 'Перемещайте и масштабируйте карту. Нажмите «Готово», чтобы вернуться.'
+                                        : 'Нажмите на карте, чтобы выбрать точку. Затем нажмите «Готово» и продолжите настройку.',
+                                  ),
+                            ),
+                          ),
+                          if (task.footer != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: task.footer!(context),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -393,6 +446,7 @@ class MainMapGateway extends StatefulWidget {
     required this.title,
     this.autoOpen = false,
     this.controls,
+    this.footer,
     this.keepCamera = false,
     this.onClosed,
   });
@@ -400,6 +454,7 @@ class MainMapGateway extends StatefulWidget {
   final String title;
   final bool autoOpen;
   final WidgetBuilder? controls;
+  final WidgetBuilder? footer;
   final bool keepCamera;
   final VoidCallback? onClosed;
   @override
@@ -433,6 +488,7 @@ class _MainMapGatewayState extends State<MainMapGateway> {
         title: widget.title,
         config: () => widget.map,
         controls: widget.controls,
+        footer: widget.footer,
         keepCamera: widget.keepCamera,
       );
     } finally {

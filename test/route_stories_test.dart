@@ -17,7 +17,7 @@ import 'package:pulsepath/models/shared_route.dart';
 import 'package:pulsepath/models/activity_type.dart';
 import 'package:pulsepath/data/ride_media_repository.dart';
 import 'package:pulsepath/data/navigation_preferences.dart';
-import 'package:pulsepath/screens/route_builder_screen.dart';
+import 'package:pulsepath/screens/route_geometry_editor_screen.dart';
 import 'package:pulsepath/screens/ride_media_screen.dart';
 import 'package:pulsepath/utils/ride_media_export.dart';
 
@@ -328,13 +328,12 @@ void main() {
                 .copyWith(textScaler: const TextScaler.linear(1.6)),
             child: child!,
           ),
-          home: const MainMapTestHost(child: RouteBuilderScreen()),
+          home: const MainMapTestHost(child: RouteGeometryEditorScreen()),
         ),
       );
       await tester.pumpAndSettle();
       await tester.tapAt(
-        tester.getRect(find.byType(FlutterMap)).topLeft +
-            const Offset(80, 220),
+        tester.getRect(find.byType(FlutterMap)).topLeft + const Offset(80, 220),
       );
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
