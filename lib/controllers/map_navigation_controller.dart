@@ -370,11 +370,13 @@ class MapNavigationController extends ChangeNotifier {
     RoutingService? routingService,
     WorkoutStepTracker? stepTracker,
     GroupRideService? groupRideService,
+    @visibleForTesting String? Function()? ownerResolver,
   }) : _gpsNow = gpsNow ?? DateTime.now,
        _activeClock = activeClock ?? Stopwatch(),
        _stepTracker = stepTracker ?? WorkoutStepTracker(),
        _routingService = routingService ?? RoutingService(),
-       _groupRideService = groupRideService ?? GroupRideService() {
+       _groupRideService = groupRideService ?? GroupRideService(),
+       _ownerResolver = ownerResolver ?? UserScope.currentUserId {
     gpsSignal.addListener(_onTelemetryQualityChanged);
     _stepTracker.addListener(_onWorkoutStepsChanged);
   }
@@ -669,8 +671,37 @@ class MapNavigationController extends ChangeNotifier {
   List<LatLng> _routePoints = [];
   Set<int> _routeSegmentStarts = {};
   List<int> get routeSegmentStarts => _routeSegmentStarts.toList()..sort();
-  List<List<LatLng>> get routeSegments =>
-      WorkoutDetails.splitTrack(_routePoints, routeSegmentStarts);
+
+  // Кэш сегментов построенного маршрута: splitTrack пересчитывает разбиение
+  // заново на каждый вызов, а отклонение от маршрута считается по сегментам
+  // на каждой GPS-точке навигации. Инвалидация — по идентичности списков
+  // (все присваивания создают новый список) и по длине (на месте список
+  // меняет только clearRoute через clear()). Вложенные списки неизменяемы,
+  // чтобы потребители не портили кэш и не меняли геометрию маршрута.
+  List<LatLng>? _cachedSegmentsPoints;
+  Set<int>? _cachedSegmentsStarts;
+  List<List<LatLng>>? _cachedSegments;
+  List<List<LatLng>> get routeSegments {
+    final cached = _cachedSegments;
+    if (cached != null &&
+        identical(_cachedSegmentsPoints, _routePoints) &&
+        identical(_cachedSegmentsStarts, _routeSegmentStarts) &&
+        _cachedSegmentsPoints!.length == _routePoints.length) {
+      return cached;
+    }
+    final segments = WorkoutDetails.splitTrack(
+      _routePoints,
+      routeSegmentStarts,
+    );
+    final immutable = List<List<LatLng>>.unmodifiable(
+      segments.map(List<LatLng>.unmodifiable),
+    );
+    _cachedSegmentsPoints = _routePoints;
+    _cachedSegmentsStarts = _routeSegmentStarts;
+    _cachedSegments = immutable;
+    return immutable;
+  }
+
   List<LatLng> get routeWaypoints => List.unmodifiable(_routeVia);
   bool get canEditWaypoints =>
       _finishPoint != null &&
@@ -817,10 +848,11 @@ class MapNavigationController extends ChangeNotifier {
   LatLng? _lastMotionPoint;
   DateTime? _lastMotionTime;
   bool _breakTrackSegment = false;
-  final String? _ownerId = UserScope.currentUserId();
+  final String? Function() _ownerResolver;
+  late final String? _ownerId = _ownerResolver();
   late final WorkoutDraftStore _draftStore = WorkoutDraftStore(_ownerId);
   bool get _hasSession => _isWorkoutActive || _isWorkoutPaused;
-  bool get _hasCurrentOwner => UserScope.currentUserId() == _ownerId;
+  bool get _hasCurrentOwner => _ownerResolver() == _ownerId;
   double get currentGpsHeading => _currentHeading;
   @override
   void notifyListeners() {
@@ -920,8 +952,22 @@ class MapNavigationController extends ChangeNotifier {
   final List<WorkoutLap> _workoutLaps = [];
   final List<int> _trackSegmentStarts = [];
   bool _isDiscardingWorkout = false;
-  List<List<LatLng>> get recordedSegments =>
-      WorkoutDetails.splitTrack(_recordedPath, _trackSegmentStarts);
+  List<List<LatLng>>? _recordedSegmentsCache;
+  int _recordedSegmentsPointCount = -1;
+  int _recordedSegmentsStartCount = -1;
+  List<List<LatLng>> get recordedSegments {
+    if (_recordedSegmentsCache == null ||
+        _recordedSegmentsPointCount != _recordedPath.length ||
+        _recordedSegmentsStartCount != _trackSegmentStarts.length) {
+      _recordedSegmentsCache = List<List<LatLng>>.unmodifiable(
+        WorkoutDetails.splitTrack(_recordedPath, _trackSegmentStarts)
+            .map(List<LatLng>.unmodifiable),
+      );
+      _recordedSegmentsPointCount = _recordedPath.length;
+      _recordedSegmentsStartCount = _trackSegmentStarts.length;
+    }
+    return _recordedSegmentsCache!;
+  }
   final List<WorkoutSample> _workoutSamples = [];
   double _maxWorkoutSpeed = 0;
   int _lastLapSeconds = 0;
@@ -1610,10 +1656,21 @@ class MapNavigationController extends ChangeNotifier {
 
   /// An interrupted ride is always resumed paused, so no distance is inferred
   /// across the period when the app was closed.
+  ///
+  /// Повреждённый черновик не бросает FormatException наружу: восстановить
+  /// его нельзя, а при первой записи новой поездки хранилище уведет его
+  /// байты в резервную копию. Ошибка чтения истории наружу не глотается:
+  /// пока неизвестно, сохранена ли старая поездка, старт блокируется.
   Future<WorkoutDraft?> loadInterruptedWorkout() async {
     if (laboratoryActive) return null;
     if (_ownerId == null || !_hasCurrentOwner || _hasSession) return null;
-    final draft = await _draftStore.load();
+    WorkoutDraft? loaded;
+    try {
+      loaded = await _draftStore.load();
+    } on FormatException {
+      return null;
+    }
+    final draft = loaded;
     if (draft == null) return null;
     final history = await _workoutHistoryRepository.getWorkoutHistory();
     if (history.any((ride) => ride.localId == draft.localId)) {
@@ -1632,6 +1689,7 @@ class MapNavigationController extends ChangeNotifier {
       return;
     }
     _workoutGroupRoomId = draft.groupRoomId;
+    _recordedSegmentsCache = null;
     _trackSegmentStarts
       ..clear()
       ..addAll(draft.details.segmentStarts);
@@ -1764,19 +1822,35 @@ class MapNavigationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Защита от параллельных стартов через await-окно проверки черновика.
+  bool _startGuardBusy = false;
+
   /// Check durable recovery data before the UI starts a new recording.
+  ///
+  /// Проверка черновика содержит await — два одновременных старта могли бы
+  /// пройти её вместе, пока хранилище ещё не изменено. [_startGuardBusy]
+  /// выставляется синхронно до первого await: второй параллельный вызов
+  /// отклоняется сразу, а не после собственной проверки.
   Future<bool> startWorkoutSafely({String? groupRoomId}) async {
     if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
       return false;
     }
-    if (await loadInterruptedWorkout() != null) {
-      throw StateError('Сначала восстановите или сохраните прерванную поездку');
+    if (_startGuardBusy) {
+      throw StateError('Старт поездки уже выполняется');
     }
-    if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
-      return false;
+    _startGuardBusy = true;
+    try {
+      if (await loadInterruptedWorkout() != null) {
+        throw StateError('Сначала восстановите или сохраните прерванную поездку');
+      }
+      if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
+        return false;
+      }
+      startWorkout(groupRoomId: groupRoomId);
+      return _hasSession;
+    } finally {
+      _startGuardBusy = false;
     }
-    startWorkout(groupRoomId: groupRoomId);
-    return _hasSession;
   }
 
   void startWorkout({String? groupRoomId}) {
@@ -1819,6 +1893,7 @@ class MapNavigationController extends ChangeNotifier {
     _speedWindowDistances.clear();
     _lastSpeedSampleAt = null;
     _lastAcceptedPointAt = null;
+    _recordedSegmentsCache = null;
     _recordedPath.clear();
     _totalDistanceMeters = 0.0;
     _workoutSpeedKmh = 0.0;
@@ -2226,6 +2301,7 @@ class MapNavigationController extends ChangeNotifier {
       ..reset();
     _stopWorkoutTimer();
     _startLivePublishTimer();
+    _recordedSegmentsCache = null;
     _recordedPath.clear();
     _totalDistanceMeters = 0;
     _workoutSpeedKmh = 0;

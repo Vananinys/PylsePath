@@ -6,6 +6,10 @@ abstract final class AppVariant {
   /// Promoted in stable 1.13.0. This selects features, never app identity.
   /// Future experiments need their own flag and are promoted individually.
   static const modernInterface = true;
+  static const routeDrawing = bool.fromEnvironment(
+    'ROUTE_DRAWING_ENABLED',
+    defaultValue: true,
+  );
   static const name = uiBeta ? 'PulsePath UI Beta' : 'PulsePath';
   static const updateTopic = uiBeta
       ? 'pulsepath_ui_beta_updates'

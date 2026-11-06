@@ -144,7 +144,13 @@ class _CommunityFeedState extends State<CommunityFeed>
     final scope = _scope;
     final cache = UiSnapshotCache(_cacheName, owner);
     if (_isLoading) {
-      final rows = await cache.read();
+      var rows = await cache.read();
+      // Before feed filters existed, the public feed used one legacy key.
+      // Never reuse it for a filtered feed or a different account.
+      if (rows == null && scope == CommunityFeedScope.everyone &&
+          _type == CommunityPostType.all && _topics.isEmpty) {
+        rows = await UiSnapshotCache('community_feed', owner).read();
+      }
       if (!current()) return;
       if (rows != null) {
         try {

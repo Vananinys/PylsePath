@@ -4,6 +4,7 @@ import 'activity_type.dart';
 import 'saved_route.dart';
 import 'workout_details.dart';
 import 'route_step.dart';
+import '../utils/geo_utils.dart';
 
 /// Geometry for a planned copy. Recorded ride metrics are never carried over.
 class RouteEditState {
@@ -39,7 +40,8 @@ class RouteEditState {
   final List<RouteStep> steps;
   final List<LatLng> controls;
   int get segmentCount => starts.length;
-  double get meters {
+  late final double meters = _measureMeters();
+  double _measureMeters() {
     const measure = Distance();
     final gaps = starts.toSet();
     var sum = 0.0;
@@ -62,6 +64,17 @@ class RouteEditState {
 
   RouteEditState move(int index, LatLng point) =>
       RouteEditState(List.of(points)..[index] = point, starts: starts);
+
+  RouteEditState appendStroke(List<LatLng> stroke, {required bool connect}) {
+    if (stroke.length < 2) {
+      throw const FormatException('Нарисуйте линию длиннее');
+    }
+    return RouteEditState(
+      [...points, ...stroke],
+      starts: [...starts, if (points.isNotEmpty && !connect) points.length],
+    );
+  }
+
   RouteEditState remove(int index) {
     RangeError.checkValidIndex(index, points);
     return RouteEditState(
@@ -126,10 +139,39 @@ class RouteEditState {
       throw const FormatException('Сначала выберите один непрерывный участок');
     }
     if (points.length <= 10) return this;
-    return RouteEditState([
-      for (var i = 0; i < 10; i++)
-        points[(i * (points.length - 1) / 9).round()],
-    ]);
+    // Keep the most significant bends instead of uniformly dropping corners.
+    final indices = <int>[0, points.length - 1];
+    while (indices.length < 10) {
+      indices.sort();
+      var best = -1, bestSpan = -1;
+      var error = -1.0;
+      var balance = double.infinity;
+      for (var span = 1; span < indices.length; span++) {
+        final first = indices[span - 1], last = indices[span];
+        for (var i = first + 1; i < last; i++) {
+          final distance = GeoUtils.distanceToSegment(
+            points[i],
+            points[first],
+            points[last],
+          );
+          final candidateBalance = (i - (first + last) / 2).abs();
+          if (distance > error + .000001 ||
+              ((distance - error).abs() <= .000001 &&
+                  (last - first > bestSpan ||
+                      (last - first == bestSpan &&
+                          candidateBalance < balance)))) {
+            best = i;
+            error = distance;
+            bestSpan = last - first;
+            balance = candidateBalance;
+          }
+        }
+      }
+      if (best < 0) break;
+      indices.add(best);
+    }
+    indices.sort();
+    return RouteEditState([for (final i in indices) points[i]]);
   }
 
   SavedRoute plannedCopy({

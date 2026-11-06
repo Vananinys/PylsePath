@@ -677,8 +677,206 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
           ),
         ),
       ),
+      children: [
+        if ((!NavigationPreferences.instance.cachedMapOnly ||
+                OfflineMapsService.isAvailable) &&
+            !AppVariant.modernInterface)
+          TileLayer(
+            urlTemplate: OfflineMapsService.routeTileUrl,
+            tileProvider: OfflineMapsService.tileProvider(
+              offlineOnly: NavigationPreferences.instance.cachedMapOnly,
+            ),
+            userAgentPackageName: 'com.pulsepath.app',
+          ),
+        PolylineLayer(
+          polylines: [
+            for (final segment in WorkoutDetails.splitTrack(
+              points,
+              _draft.starts,
+            ))
+              Polyline(
+                points: segment,
+                color: _roadPreview != null ? scheme.outline : scheme.primary,
+                strokeWidth: 5,
+              ),
+            if (_rawStroke != null && _smooth)
+              Polyline(
+                points: _rawStroke!,
+                color: scheme.outline.withValues(alpha: .65),
+                strokeWidth: 2,
+              ),
+            if (stroke != null)
+              Polyline(
+                points: [
+                  if (_connectStroke && points.isNotEmpty) points.last,
+                  ...stroke,
+                ],
+                color: Colors.teal,
+                strokeWidth: 5,
+              ),
+            if (_roadPreview != null)
+              Polyline(
+                points: _roadPreview!.points,
+                color: Colors.teal,
+                strokeWidth: 6,
+              ),
+          ],
+        ),
+        MarkerLayer(
+          markers: [
+            for (final index in {
+              if (points.isNotEmpty) 0,
+              if (points.length > 1) points.length - 1,
+              if (_selected >= 0 && _selected < points.length) _selected,
+            })
+              Marker(
+                point: points[index],
+                width: 38,
+                height: 38,
+                child: Tooltip(
+                  message: 'Точка ${index + 1}',
+                  child: Icon(
+                    index == 0 ? Icons.trip_origin : Icons.location_on,
+                    color: index == _selected
+                        ? scheme.secondary
+                        : scheme.primary,
+                    size: 32,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (AppVariant.routeDrawing &&
+            _action == _PointAction.draw &&
+            !_busy &&
+            _rawStroke == null &&
+            _roadPreview == null)
+          RouteDrawingLayer(
+            onStroke: _receiveStroke,
+            onLimit: () => _message(
+              'Рисунок слишком длинный. Нарисуйте маршрут несколькими частями.',
+            ),
+          ),
+        const RichAttributionWidget(
+          attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
+        ),
+      ],
     );
   }
+
+  Widget _details() => SingleChildScrollView(
+    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Сохраните свой маршрут',
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Название, вид активности и заметка — всё в одном месте.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _name,
+          enabled: !_busy,
+          maxLength: 120,
+          onChanged: (_) => setState(() => _changed = true),
+          decoration: const InputDecoration(
+            labelText: 'Название маршрута',
+            prefixIcon: Icon(Icons.edit_road_outlined),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<ActivityType>(
+          isExpanded: true,
+          initialValue: _activity,
+          decoration: const InputDecoration(
+            labelText: 'Вид активности',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final activity in ActivityType.values)
+              DropdownMenuItem(value: activity, child: Text(activity.label)),
+          ],
+          onChanged: _busy
+              ? null
+              : (value) => setState(() {
+                  _activity = value!;
+                  _draft = RouteEditState(_draft.points, starts: _draft.starts);
+                  _roadPreview = null;
+                  _changed = true;
+                }),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _notes,
+          enabled: !_busy,
+          maxLength: 2000,
+          minLines: 1,
+          maxLines: 3,
+          onChanged: (_) => setState(() => _changed = true),
+          decoration: const InputDecoration(
+            labelText: 'Заметка (необязательно)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed:
+              _busy ||
+                  _draft.points.length < 2 ||
+                  _rawStroke != null ||
+                  _roadPreview != null
+              ? null
+              : _save,
+          icon: const Icon(Icons.bookmark_add_outlined),
+          label: Text(_busy ? 'Сохранение…' : 'Сохранить отдельный маршрут'),
+        ),
+        if (_rawStroke != null || _roadPreview != null)
+          const Text('Сначала подтвердите или отмените предпросмотр на карте.'),
+        const SizedBox(height: 8),
+        Text(
+          _draft.estimatedSeconds == null
+              ? 'Свободный трек: проходимость не проверена, время не рассчитано.'
+              : 'По дорогам · около ${_draft.estimatedSeconds! ~/ 60} мин. Учитывайте реальные ограничения на месте.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_busy && !_changed,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && !_busy) _leave();
+    },
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Мой маршрут')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              flex: 4,
+              child: MainMapGateway(
+                controls: (_) => _mapTools(),
+                keepCamera: widget.source == null && _draft.points.isEmpty,
+                title: 'Рисуйте свой маршрут',
+                autoOpen: true,
+                map: _editorMap(context),
+              ),
+            ),
+            Expanded(flex: 3, child: _details()),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _PlaceSearch extends SearchDelegate<Map<String, dynamic>?> {
