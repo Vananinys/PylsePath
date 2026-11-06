@@ -1,20 +1,22 @@
-import '../config/app_variant.dart';
-import '../widgets/primary_map_portal.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
-import '../models/route_edit_state.dart';
-import '../models/saved_route.dart';
-import '../models/activity_type.dart';
-import '../models/workout_details.dart';
+import '../config/app_variant.dart';
 import '../data/navigation_preferences.dart';
 import '../data/saved_routes_repository.dart';
 import '../data/user_scope.dart';
+import '../models/activity_type.dart';
+import '../models/route_edit_state.dart';
+import '../models/saved_route.dart';
+import '../services/geocoding_service.dart';
 import '../services/offline_maps_service.dart';
 import '../services/routing_service.dart';
+import '../widgets/primary_map_portal.dart';
+import 'route_geometry_editor_screen.dart';
 
+/// Plans with user waypoints; road geometry is never used as editable stops.
 class RouteBuilderScreen extends StatefulWidget {
   const RouteBuilderScreen({
     super.key,
@@ -29,225 +31,283 @@ class RouteBuilderScreen extends StatefulWidget {
   State<RouteBuilderScreen> createState() => _RouteBuilderScreenState();
 }
 
-enum _PointAction { add, select, move }
-
 class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
-  late RouteEditState _draft = RouteEditState(
-    widget.source?.routePoints ?? [],
-    starts: widget.source?.workoutDetails.segmentStarts ?? const [0],
-    steps: widget.source?.navigationSteps ?? const [],
-  );
-  final _undo = <RouteEditState>[], _redo = <RouteEditState>[];
   final _localMap = MapController();
-  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
   final _owner = UserScope.currentUserId();
-  late final _repository = SavedRoutesRepository();
-  late final _name = TextEditingController(
-    text: widget.source == null
-        ? 'Мой маршрут'
-        : '${widget.source!.title} — копия',
-  );
-  late final _notes = TextEditingController(
-    text: widget.source?.routeNotes ?? '',
-  );
-  late ActivityType _activity =
-      widget.source?.activityType ?? ActivityType.cycling;
-  _PointAction _action = _PointAction.add;
-  int _selected = -1;
-  bool _busy = false, _changed = false;
-
+  final _stops = <LatLng>[];
+  final _labels = <String>[];
+  final _undo = <({List<LatLng> points, List<String> labels})>[];
+  final _redo = <({List<LatLng> points, List<String> labels})>[];
+  RoutingResult? _route;
+  bool _roads = true, _busy = false, _changed = false;
+  String? _error;
+  int? _replace;
+  ActivityType _activity = ActivityType.cycling;
+  MapController get _map => PrimaryMapNavigation.instance.resolve(_localMap);
+  bool get _owned => UserScope.currentUserId() == _owner;
+  bool get _canSave =>
+      !_busy && _stops.length >= 2 && (!_roads || _route != null);
   @override
   void dispose() {
     _localMap.dispose();
-    _name.dispose();
-    _notes.dispose();
     super.dispose();
   }
 
-  void _message(String text) =>
+  void _message(String text) {
+    if (mounted)
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  void _apply(RouteEditState next) {
-    _undo.add(_draft);
+  }
+
+  void _refresh() {
+    if (mounted) {
+      setState(() {});
+      PrimaryMapNavigation.instance.refresh();
+    }
+  }
+
+  ({List<LatLng> points, List<String> labels}) _snapshot() =>
+      (points: List.of(_stops), labels: List.of(_labels));
+  Future<void> _change(VoidCallback edit) async {
+    if (_busy || !_owned) return;
+    _undo.add(_snapshot());
     if (_undo.length > 30) _undo.removeAt(0);
-    setState(() {
-      _draft = next;
-      _redo.clear();
-      _changed = true;
-      _selected = next.points.isEmpty
-          ? -1
-          : _selected.clamp(0, next.points.length - 1);
+    _redo.clear();
+    edit();
+    _changed = true;
+    _replace = null;
+    await _calculate();
+  }
+
+  Future<void> _calculate() async {
+    _route = null;
+    _error = null;
+    if (!_roads || _stops.length < 2) {
+      _refresh();
+      return;
+    }
+    _busy = true;
+    _refresh();
+    try {
+      final result = await (widget.routingService ?? RoutingService())
+          .buildRoute(
+            start: _stops.first,
+            end: _stops.last,
+            via: _stops.sublist(1, _stops.length - 1),
+            activity: _activity,
+          );
+      if (!mounted || !_owned) return;
+      _route = result;
+    } catch (e) {
+      _error = e is RoutingException
+          ? e.message
+          : 'Не удалось построить путь. Проверьте интернет и повторите.';
+    } finally {
+      _busy = false;
+      _refresh();
+    }
+  }
+
+  Future<void> _point(LatLng point, [String? name]) async {
+    if (_busy) return;
+    if (_replace == null && _stops.length >= 10) {
+      _message('Можно добавить до 8 остановок между стартом и финишем.');
+      return;
+    }
+    await _change(() {
+      final label =
+          name ??
+          '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
+      if (_replace case final int index) {
+        _stops[index] = point;
+        _labels[index] = label;
+      } else {
+        _stops.add(point);
+        _labels.add(label);
+      }
     });
   }
 
-  void _edit(RouteEditState Function() action) {
-    try {
-      _apply(action());
-    } catch (_) {
-      _message('Нельзя выполнить действие для этого участка');
-    }
+  Future<void> _history(bool redo) async {
+    if (_busy || !_owned) return;
+    final from = redo ? _redo : _undo, to = redo ? _undo : _redo;
+    if (from.isEmpty) return;
+    to.add(_snapshot());
+    final next = from.removeLast();
+    _stops
+      ..clear()
+      ..addAll(next.points);
+    _labels
+      ..clear()
+      ..addAll(next.labels);
+    _replace = null;
+    _changed = true;
+    await _calculate();
   }
 
-  void _tap(LatLng point) {
+  Future<void> _locate() async {
     if (_busy) return;
-    if (_action == _PointAction.add) {
-      final after = _selected < 0 ? _draft.points.length - 1 : _selected;
-      _edit(() => _draft.insert(after, point));
-      setState(
-        () => _selected = (after + 1).clamp(0, _draft.points.length - 1),
-      );
-    } else if (_action == _PointAction.move && _selected >= 0) {
-      _edit(() => _draft.move(_selected, point));
-    } else if (_draft.points.isNotEmpty) {
-      const measure = Distance();
-      var index = 0, best = double.infinity;
-      for (var i = 0; i < _draft.points.length; i++) {
-        final distance = measure(point, _draft.points[i]);
-        if (distance < best) {
-          best = distance;
-          index = i;
-        }
+    _busy = true;
+    _refresh();
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied)
+        permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _message('Разрешите геопозицию или выберите точку на карте.');
+        return;
       }
-      setState(() => _selected = index);
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (!mounted || !_owned) return;
+      _busy = false;
+      await _point(
+        LatLng(position.latitude, position.longitude),
+        'Моё местоположение',
+      );
+    } catch (_) {
+      _message(
+        'Не удалось определить местоположение. Выберите точку на карте.',
+      );
+    } finally {
+      _busy = false;
+      _refresh();
     }
   }
 
-  Future<void> _trim() async {
-    if (_draft.points.length < 3) return;
-    var range = RangeValues(0, (_draft.points.length - 1).toDouble());
-    final result = await showModalBottomSheet<RangeValues>(
+  Future<void> _search() async {
+    final result = await showSearch<Map<String, dynamic>?>(
       context: context,
+      delegate: _PlaceSearch(),
+    );
+    if (!mounted || !_owned || result == null) return;
+    final point = LatLng(
+      double.parse('${result['lat']}'),
+      double.parse('${result['lon']}'),
+    );
+    await _point(point, '${result['display_name']}');
+    if (mounted && _owned) {
+      try {
+        _map.move(point, 14);
+      } catch (_) {}
+    }
+  }
+
+  RouteEditState get _geometry => RouteEditState(
+    _route?.points ?? _stops,
+    controls: _stops,
+    estimatedSeconds: _route == null
+        ? null
+        : (_route!.durationMin * 60).round(),
+    steps: _route?.steps ?? const [],
+  );
+  Future<void> _save() async {
+    if (!_canSave || !_owned) return;
+    final name = TextEditingController(text: 'Мой маршрут');
+    final notes = TextEditingController();
+    final form = GlobalKey<FormState>();
+    final details = await showModalBottomSheet<({String title, String notes})>(
+      context: context,
+      isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheet) => StatefulBuilder(
-        builder: (sheet, change) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Оставить участок в новой копии'),
-              Text('Точки ${range.start.round() + 1}–${range.end.round() + 1}'),
-              RangeSlider(
-                values: range,
-                max: (_draft.points.length - 1).toDouble(),
-                divisions: (_draft.points.length - 1).clamp(1, 1000),
-                onChanged: (value) => change(() => range = value),
-              ),
-              FilledButton(
-                onPressed: range.end.round() - range.start.round() < 1
-                    ? null
-                    : () => Navigator.pop(sheet, range),
-                child: const Text('Оставить участок'),
-              ),
-            ],
+      builder: (sheet) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.viewInsetsOf(sheet).bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Сохранить маршрут',
+                  style: Theme.of(sheet).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: name,
+                  maxLength: 120,
+                  decoration: const InputDecoration(labelText: 'Название'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Введите название' : null,
+                ),
+                TextFormField(
+                  controller: notes,
+                  maxLength: 2000,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Заметка · необязательно',
+                  ),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (form.currentState!.validate())
+                      Navigator.pop(sheet, (
+                        title: name.text.trim(),
+                        notes: notes.text,
+                      ));
+                  },
+                  child: const Text('Сохранить'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-    if (mounted && result != null) {
-      _edit(() => _draft.trim(result.start.round(), result.end.round()));
-    }
-  }
-
-  Future<void> _roads() async {
-    if (_draft.segmentCount > 1 || _draft.points.length < 2) {
-      _message('Выберите один непрерывный участок из двух или более точек');
-      return;
-    }
-    var controls = _draft;
-    if (controls.points.length > 10) {
-      final agreed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Выделить 10 контрольных точек?'),
-          content: const Text(
-            'Сервис перестроит путь между контрольными точками. Геометрия копии изменится; исходная поездка останется прежней.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Перестроить'),
-            ),
-          ],
+    // Controllers belong to the sheet until its closing animation completes.
+    if (!mounted || !_owned || details == null) return;
+    _busy = true;
+    _refresh();
+    try {
+      await SavedRoutesRepository().addRoute(
+        _geometry.plannedCopy(
+          title: details.title,
+          notes: details.notes,
+          activity: _activity,
         ),
       );
-      if (!mounted || agreed != true) return;
-      controls = controls.controlPoints();
-    }
-    setState(() => _busy = true);
-    try {
-      final result = await (widget.routingService ?? RoutingService())
-          .buildRoute(
-            start: controls.points.first,
-            end: controls.points.last,
-            via: controls.points.sublist(1, controls.points.length - 1),
-            activity: _activity,
-          );
-      if (!mounted || UserScope.currentUserId() != _owner) return;
-      _apply(
-        RouteEditState(
-          result.points,
-          estimatedSeconds: (result.durationMin * 60).round(),
-          steps: result.steps,
-          controls: controls.points,
-        ),
-      );
-    } catch (_) {
-      if (mounted) {
-        _message(
-          'Не удалось построить по дорогам. Предыдущая линия сохранена.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      if (UserScope.currentUserId() != _owner) throw StateError('account');
-      final route = _draft.plannedCopy(
-        title: _name.text,
-        activity: _activity,
-        notes: _notes.text,
-        collection: widget.source?.collection ?? '',
-      );
-      await _repository.addRoute(route);
-      if (mounted) {
-        setState(() => _changed = false);
-        Navigator.pop(context, true);
+      if (mounted && _owned) {
+        _changed = false;
+        Navigator.of(context).pop(true);
       }
     } catch (_) {
-      if (mounted) {
-        _message(
-          'Не удалось сохранить. Нужно название до 120 символов и минимум две точки.',
-        );
-      }
+      _message(
+        'Не удалось сохранить маршрут на устройстве. Повторите попытку.',
+      );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _busy = false;
+      _refresh();
     }
   }
 
   Future<void> _leave() async {
+    if (_busy) return;
+    if (!_changed) {
+      Navigator.pop(context);
+      return;
+    }
     final leave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Закрыть без сохранения?'),
-        content: const Text(
-          'Изменения в редакторе не сохранятся. Исходный маршрут останется прежним.',
-        ),
+        title: const Text('Выйти из конструктора?'),
+        content: const Text('Маршрут ещё не сохранён.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Продолжить'),
+            child: const Text('Продолжить создание'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Закрыть'),
+            child: const Text('Выйти без сохранения'),
           ),
         ],
       ),
@@ -258,149 +318,249 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     }
   }
 
-  Widget _mapTools() {
-    final points = _draft.points;
+  String _role(int i) => i == 0
+      ? 'Старт'
+      : i == _stops.length - 1
+      ? 'Финиш'
+      : 'Остановка $i';
+  Widget _panel(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          '${points.length} точек · ${(_draft.meters / 1000).toStringAsFixed(2)} км · ${_draft.segmentCount} участков',
-        ),
-        Text(
-          _draft.estimatedSeconds == null
-              ? 'Линия без проверки дорог. Время не рассчитано.'
-              : 'По дорогам · примерно ${_draft.estimatedSeconds! ~/ 60} мин',
-        ),
-        const Text(
-          'Нажмите на карту. «Выбрать» находит ближайшую точку; «Перенести» перемещает выбранную. Исходник не изменяется.',
-          style: TextStyle(fontSize: 12),
-        ),
-        Wrap(
-          spacing: 6,
+        Row(
           children: [
-            for (final action in _PointAction.values)
-              ChoiceChip(
-                label: Text(
-                  ['Добавлять', 'Выбрать', 'Перенести'][action.index],
-                ),
-                selected: _action == action,
-                onSelected: _busy
-                    ? null
-                    : (_) => setState(() => _action = action),
+            Expanded(
+              child: Text(
+                _stops.isEmpty
+                    ? 'Куда отправимся?'
+                    : '${(_geometry.meters / 1000).toStringAsFixed(1)} км',
+                style: theme.textTheme.titleLarge,
               ),
-          ],
-        ),
-        if (points.isNotEmpty)
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  value: _selected.clamp(0, points.length - 1).toDouble(),
-                  max: (points.length - 1).clamp(1, 100000).toDouble(),
-                  onChanged: _busy
-                      ? null
-                      : (value) => setState(
-                          () => _selected = value.round().clamp(
-                            0,
-                            points.length - 1,
-                          ),
-                        ),
-                ),
-              ),
-              Text('${_selected + 1}/${points.length}'),
-            ],
-          ),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
+            ),
             IconButton(
-              tooltip: 'Отменить изменение',
-              onPressed: _busy || _undo.isEmpty
-                  ? null
-                  : () => setState(() {
-                      _redo.add(_draft);
-                      _draft = _undo.removeLast();
-                      _selected = _draft.points.isEmpty ? -1 : 0;
-                      _changed = true;
-                    }),
+              tooltip: 'Отменить',
+              onPressed: _busy || _undo.isEmpty ? null : () => _history(false),
               icon: const Icon(Icons.undo),
             ),
             IconButton(
-              tooltip: 'Повторить изменение',
-              onPressed: _busy || _redo.isEmpty
-                  ? null
-                  : () => setState(() {
-                      _undo.add(_draft);
-                      _draft = _redo.removeLast();
-                      _selected = _draft.points.isEmpty ? -1 : 0;
-                      _changed = true;
-                    }),
+              tooltip: 'Повторить',
+              onPressed: _busy || _redo.isEmpty ? null : () => _history(true),
               icon: const Icon(Icons.redo),
-            ),
-            TextButton(
-              onPressed: _busy || _selected < 0
-                  ? null
-                  : () => _edit(() => _draft.remove(_selected)),
-              child: const Text('Убрать точку'),
-            ),
-            TextButton(
-              onPressed:
-                  _busy ||
-                      _selected <= 0 ||
-                      points.length > 32 ||
-                      _draft.segmentCount > 1
-                  ? null
-                  : () {
-                      _edit(() => _draft.reorder(_selected, _selected - 1));
-                      setState(() => _selected--);
-                    },
-              child: const Text('Раньше'),
-            ),
-            TextButton(
-              onPressed:
-                  _busy ||
-                      _selected < 0 ||
-                      _selected >= points.length - 1 ||
-                      points.length > 32 ||
-                      _draft.segmentCount > 1
-                  ? null
-                  : () {
-                      _edit(() => _draft.reorder(_selected, _selected + 1));
-                      setState(() => _selected++);
-                    },
-              child: const Text('Позже'),
-            ),
-            TextButton(
-              onPressed: _busy || points.isEmpty
-                  ? null
-                  : () => _edit(_draft.reversed),
-              child: const Text('Обратно'),
-            ),
-            TextButton(
-              onPressed: _busy || points.length < 2 || _draft.segmentCount > 1
-                  ? null
-                  : () => _edit(_draft.closeLoop),
-              child: const Text('Замкнуть круг'),
-            ),
-            TextButton(
-              onPressed: _busy || points.length < 3 ? null : _trim,
-              child: const Text('Обрезать'),
-            ),
-            TextButton(
-              onPressed: _busy || _draft.segmentCount > 1 || points.length <= 10
-                  ? null
-                  : () => _edit(_draft.controlPoints),
-              child: const Text('10 контрольных точек'),
-            ),
-            OutlinedButton(
-              onPressed: _busy ? null : _roads,
-              child: const Text('По дорогам'),
             ),
           ],
         ),
-        const Text(
-          'Нажмите «Готово», чтобы вернуться к названию и сохранению маршрута.',
+        Text(
+          _busy
+              ? 'Строим путь по дорогам…'
+              : _route != null
+              ? 'Примерно ${_route!.durationMin.ceil()} мин · по дорогам'
+              : _roads
+              ? 'Выберите старт и финиш'
+              : 'Вручную · проходимость не проверена',
+          style: theme.textTheme.bodyMedium,
+        ),
+        if (_busy) const LinearProgressIndicator(),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _search,
+          icon: const Icon(Icons.search),
+          label: const Text('Найти адрес или место'),
+        ),
+        if (_stops.isEmpty)
+          TextButton.icon(
+            onPressed: _busy ? null : _locate,
+            icon: const Icon(Icons.my_location),
+            label: const Text('Начать от меня'),
+          ),
+        if (_replace != null)
+          Material(
+            color: theme.colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(16),
+            child: ListTile(
+              title: Text('Выберите новое место: ${_role(_replace!)}'),
+              trailing: IconButton(
+                tooltip: 'Отменить перенос',
+                onPressed: () {
+                  _replace = null;
+                  _refresh();
+                },
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          ),
+        if (_stops.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Нажмите на карту, чтобы поставить старт. Следующее нажатие добавит финиш.',
+            ),
+          ),
+        if (_stops.isNotEmpty)
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            itemCount: _stops.length,
+            onReorder: (oldIndex, newIndex) {
+              if (_busy) return;
+              _change(() {
+                if (newIndex > oldIndex) newIndex--;
+                final point = _stops.removeAt(oldIndex),
+                    label = _labels.removeAt(oldIndex);
+                _stops.insert(newIndex, point);
+                _labels.insert(newIndex, label);
+              });
+            },
+            itemBuilder: (ctx, i) => ListTile(
+              key: ValueKey(i),
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  i == 0
+                      ? 'A'
+                      : i == _stops.length - 1
+                      ? 'B'
+                      : '$i',
+                ),
+              ),
+              title: Text(_role(i)),
+              subtitle: Text(
+                _labels[i],
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: _busy
+                  ? null
+                  : () {
+                      _replace = i;
+                      _refresh();
+                    },
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Убрать ${_role(i).toLowerCase()}',
+                    onPressed: _busy
+                        ? null
+                        : () => _change(() {
+                            _stops.removeAt(i);
+                            _labels.removeAt(i);
+                          }),
+                    icon: const Icon(Icons.close),
+                  ),
+                  ReorderableDragStartListener(
+                    index: i,
+                    enabled: !_busy,
+                    child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(Icons.drag_handle),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (_stops.length >= 2)
+          Text(
+            'Следующее нажатие добавит новую точку в конец пути. Для остановки по пути измените порядок в списке.',
+            style: theme.textTheme.bodySmall,
+          ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('По дорогам'),
+              selected: _roads,
+              onSelected: _busy
+                  ? null
+                  : (_) {
+                      _roads = true;
+                      _changed = true;
+                      _calculate();
+                    },
+            ),
+            ChoiceChip(
+              label: const Text('Вручную'),
+              selected: !_roads,
+              onSelected: _busy
+                  ? null
+                  : (_) {
+                      _roads = false;
+                      _changed = true;
+                      _calculate();
+                    },
+            ),
+            if (_stops.length >= 2)
+              ActionChip(
+                label: const Text('Обратно'),
+                avatar: const Icon(Icons.swap_vert),
+                onPressed: _busy
+                    ? null
+                    : () => _change(() {
+                        final p = _stops.reversed.toList(),
+                            l = _labels.reversed.toList();
+                        _stops
+                          ..clear()
+                          ..addAll(p);
+                        _labels
+                          ..clear()
+                          ..addAll(l);
+                      }),
+              ),
+            if (_stops.length >= 2 && _stops.length < 10)
+              ActionChip(
+                label: const Text('Вернуться к старту'),
+                avatar: const Icon(Icons.loop),
+                onPressed: _busy
+                    ? null
+                    : () => _point(_stops.first, _labels.first),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<ActivityType>(
+          initialValue: _activity,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Активность'),
+          items: [
+            for (final a in ActivityType.values)
+              DropdownMenuItem(value: a, child: Text(a.label)),
+          ],
+          onChanged: _busy
+              ? null
+              : (a) {
+                  if (a != null) {
+                    _activity = a;
+                    _changed = true;
+                    _calculate();
+                  }
+                },
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              _error!,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ),
+        if (_error != null)
+          TextButton.icon(
+            onPressed: _busy ? null : _calculate,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Повторить построение'),
+          ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _canSave ? _save : null,
+          icon: const Icon(Icons.bookmark_add_outlined),
+          label: const Text('Сохранить маршрут'),
         ),
       ],
     );
@@ -408,315 +568,109 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final points = _draft.points;
-    final center = points.isEmpty
-        ? widget.initialCenter ?? const LatLng(55.75, 37.61)
-        : points.first;
+    // Preserve precise editing of imported/recorded tracks and all legacy tools.
+    if (widget.source != null)
+      return RouteGeometryEditorScreen(
+        source: widget.source,
+        initialCenter: widget.initialCenter,
+        routingService: widget.routingService,
+      );
+    final colors = Theme.of(context).colorScheme;
+    final map = FlutterMap(
+      mapController: _map,
+      options: MapOptions(
+        initialCenter: widget.initialCenter ?? const LatLng(55.75, 37.61),
+        initialZoom: 13,
+        onTap: (_, p) => _point(p),
+      ),
+      children: [
+        if (!AppVariant.modernInterface)
+          TileLayer(
+            urlTemplate: OfflineMapsService.routeTileUrl,
+            tileProvider: OfflineMapsService.tileProvider(
+              offlineOnly: NavigationPreferences.instance.cachedMapOnly,
+            ),
+            userAgentPackageName: 'com.pulsepath.app',
+          ),
+        PolylineLayer(
+          polylines: [
+            if (_stops.length > 1)
+              Polyline(
+                points: _route?.points ?? _stops,
+                color: _route != null || !_roads
+                    ? colors.primary
+                    : colors.outline,
+                strokeWidth: 5,
+              ),
+          ],
+        ),
+        MarkerLayer(
+          markers: [
+            for (var i = 0; i < _stops.length; i++)
+              Marker(
+                point: _stops[i],
+                width: 48,
+                height: 48,
+                child: Semantics(
+                  label: _role(i),
+                  button: true,
+                  child: GestureDetector(
+                    onTap: _busy
+                        ? null
+                        : () {
+                            _replace = i;
+                            _refresh();
+                          },
+                    child: CircleAvatar(
+                      backgroundColor: _replace == i
+                          ? colors.tertiary
+                          : colors.primary,
+                      foregroundColor: _replace == i
+                          ? colors.onTertiary
+                          : colors.onPrimary,
+                      child: Text(
+                        i == 0
+                            ? 'A'
+                            : i == _stops.length - 1
+                            ? 'B'
+                            : '$i',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const RichAttributionWidget(
+          attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
+        ),
+      ],
+    );
     return PopScope(
       canPop: !_busy && !_changed,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_busy) _leave();
+        if (!didPop) _leave();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Конструктор маршрута')),
+        appBar: AppBar(title: const Text('Новый маршрут')),
         body: SafeArea(
           child: Column(
             children: [
               Expanded(
                 flex: 3,
                 child: MainMapGateway(
-                  controls: (_) => _mapTools(),
-                  keepCamera: widget.source == null && _draft.points.isEmpty,
-                  title: 'Редактирование маршрута',
-                  autoOpen: true,
-                  map: FlutterMap(
-                    mapController: _map,
-                    options: MapOptions(
-                      initialCenter: center,
-                      initialZoom: 13,
-                      initialCameraFit: points.length < 2
-                          ? null
-                          : CameraFit.bounds(
-                              bounds: LatLngBounds.fromPoints(points),
-                              padding: const EdgeInsets.all(24),
-                              maxZoom: 16,
-                            ),
-                      onTap: (_, point) => _tap(point),
-                    ),
-                    children: [
-                      if (!NavigationPreferences.instance.cachedMapOnly ||
-                          OfflineMapsService.isAvailable)
-                        if (!AppVariant.modernInterface)
-                          TileLayer(
-                            urlTemplate: OfflineMapsService.routeTileUrl,
-                            tileProvider: OfflineMapsService.tileProvider(
-                              offlineOnly:
-                                  NavigationPreferences.instance.cachedMapOnly,
-                            ),
-                            userAgentPackageName: 'com.pulsepath.app',
-                          ),
-                      PolylineLayer(
-                        polylines: [
-                          for (final segment in WorkoutDetails.splitTrack(
-                            points,
-                            _draft.starts,
-                          ))
-                            Polyline(
-                              points: segment,
-                              color: Colors.deepOrange,
-                              strokeWidth: 4,
-                            ),
-                        ],
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          for (final index in {
-                            if (points.isNotEmpty) 0,
-                            if (points.length > 1) points.length - 1,
-                            if (_selected >= 0) _selected,
-                          })
-                            Marker(
-                              point: points[index],
-                              width: 38,
-                              height: 38,
-                              child: Tooltip(
-                                message: 'Точка ${index + 1}',
-                                child: Icon(
-                                  Icons.location_on,
-                                  color: index == _selected
-                                      ? Colors.blue
-                                      : Colors.deepOrange,
-                                  size: 36,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const RichAttributionWidget(
-                        attributions: [
-                          TextSourceAttribution('© OpenStreetMap contributors'),
-                        ],
-                      ),
-                    ],
-                  ),
+                  map: map,
+                  title: 'Новый маршрут',
+                  controls: _panel,
+                  autoOpen: false,
+                  keepCamera: true,
                 ),
               ),
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        '${points.length} точек · ${(_draft.meters / 1000).toStringAsFixed(2)} км · ${_draft.segmentCount} участков',
-                      ),
-                      Text(
-                        _draft.estimatedSeconds == null
-                            ? 'Линия без проверки дорог. Время не рассчитано.'
-                            : 'По дорогам · примерно ${_draft.estimatedSeconds! ~/ 60} мин',
-                      ),
-                      const Text(
-                        'Нажмите на карту. «Выбрать» находит ближайшую точку; «Перенести» перемещает выбранную. Исходник не изменяется.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      Wrap(
-                        spacing: 6,
-                        children: [
-                          for (final action in _PointAction.values)
-                            ChoiceChip(
-                              label: Text(
-                                [
-                                  'Добавлять',
-                                  'Выбрать',
-                                  'Перенести',
-                                ][action.index],
-                              ),
-                              selected: _action == action,
-                              onSelected: _busy
-                                  ? null
-                                  : (_) => setState(() => _action = action),
-                            ),
-                        ],
-                      ),
-                      if (points.isNotEmpty)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Slider(
-                                value: _selected
-                                    .clamp(0, points.length - 1)
-                                    .toDouble(),
-                                max: (points.length - 1)
-                                    .clamp(1, 100000)
-                                    .toDouble(),
-                                onChanged: _busy
-                                    ? null
-                                    : (value) => setState(
-                                        () => _selected = value.round().clamp(
-                                          0,
-                                          points.length - 1,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                            Text('${_selected + 1}/${points.length}'),
-                          ],
-                        ),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          IconButton(
-                            tooltip: 'Отменить изменение',
-                            onPressed: _busy || _undo.isEmpty
-                                ? null
-                                : () => setState(() {
-                                    _redo.add(_draft);
-                                    _draft = _undo.removeLast();
-                                    _selected = _draft.points.isEmpty ? -1 : 0;
-                                    _changed = true;
-                                  }),
-                            icon: const Icon(Icons.undo),
-                          ),
-                          IconButton(
-                            tooltip: 'Повторить изменение',
-                            onPressed: _busy || _redo.isEmpty
-                                ? null
-                                : () => setState(() {
-                                    _undo.add(_draft);
-                                    _draft = _redo.removeLast();
-                                    _selected = _draft.points.isEmpty ? -1 : 0;
-                                    _changed = true;
-                                  }),
-                            icon: const Icon(Icons.redo),
-                          ),
-                          TextButton(
-                            onPressed: _busy || _selected < 0
-                                ? null
-                                : () => _edit(() => _draft.remove(_selected)),
-                            child: const Text('Убрать точку'),
-                          ),
-                          TextButton(
-                            onPressed:
-                                _busy ||
-                                    _selected <= 0 ||
-                                    points.length > 32 ||
-                                    _draft.segmentCount > 1
-                                ? null
-                                : () {
-                                    _edit(
-                                      () => _draft.reorder(
-                                        _selected,
-                                        _selected - 1,
-                                      ),
-                                    );
-                                    setState(() => _selected--);
-                                  },
-                            child: const Text('Раньше'),
-                          ),
-                          TextButton(
-                            onPressed:
-                                _busy ||
-                                    _selected < 0 ||
-                                    _selected >= points.length - 1 ||
-                                    points.length > 32 ||
-                                    _draft.segmentCount > 1
-                                ? null
-                                : () {
-                                    _edit(
-                                      () => _draft.reorder(
-                                        _selected,
-                                        _selected + 1,
-                                      ),
-                                    );
-                                    setState(() => _selected++);
-                                  },
-                            child: const Text('Позже'),
-                          ),
-                          TextButton(
-                            onPressed: _busy || points.isEmpty
-                                ? null
-                                : () => _edit(_draft.reversed),
-                            child: const Text('Обратно'),
-                          ),
-                          TextButton(
-                            onPressed:
-                                _busy ||
-                                    points.length < 2 ||
-                                    _draft.segmentCount > 1
-                                ? null
-                                : () => _edit(_draft.closeLoop),
-                            child: const Text('Замкнуть круг'),
-                          ),
-                          TextButton(
-                            onPressed: _busy || points.length < 3
-                                ? null
-                                : _trim,
-                            child: const Text('Обрезать'),
-                          ),
-                          TextButton(
-                            onPressed:
-                                _busy ||
-                                    _draft.segmentCount > 1 ||
-                                    points.length <= 10
-                                ? null
-                                : () => _edit(_draft.controlPoints),
-                            child: const Text('10 контрольных точек'),
-                          ),
-                          OutlinedButton(
-                            onPressed: _busy ? null : _roads,
-                            child: const Text('По дорогам'),
-                          ),
-                        ],
-                      ),
-                      TextField(
-                        controller: _name,
-                        enabled: !_busy,
-                        maxLength: 120,
-                        onChanged: (_) => setState(() => _changed = true),
-                        decoration: const InputDecoration(
-                          labelText: 'Название новой копии',
-                        ),
-                      ),
-                      DropdownButtonFormField<ActivityType>(
-                        isExpanded: true,
-                        initialValue: _activity,
-                        items: [
-                          for (final activity in ActivityType.values)
-                            DropdownMenuItem(
-                              value: activity,
-                              child: Text(activity.label),
-                            ),
-                        ],
-                        onChanged: _busy
-                            ? null
-                            : (value) => setState(() {
-                                _activity = value!;
-                                _draft = RouteEditState(
-                                  _draft.points,
-                                  starts: _draft.starts,
-                                );
-                                _changed = true;
-                              }),
-                      ),
-                      TextField(
-                        controller: _notes,
-                        enabled: !_busy,
-                        maxLength: 2000,
-                        maxLines: 2,
-                        onChanged: (_) => setState(() => _changed = true),
-                        decoration: const InputDecoration(labelText: 'Заметка'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _busy || points.length < 2 ? null : _save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: Text(
-                          _busy ? 'Подождите…' : 'Сохранить отдельный маршрут',
-                        ),
-                      ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: _panel(context),
                 ),
               ),
             ],
@@ -724,5 +678,74 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         ),
       ),
     );
+  }
+}
+
+class _PlaceSearch extends SearchDelegate<Map<String, dynamic>?> {
+  _PlaceSearch() : super(searchFieldLabel: 'Адрес или название места');
+  Future<List<Map<String, dynamic>>>? _results;
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(
+      tooltip: 'Очистить',
+      onPressed: () {
+        query = '';
+        _results = null;
+      },
+      icon: const Icon(Icons.close),
+    ),
+  ];
+  @override
+  Widget buildLeading(BuildContext context) => IconButton(
+    tooltip: 'Назад',
+    onPressed: () => close(context, null),
+    icon: const Icon(Icons.arrow_back),
+  );
+  @override
+  Widget buildSuggestions(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(24),
+    child: Text(
+      'Введите место и нажмите поиск на клавиатуре. Поиск выполняется через интернет.',
+    ),
+  );
+  @override
+  Widget buildResults(BuildContext context) {
+    _results ??= GeocodingService().searchPlaces(query, nearbyOnly: false);
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _results,
+      builder: (ctx, state) {
+        if (state.connectionState != ConnectionState.done)
+          return const Center(child: CircularProgressIndicator());
+        if (state.hasError)
+          return Center(
+            child: TextButton(
+              onPressed: () {
+                _results = null;
+                showResults(context);
+              },
+              child: const Text('Поиск недоступен. Повторить'),
+            ),
+          );
+        final rows = state.data ?? [];
+        if (rows.isEmpty)
+          return const Center(
+            child: Text('Места не найдены. Уточните запрос.'),
+          );
+        return ListView.builder(
+          itemCount: rows.length,
+          itemBuilder: (ctx, i) => ListTile(
+            leading: const Icon(Icons.place_outlined),
+            title: Text('${rows[i]['display_name']}'),
+            onTap: () => close(context, rows[i]),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void showResults(BuildContext context) {
+    _results = null;
+    super.showResults(context);
   }
 }
