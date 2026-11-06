@@ -170,6 +170,15 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     _changed = true;
     await _persist();
     await _calculate();
+    if (mounted && _owned && _stops.isNotEmpty) {
+      _map.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(_stops),
+          padding: const EdgeInsets.fromLTRB(48, 140, 48, 300),
+          maxZoom: 15,
+        ),
+      );
+    }
   }
 
   String? _error;
@@ -317,6 +326,8 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         LatLng(position.latitude, position.longitude),
         'Моё местоположение',
       );
+      if (mounted && _owned)
+        _map.move(LatLng(position.latitude, position.longitude), 14);
     } catch (_) {
       _message(
         'Не удалось определить местоположение. Выберите точку на карте.',
@@ -889,7 +900,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                   controls: _panel,
                   autoOpen: true,
                   footer: _saveButton,
-                  keepCamera: true,
+                  keepCamera: widget.source == null && _stops.isEmpty,
                 ),
               ),
               Expanded(
