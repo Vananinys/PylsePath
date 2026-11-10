@@ -337,6 +337,14 @@ class PushService {
     } catch (_) {}
   }
 
+  /// Body for a failed notification action. Never echoes [input]: the
+  /// user's unsent reply must stay inside the app sandbox — system
+  /// notification text is readable from the shade, notification history
+  /// and any app holding notification access.
+  @visibleForTesting
+  static String failedActionBody({required bool replySent, String? input}) =>
+      'Проверьте подключение к интернету';
+
   Future<void> _handleNotificationResponse(
     NotificationResponse response,
   ) async {
@@ -399,9 +407,7 @@ class PushService {
         title: replySent
             ? 'Ответ отправлен. Не удалось обновить прочтение'
             : 'Действие не выполнено. Откройте чат',
-        body: !replySent && response.input?.isNotEmpty == true
-            ? 'Неотправленный ответ: ${response.input}'
-            : 'Проверьте подключение к интернету',
+        body: failedActionBody(replySent: replySent, input: response.input),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'chat_messages',
