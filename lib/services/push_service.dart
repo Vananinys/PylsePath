@@ -26,7 +26,8 @@ Future<void> pulsePathBackgroundMessage(RemoteMessage message) async {
   if (message.notification == null && message.data['type'] == 'chat') {
     await ensureNotificationSession();
     await PushService.instance._ensureLocalNotifications();
-    if (message.data['showPreview'] == 'true') {
+    if (message.data['showPreview'] == 'true' &&
+        message.data['encrypted'] != 'true') {
       final id = message.data['messageId']?.toString();
       if (id != null) {
         final row = await ChatService()
@@ -791,16 +792,41 @@ class PushService {
         }
       }
       if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+      var notificationBody =
+          message.notification?.body ??
+          message.data['body']?.toString() ??
+          'Откройте PulsePath, чтобы прочитать';
+      if (AppVariant.e2eeMessaging && message.data['encrypted'] == 'true') {
+        // Fetch only through the current authenticated session. Ciphertext is
+        // decrypted by ChatService using this installation's secure keys.
+        notificationBody = 'Зашифрованное сообщение · откройте PulsePath';
+        try {
+          final row = key == null
+              ? null
+              : await ChatService()
+                    .fetchMessage(key)
+                    .timeout(const Duration(seconds: 8));
+          if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+          if (row != null && row.senderId == sender && row.receiverId == uid) {
+            if (row.isRead) return;
+            if (row.isEncrypted && !row.decryptionFailed) {
+              notificationBody = row.isStickerOnly
+                  ? 'Стикер ${row.sticker}'
+                  : row.body ?? 'Новое сообщение';
+            }
+          }
+        } catch (_) {
+          // A missing session/key or network leaves the private fallback.
+        }
+      }
+      if (Supabase.instance.client.auth.currentUser?.id != uid) return;
       await _localNotifications.show(
         id: chatNotificationId(uid, sender),
         title:
             message.notification?.title ??
             message.data['title']?.toString() ??
             'Новое сообщение',
-        body:
-            message.notification?.body ??
-            message.data['body']?.toString() ??
-            'Откройте PulsePath, чтобы прочитать',
+        body: notificationBody,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'chat_messages',
@@ -813,11 +839,7 @@ class PushService {
             category: AndroidNotificationCategory.message,
             groupKey: 'pulsepath_chats_$uid',
             visibility: NotificationVisibility.private,
-            styleInformation: BigTextStyleInformation(
-              message.notification?.body ??
-                  message.data['body']?.toString() ??
-                  'Новое сообщение',
-            ),
+            styleInformation: BigTextStyleInformation(notificationBody),
             actions: const [
               AndroidNotificationAction(
                 'reply',
