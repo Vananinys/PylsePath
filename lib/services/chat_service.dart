@@ -378,6 +378,15 @@ class ChatService {
           return existing;
         }
       }
+      if (error.code == '42501' &&
+          error.message.contains('E2EE_UPGRADE_REQUIRED')) {
+        // A conversation locked by the first E2EE message rejects plaintext
+        // writes (docs/e2ee_chat_schema.sql). Blaming connectivity would
+        // mislead stable clients; point at the update instead.
+        throw const ChatServiceException(
+          'Чат переведён в защищённый режим. Обновите приложение до UI Beta, чтобы продолжить переписку.',
+        );
+      }
       debugPrint('[ChatService] send ${error.code}: ${error.message}');
       throw const ChatServiceException(
         'Не удалось отправить сообщение. Проверьте интернет.',
