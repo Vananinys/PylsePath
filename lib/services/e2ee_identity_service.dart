@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:sodium/sodium.dart';
+import 'package:crypto/crypto.dart' as hashes;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/e2ee_recovery_vault.dart';
@@ -18,7 +19,13 @@ class E2eeException implements Exception {
 /// Account identity shared with another installation only via the user's
 /// recovery key. No private seed or recovery key is uploaded unencrypted.
 class E2eeIdentityService {
-  E2eeIdentityService(this.client, this.owner)
+  static final _instances = Expando<Map<String, E2eeIdentityService>>();
+  factory E2eeIdentityService(SupabaseClient client, String owner) =>
+      (_instances[client] ??= {}).putIfAbsent(
+        owner,
+        () => E2eeIdentityService._(client, owner),
+      );
+  E2eeIdentityService._(this.client, this.owner)
     : store = E2eeSecretStore(
         owner: owner,
         currentOwner: () => client.auth.currentUser?.id,
@@ -28,6 +35,10 @@ class E2eeIdentityService {
   final E2eeSecretStore store;
   static final Future<Sodium> _runtime = Future.sync(SodiumInit.init);
   Future<void> _tail = Future.value();
+  Map<String, dynamic>? _cached;
+  void resetMemory() {
+    _cached = null;
+  }
 
   void _requireOwner() {
     if (client.auth.currentUser?.id != owner) {
@@ -67,8 +78,21 @@ class E2eeIdentityService {
   }
 
   Future<Map<String, dynamic>> _ensure() async {
+    _requireOwner();
+    if (_cached != null) return _cached!;
     final sodium = await _runtime;
     final local = await store.read();
+    if (local != null && local['published'] is String) {
+      final existingPair = _pair(sodium, local);
+      try {
+        if (local['published'] == base64UrlEncode(existingPair.publicKey)) {
+          _cached = local;
+          return local; // Registered local keys and pinned peers also work offline.
+        }
+      } finally {
+        existingPair.secretKey.dispose();
+      }
+    }
     final published = await _published(owner);
     if (local == null && published != null) {
       throw const E2eeException(
@@ -108,6 +132,9 @@ class E2eeIdentityService {
             .timeout(const Duration(seconds: 15));
         _requireOwner();
       }
+      secrets['published'] = public;
+      await store.save(secrets);
+      _cached = secrets;
       return secrets;
     } finally {
       pair.secretKey.dispose();
@@ -145,21 +172,35 @@ class E2eeIdentityService {
       }
       final previous = await store.read();
       if (previous != null && previous['seed'] != recovered['seed']) {
-        throw const E2eeException(
-          'На устройстве уже другой ключ. Автоматическая замена запрещена.',
-        );
+        final previousPair = _pair(sodium, previous);
+        try {
+          if (published?['public_key'] ==
+              base64UrlEncode(previousPair.publicKey)) {
+            throw const E2eeException(
+              'На устройстве уже действующий ключ. Замена запрещена.',
+            );
+          }
+          // A locally generated seed may have lost a simultaneous registration.
+          // A verified recovery of the published identity can replace that provisional seed.
+        } finally {
+          previousPair.secretKey.dispose();
+        }
       }
       await store.save({
         'seed': recovered['seed'],
         'recovery': recoveryKey.trim(),
+        'published': base64UrlEncode(pair.publicKey),
         'pins': previous?['pins'] ?? <String, dynamic>{},
       });
+      _cached = null;
     } finally {
       pair.secretKey.dispose();
     }
   });
 
   Future<Uint8List> _peer(String user, Map<String, dynamic> secrets) async {
+    final pinned = (secrets['pins'] as Map)[user];
+    if (pinned is String) return base64Url.decode(pinned);
     final row = await _published(user);
     if (row == null) {
       throw const E2eeException(
@@ -234,6 +275,22 @@ class E2eeIdentityService {
         senderPublic: public,
         recipientSecret: pair.secretKey,
       );
+    } finally {
+      pair.secretKey.dispose();
+    }
+  });
+
+  Future<Map<String, String>> fingerprints(String? peer) => _serial(() async {
+    final secrets = await _ensure();
+    final sodium = await _runtime;
+    final pair = _pair(sodium, secrets);
+    try {
+      String fingerprint(Uint8List bytes) =>
+          hashes.sha256.convert(bytes).toString();
+      return {
+        'own': fingerprint(pair.publicKey),
+        if (peer != null) 'peer': fingerprint(await _peer(peer, secrets)),
+      };
     } finally {
       pair.secretKey.dispose();
     }

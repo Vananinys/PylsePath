@@ -1,5 +1,8 @@
 import 'dart:convert';
 
+import '../config/app_variant.dart';
+import 'e2ee_secret_store.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/chat_message.dart';
@@ -14,6 +17,15 @@ class ChatLocalStore {
   final String friendId;
   String get _key => UserScope.keyFor('chat_v1_$friendId', owner);
   String get _recoveryKey => '${_key}_recovery_v1';
+  bool get _protected => AppVariant.e2eeMessaging && owner != null;
+  E2eeSecretStore get _secure {
+    final keyOwner = 'chat-cache:$owner:$friendId';
+    return E2eeSecretStore(
+      owner: keyOwner,
+      currentOwner: () => _currentOwner() == owner ? keyOwner : null,
+    );
+  }
+
   Future<void> _tail = Future.value();
   String? recoveryNotice;
   void _requireOwner() {
@@ -72,6 +84,12 @@ class ChatLocalStore {
 
   Future<List<ChatMessage>> readMessages() => _serial(() async {
     _requireOwner();
+    if (_protected) {
+      final cache = await _secure.read();
+      _requireOwner();
+      if (cache?['messages'] is List)
+        return _decode(jsonEncode(cache!['messages']));
+    }
     final prefs = await SharedPreferences.getInstance();
     _requireOwner();
     final key = await _archive(prefs);
@@ -94,6 +112,28 @@ class ChatLocalStore {
     final encoded = jsonEncode(kept.map((m) => m.toRow()).toList());
     return _serial(() async {
       _requireOwner();
+      if (_protected) {
+        final previous = await _secure.read() ?? <String, dynamic>{};
+        final priorRows = {
+          for (final row in (previous['messages'] as List? ?? []))
+            if (row is Map) row['id']: row,
+        };
+        await _secure.save({
+          ...previous,
+          'messages': kept
+              .map(
+                (m) => {
+                  ...?priorRows[m.id],
+                  ...m.toRow(),
+                  'e2ee_encrypted': m.isEncrypted,
+                  'e2ee_failed': m.decryptionFailed,
+                },
+              )
+              .toList(),
+        });
+        _requireOwner();
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
       _requireOwner();
       final key = await _archive(prefs);
@@ -123,12 +163,23 @@ class ChatLocalStore {
 
   Future<String> readDraft() => _serial(() async {
     _requireOwner();
+    if (_protected) {
+      final cache = await _secure.read();
+      _requireOwner();
+      if (cache?['draft'] is String) return cache!['draft'] as String;
+    }
     final prefs = await SharedPreferences.getInstance();
     _requireOwner();
     return prefs.getString('${_key}_draft') ?? '';
   });
   Future<void> saveDraft(String draft) => _serial(() async {
     _requireOwner();
+    if (_protected) {
+      final previous = await _secure.read() ?? <String, dynamic>{};
+      await _secure.save({...previous, 'draft': draft});
+      _requireOwner();
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     _requireOwner();
     final ok = draft.isEmpty

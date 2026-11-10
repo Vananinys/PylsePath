@@ -1,6 +1,8 @@
 import 'app_versions_screen.dart';
 import '../config/app_variant.dart';
 import 'e2ee_test_chat_screen.dart';
+import 'e2ee_keys_screen.dart';
+import '../services/chat_service.dart';
 import 'usage_statistics_screen.dart';
 import '../widgets/home_steps_pill.dart';
 
@@ -292,6 +294,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const E2eeTestChatScreen()),
+            ),
+          ),
+        if (AppVariant.e2eeMessaging)
+          ListTile(
+            leading: const Icon(Icons.key_outlined),
+            title: const Text('Ключи реальной переписки'),
+            subtitle: const Text('E2EE: восстановление и отпечаток ключа'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    E2eeKeysScreen(service: ChatService().encryption),
+              ),
             ),
           ),
         ListTile(

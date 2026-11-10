@@ -24,11 +24,15 @@ jobs:
       - run: flutter pub get
       - name: Experimental local crypto chat and recovery
         run: flutter test --no-pub test/e2ee_box_codec_test.dart test/e2ee_recovery_vault_test.dart test/e2ee_secret_store_test.dart test/e2ee_signal_runtime_test.dart test/e2ee_test_chat_screen_test.dart
+      - name: E2EE messaging beta transport and downgrade protection
+        run: flutter test --no-pub test/chat_e2ee_transport_test.dart --dart-define=UI_BETA=true --dart-define=E2EE_MESSAGING=true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
       - name: Club push preferences, privacy and retries without network
-        run: node tools/test_club_push.mjs
+        run: |
+          node tools/test_club_push.mjs
+          node tools/test_chat_e2ee_push.mjs
       - name: Interface themes and isolated UI beta
         run: |
           flutter test --no-pub test/interface_beta_test.dart test/inside_menu_ui_test.dart test/group_ride_flow_test.dart test/saved_places_test.dart test/progressive_map_ui_test.dart test/map_accessibility_test.dart test/notification_config_test.dart

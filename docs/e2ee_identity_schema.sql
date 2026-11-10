@@ -2,19 +2,25 @@
 -- Apply only together with the completed client rollout.
 begin;
 create table if not exists public.e2ee_identities (
-  user_id uuid primary key references auth.users(id),
+  user_id uuid primary key references auth.users(id) on delete cascade,
   public_key text not null check (length(public_key)=44),
   created_at timestamptz not null default now()
 );
 create table if not exists public.e2ee_recovery_backups (
-  user_id uuid primary key references public.e2ee_identities(user_id),
+  user_id uuid primary key references public.e2ee_identities(user_id) on delete cascade,
   envelope text not null check (octet_length(envelope) between 64 and 16384),
   created_at timestamptz not null default now()
 );
 alter table public.e2ee_identities enable row level security;
 alter table public.e2ee_recovery_backups enable row level security;
 create policy e2ee_public_identity_read on public.e2ee_identities
-  for select to authenticated using (true);
+  for select to authenticated using (
+    user_id=(select auth.uid()) or exists(select 1 from public.friends f
+      where f.user_id=(select auth.uid()) and f.friend_id=e2ee_identities.user_id)
+    or exists(select 1 from public.chat_messages m where
+      (m.sender_id=(select auth.uid()) and m.receiver_id=e2ee_identities.user_id) or
+      (m.receiver_id=(select auth.uid()) and m.sender_id=e2ee_identities.user_id))
+  );
 create policy e2ee_own_backup_read on public.e2ee_recovery_backups
   for select to authenticated using (user_id=(select auth.uid()));
 revoke all on public.e2ee_identities,public.e2ee_recovery_backups from anon,authenticated;

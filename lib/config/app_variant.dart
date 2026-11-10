@@ -3,6 +3,7 @@
 abstract final class AppVariant {
   static const uiBeta = bool.fromEnvironment('UI_BETA');
   static const e2eeTestChat = uiBeta && bool.fromEnvironment('E2EE_TEST_CHAT');
+  static const e2eeMessaging = uiBeta && bool.fromEnvironment('E2EE_MESSAGING');
 
   /// Promoted in stable 1.13.0. This selects features, never app identity.
   /// Future experiments need their own flag and are promoted individually.

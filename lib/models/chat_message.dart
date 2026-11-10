@@ -8,6 +8,8 @@ enum MessageDelivery { sending, failed, sent }
 /// Сообщение содержит либо текст ([body]), либо стикер ([sticker]),
 /// либо и то и другое.
 class ChatMessage {
+  final bool isEncrypted;
+  final bool decryptionFailed;
   final Map<String, dynamic>? groupInvitation;
   final SharedRoute? routeAttachment;
   final String? communityPostId;
@@ -41,6 +43,8 @@ class ChatMessage {
   final Map<String, List<String>> reactions;
 
   const ChatMessage({
+    this.isEncrypted = false,
+    this.decryptionFailed = false,
     this.groupInvitation,
     this.routeAttachment,
     this.communityPostId,
@@ -87,6 +91,8 @@ class ChatMessage {
 
   ChatMessage copyWith({MessageDelivery? delivery, DateTime? readAt}) =>
       ChatMessage(
+        isEncrypted: isEncrypted,
+        decryptionFailed: decryptionFailed,
         id: id,
         senderId: senderId,
         receiverId: receiverId,
@@ -115,6 +121,8 @@ class ChatMessage {
   ChatMessage withDelivery(MessageDelivery value) => copyWith(delivery: value);
 
   Map<String, dynamic> toRow() => {
+    if (isEncrypted) 'e2ee_encrypted': true,
+    if (decryptionFailed) 'e2ee_failed': true,
     'community_post_id': communityPostId,
     'group_invitation': groupInvitation,
     'route_attachment': routeAttachment?.toJson(),
@@ -139,6 +147,9 @@ class ChatMessage {
 
   factory ChatMessage.fromRow(Map<String, dynamic> row) {
     return ChatMessage(
+      isEncrypted:
+          row['encrypted_payload'] is Map || row['e2ee_encrypted'] == true,
+      decryptionFailed: row['e2ee_failed'] == true,
       communityPostId: row['community_post_id'] as String?,
       groupInvitation: row['group_invitation'] is Map
           ? Map<String, dynamic>.from(row['group_invitation'] as Map)

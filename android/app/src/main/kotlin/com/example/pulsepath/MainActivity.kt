@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 
 class MainActivity : FlutterActivity() {
+    private var secureScreenCount = 0
     private var voiceGuidance: VoiceGuidance? = null
     private var networkStatus: NetworkStatusBridge? = null
     private var stepListener: SensorEventListener? = null
@@ -30,6 +31,15 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pulsepath/privacy")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "secureScreen") {
+                    secureScreenCount = if (call.arguments == true) secureScreenCount + 1 else (secureScreenCount - 1).coerceAtLeast(0)
+                    if (secureScreenCount > 0) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                    else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                    result.success(null)
+                } else result.notImplemented()
+            }
         RideMediaExport(this).attach(flutterEngine.dartExecutor.binaryMessenger)
         VideoPreviewBridge(this).attach(flutterEngine.dartExecutor.binaryMessenger)
         networkStatus?.close()

@@ -3,6 +3,8 @@ import '../widgets/swipe_to_reply.dart';
 import '../widgets/chat_message_text.dart';
 import '../data/chat_local_store.dart';
 import '../data/user_scope.dart';
+import '../config/app_variant.dart';
+import 'e2ee_keys_screen.dart';
 import '../utils/ride_id.dart';
 import '../widgets/chat_photo.dart';
 import '../models/chat_media_draft.dart';
@@ -824,6 +826,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   /// Голосовое: нажатие на микрофон начинает запись, повторное — отправляет.
   Future<void> _toggleVoiceRecording() async {
+    if (AppVariant.e2eeMessaging) {
+      _showError(
+        'Защищённые голосовые сообщения ещё не подключены в этой бете.',
+      );
+      return;
+    }
     if (_recorderBusy) return;
     _recorderBusy = true;
     try {
@@ -1018,6 +1026,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               : 'Вы снова сможете обмениваться сообщениями, если собеседник вас не заблокировал.',
         ),
         actions: [
+          if (AppVariant.e2eeMessaging)
+            IconButton(
+              icon: const Icon(Icons.key_outlined),
+              tooltip: 'Ключи переписки',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => E2eeKeysScreen(
+                      service: _chatService.encryption,
+                      peer: widget.friend.id,
+                    ),
+                  ),
+                );
+                if (mounted) _loadMessagesWithReactions();
+              },
+            ),
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
@@ -1121,6 +1146,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _editMessage(ChatMessage message) async {
+    if (AppVariant.e2eeMessaging &&
+        (!message.isEncrypted || message.decryptionFailed)) {
+      _showError(
+        'В этой бете можно менять только свои расшифрованные E2EE-сообщения.',
+      );
+      return;
+    }
     final text = await showDialog<String>(
       context: context,
       builder: (_) => _EditMessageDialog(text: message.body ?? ''),
@@ -1266,7 +1298,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 autofocus: true,
                 onChanged: _searchChanged,
                 decoration: const InputDecoration(
-                  hintText: 'Поиск по всей переписке',
+                  hintText: AppVariant.e2eeMessaging
+                      ? 'Поиск среди последних сообщений'
+                      : 'Поиск по всей переписке',
                   prefixIcon: Icon(Icons.search),
                 ),
               ),
@@ -1292,6 +1326,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   child: const Text('Понятно'),
                 ),
               ],
+            ),
+
+          if (AppVariant.e2eeMessaging)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                'Замок — E2EE текста и стикеров. Без замка сообщение не защищено E2EE.',
+                style: TextStyle(fontSize: 12),
+              ),
             ),
 
           if (_loadError != null)
@@ -1748,6 +1791,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (message.isEncrypted)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Tooltip(
+                                  message: message.decryptionFailed
+                                      ? 'Не расшифровано. Откройте ключи переписки.'
+                                      : 'Сквозное шифрование',
+                                  child: Icon(
+                                    message.decryptionFailed
+                                        ? Icons.lock_clock_outlined
+                                        : Icons.lock_outline,
+                                    size: 13,
+                                  ),
+                                ),
+                              ),
                             if (message.editedAt != null)
                               Text(
                                 'изм. ',
@@ -2201,6 +2259,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     tooltip: 'Вложение',
                     icon: const Icon(Icons.attach_file),
                     onSelected: (value) {
+                      if (AppVariant.e2eeMessaging && value != 'group') {
+                        _showError(
+                          'В этой бете защищены текст и стикеры. Вложения пока недоступны.',
+                        );
+                        return;
+                      }
                       if (value == 'group') {
                         showGroupInvitationSheet(
                           context,
@@ -2285,6 +2349,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Expanded(
                     child: TextField(
                       controller: _inputController,
+                      enableIMEPersonalizedLearning: !AppVariant.e2eeMessaging,
                       onChanged: _composerChanged,
                       focusNode: _inputFocus,
                       minLines: 1,

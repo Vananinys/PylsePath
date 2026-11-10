@@ -1,4 +1,6 @@
 import 'chat_attachment_cleanup.dart';
+import '../config/app_variant.dart';
+import 'e2ee_identity_service.dart';
 import '../utils/chat_media_files.dart';
 
 import 'dart:async';
@@ -31,9 +33,28 @@ class ChatServiceException implements Exception {
 /// невозможен даже подделанным запросом. Новые сообщения приходят живьём
 /// через Realtime ([subscribe]).
 class ChatService {
-  ChatService._();
+  E2eeIdentityService? _identity;
+  E2eeIdentityService get encryption {
+    final owner = userId;
+    if (owner == null || _client == null) {
+      throw const E2eeException('Войдите в аккаунт.');
+    }
+    if (_identity?.owner != owner) {
+      _identity?.resetMemory();
+      _identity = E2eeIdentityService(_client!, owner);
+    }
+    return _identity!;
+  }
+
+  static String encryptedConversation(String a, String b) {
+    final ids = [a, b]..sort();
+    return 'dm:${ids.join(':')}';
+  }
+
+  final SupabaseClient? _overrideClient;
+  ChatService._() : _overrideClient = null;
   @visibleForTesting
-  ChatService.forTesting();
+  ChatService.forTesting({SupabaseClient? client}) : _overrideClient = client;
   static final ChatService _instance = ChatService._();
   factory ChatService() => _instance;
   String? _channelUserId;
@@ -104,6 +125,8 @@ class ChatService {
   }
 
   void resetSession() {
+    _identity?.resetMemory();
+    _identity = null;
     _unreadRequest++;
     final channel = _channel;
     _channel = null;
@@ -117,7 +140,8 @@ class ChatService {
     unreadTotal.value = 0;
   }
 
-  static SupabaseClient? get _client {
+  SupabaseClient? get _client {
+    if (_overrideClient != null) return _overrideClient;
     try {
       return Supabase.instance.client;
     } catch (_) {
@@ -217,6 +241,52 @@ class ChatService {
     }
 
     try {
+      if (AppVariant.e2eeMessaging) {
+        if (photoPath != null ||
+            videoPath != null ||
+            audioPath != null ||
+            routeAttachment != null) {
+          throw const ChatServiceException(
+            'В этой бете E2EE доступно для текста и стикеров. Защищённые вложения ещё не подключены.',
+          );
+        }
+        messageId ??= newRideId();
+        if (retry) {
+          final existing = await fetchMessage(messageId);
+          if (existing != null &&
+              existing.senderId == id &&
+              existing.receiverId == receiverId) {
+            return existing;
+          }
+        }
+        final envelope = await encryption.encrypt(
+          id: messageId,
+          conversation: encryptedConversation(id, receiverId),
+          recipients: [receiverId],
+          payload: {
+            'body': cleanText.isEmpty ? null : cleanText,
+            'sticker': cleanSticker.isEmpty ? null : cleanSticker,
+          },
+        );
+        if (userId != id) {
+          throw const ChatServiceException('Аккаунт изменился.');
+        }
+        final row = await client
+            .from('chat_messages')
+            .insert({
+              'id': messageId,
+              'sender_id': id,
+              'receiver_id': receiverId,
+              'body': 'Зашифрованное сообщение · откройте новую UI Beta',
+              'encrypted_payload': envelope,
+              if (replyToId != null && replyToId.isNotEmpty)
+                'reply_to_id': replyToId,
+            })
+            .select()
+            .single()
+            .timeout(const Duration(seconds: 25));
+        return await _messageFromRow(Map<String, dynamic>.from(row));
+      }
       if (videoPosterPath != null) messageId ??= newRideId();
       if (retry && messageId != null) {
         final existing = await fetchMessage(messageId);
@@ -297,6 +367,8 @@ class ChatService {
           .single()
           .timeout(const Duration(seconds: 25));
       return await _messageFromRow(Map<String, dynamic>.from(inserted));
+    } on E2eeException catch (error) {
+      throw ChatServiceException(error.message);
     } on PostgrestException catch (error) {
       if (error.code == '23505' && messageId != null) {
         final existing = await fetchMessage(messageId);
@@ -458,7 +530,9 @@ class ChatService {
             'created_at.lt.$date,and(created_at.eq.$date,id.lt.${before.id})',
           );
         }
-        if (search != null && search.trim().isNotEmpty) {
+        if (!AppVariant.e2eeMessaging &&
+            search != null &&
+            search.trim().isNotEmpty) {
           final escaped = search
               .trim()
               .replaceAll(r'\', r'\\')
@@ -491,7 +565,17 @@ class ChatService {
         rows.take(limit).map((row) => Map<String, dynamic>.from(row)).toList(),
       );
       if (userId != id) return const [];
-      return messages.reversed.toList();
+      final filtered =
+          AppVariant.e2eeMessaging && search != null && search.trim().isNotEmpty
+          ? messages
+                .where(
+                  (m) => (m.body ?? '').toLowerCase().contains(
+                    search.trim().toLowerCase(),
+                  ),
+                )
+                .toList()
+          : messages;
+      return filtered.reversed.toList();
     } catch (error) {
       debugPrint('[ChatService] conversation: $error');
       if (strict) {
@@ -573,6 +657,35 @@ class ChatService {
       throw const ChatServiceException('Введите текст до 4000 символов');
     }
     try {
+      if (AppVariant.e2eeMessaging) {
+        final previous = await fetchMessage(messageId);
+        if (previous == null ||
+            previous.senderId != id ||
+            !previous.isEncrypted ||
+            previous.decryptionFailed) {
+          throw const ChatServiceException(
+            'В этой бете можно менять только свои расшифрованные E2EE-сообщения.',
+          );
+        }
+        final envelope = await encryption.encrypt(
+          id: messageId,
+          conversation: encryptedConversation(id, previous.receiverId),
+          recipients: [previous.receiverId],
+          payload: {'body': clean, 'sticker': previous.sticker},
+        );
+        if (userId != id) {
+          throw const ChatServiceException('Аккаунт изменился.');
+        }
+        final row = await _client!
+            .from('chat_messages')
+            .update({'encrypted_payload': envelope})
+            .eq('id', messageId)
+            .eq('sender_id', id)
+            .select()
+            .single()
+            .timeout(const Duration(seconds: 15));
+        return await _messageFromRow(Map<String, dynamic>.from(row));
+      }
       final row = await _client!
           .from('chat_messages')
           .update({'body': clean})
@@ -582,6 +695,10 @@ class ChatService {
           .single()
           .timeout(const Duration(seconds: 15));
       return await _messageFromRow(Map<String, dynamic>.from(row));
+    } on ChatServiceException {
+      rethrow;
+    } on E2eeException catch (error) {
+      throw ChatServiceException(error.message);
     } catch (_) {
       throw const ChatServiceException('Не удалось изменить сообщение');
     }
@@ -911,6 +1028,50 @@ class ChatService {
   }
 
   Future<ChatMessage> _messageFromRow(Map<String, dynamic> row) async {
+    if (row['encrypted_payload'] is Map) {
+      final owner = userId;
+      if (owner == null ||
+          (row['sender_id'] != owner && row['receiver_id'] != owner)) {
+        throw const ChatServiceException('Сообщение другого аккаунта.');
+      }
+      final resolved = Map<String, dynamic>.from(row);
+      resolved['body'] = 'Не удалось расшифровать. Откройте ключи переписки.';
+      resolved['sticker'] = null;
+      resolved['e2ee_failed'] = true;
+      if (AppVariant.e2eeMessaging) {
+        try {
+          final payload = await encryption.decrypt(
+            id: row['id'] as String,
+            sender: row['sender_id'] as String,
+            conversation: encryptedConversation(
+              row['sender_id'] as String,
+              row['receiver_id'] as String,
+            ),
+            envelope: Map<String, dynamic>.from(
+              row['encrypted_payload'] as Map,
+            ),
+          );
+          if (payload.keys.any((k) => k != 'body' && k != 'sticker') ||
+              (payload['body'] != null &&
+                  (payload['body'] is! String ||
+                      (payload['body'] as String).length > 4000)) ||
+              (payload['sticker'] != null &&
+                  (payload['sticker'] is! String ||
+                      (payload['sticker'] as String).length > 64))) {
+            throw const FormatException('Invalid private payload');
+          }
+          resolved['body'] = payload['body'];
+          resolved['sticker'] = payload['sticker'];
+          resolved['e2ee_failed'] = false;
+        } catch (_) {
+          /* Never show ciphertext as text or fall back to an open body. */
+        }
+      }
+      if (userId != owner) {
+        throw const ChatServiceException('Аккаунт изменился.');
+      }
+      return ChatMessage.fromRow(resolved);
+    }
     final resolved = Map<String, dynamic>.from(row);
     resolved['photo_reference'] = row['photo_url'];
     resolved['audio_reference'] = row['audio_url'];
@@ -950,6 +1111,10 @@ class ChatService {
   Future<List<ChatMessage>> _messagesFromRows(
     List<Map<String, dynamic>> rows,
   ) async {
+    if (rows.any((row) => row['encrypted_payload'] is Map)) {
+      // Preserve legacy media hydration while decrypting each protected row.
+      return Future.wait(rows.map(_messageFromRow));
+    }
     final client = _client;
     final paths = <String>{};
     for (final row in rows) {
@@ -1022,6 +1187,14 @@ class ChatService {
 
     final id = userId;
     if (id == null) return;
+    if (AppVariant.e2eeMessaging) {
+      try {
+        await encryption.ensure();
+      } catch (_) {
+        /* Recovery remains available; sending still fails closed. */
+      }
+      if (userId != id) return;
+    }
     if (_channelUserId != null && _channelUserId != id) resetSession();
     if (!_listeners.contains(listener)) _listeners.add(listener);
     if (_channel != null) return;
