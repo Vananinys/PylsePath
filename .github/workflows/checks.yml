@@ -22,6 +22,8 @@ jobs:
           echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
       - run: python3 tools/verify_publishable_sources.py
       - run: flutter pub get
+      - name: Experimental local crypto chat and recovery
+        run: flutter test --no-pub test/e2ee_box_codec_test.dart test/e2ee_recovery_vault_test.dart test/e2ee_secret_store_test.dart test/e2ee_signal_runtime_test.dart test/e2ee_test_chat_screen_test.dart
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'

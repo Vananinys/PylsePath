@@ -1,4 +1,6 @@
 import 'app_versions_screen.dart';
+import '../config/app_variant.dart';
+import 'e2ee_test_chat_screen.dart';
 import 'usage_statistics_screen.dart';
 import '../widgets/home_steps_pill.dart';
 
@@ -280,6 +282,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
+        if (AppVariant.e2eeTestChat)
+          ListTile(
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Тест шифрования · эксперимент'),
+            subtitle: const Text(
+              'Локальный чат Алисы и Боба, проверки подмены и восстановления',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const E2eeTestChatScreen()),
+            ),
+          ),
         ListTile(
           leading: const Icon(Icons.policy_outlined),
           title: const Text('Данные и согласия'),

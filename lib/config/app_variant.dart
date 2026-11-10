@@ -2,6 +2,7 @@
 /// UI beta has its own catalog; regular installations never read it.
 abstract final class AppVariant {
   static const uiBeta = bool.fromEnvironment('UI_BETA');
+  static const e2eeTestChat = uiBeta && bool.fromEnvironment('E2EE_TEST_CHAT');
 
   /// Promoted in stable 1.13.0. This selects features, never app identity.
   /// Future experiments need their own flag and are promoted individually.
