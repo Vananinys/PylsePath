@@ -77,4 +77,9 @@ Read-only: chat_media — приватный бакет; в chat_messages ест
 9 тестов в e2ee_recovery_vault_test.dart, e2ee_secret_store_test.dart,
 e2ee_signal_runtime_test.dart прошли. Анализатор новых пяти файлов и
 git diff --check прошли после окончательной правки тестов.
-Android APK, iOS/Web, серверный rollout и физический телефон не проверены.
+10.11.2026: проверочная Android release-сборка с зависимостями успешна
+(flutter build apk --release, 232 с, 94 813 950 байт). Это неподписанный APK:
+в изолированной копии нет android/key.properties. Артефакт содержит прежний
+незашифрованный чат и НЕ является выпуском E2EE; не публиковать и не устанавливать
+поверх подписанного приложения. ADB: подключённых устройств нет.
+iOS/Web, серверный rollout и физический телефон не проверены.
