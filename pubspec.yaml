@@ -23,6 +23,8 @@ dependencies:
   # Сеть
   http: ^1.2.2
   crypto: ^3.0.7
+  cryptography: 2.9.0
+  flutter_secure_storage: 10.3.4
   # Фото профиля: выбор из галереи + постоянный каталог для копии файла
   image_picker: ^1.1.2
   video_player: 2.11.1
@@ -43,6 +45,7 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^22.3.1
+  libsignal: 9.0.0
 
 dev_dependencies:
   video_player_platform_interface: 6.9.0
