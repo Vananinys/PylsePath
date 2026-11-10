@@ -148,7 +148,7 @@ export async function googleAccessToken(account:ServiceAccount,http:typeof fetch
     const head=b64url(enc.encode(JSON.stringify({alg:'RS256',typ:'JWT'})));
     const claims=b64url(enc.encode(JSON.stringify({iss:account.client_email,
       scope:'https://www.googleapis.com/auth/firebase.messaging',aud:googleTokenUrl,iat:now,exp:now+3600})));
-    const pem=account.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,'');
+    const pem=account.private_key.split(String.fromCharCode(10)).filter(line=>!line.trim().startsWith('-----')).join('').trim();
     const bytes=Uint8Array.from(atob(pem),c=>c.charCodeAt(0));
     const signingKey=await crypto.subtle.importKey('pkcs8',bytes,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
     const signature=new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',signingKey,enc.encode(`${head}.${claims}`)));
