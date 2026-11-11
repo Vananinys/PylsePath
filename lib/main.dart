@@ -1,3 +1,4 @@
+import 'data/secure_session_storage.dart';
 import 'widgets/map_home_navigation.dart';
 import 'widgets/map_speed_badge.dart';
 import 'widgets/laboratory_controls.dart';
@@ -166,7 +167,8 @@ void main() async {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       publishableKey: AppConfig.supabasePublishableKey,
-      authOptions: const FlutterAuthClientOptions(
+      authOptions: FlutterAuthClientOptions(
+        localStorage: platformSessionStorage(),
         // PKCE: письмо возвращает ?code=..., который SDK обменивает на сессию.
         authFlowType: AuthFlowType.pkce,
         // true (по умолчанию, указано явно для наглядности): SDK сам ловит

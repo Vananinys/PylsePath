@@ -1,3 +1,5 @@
+import '../data/secure_session_storage.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -61,7 +63,10 @@ Future<void> ensureNotificationSession() async {
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
       publishableKey: AppConfig.supabasePublishableKey,
-      authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
+      authOptions: FlutterAuthClientOptions(
+        localStorage: platformSessionStorage(),
+        detectSessionInUri: false,
+      ),
     );
   }
 }

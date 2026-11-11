@@ -3,7 +3,7 @@ allprojects {
         // Official artifacts prepared locally when Google Maven is unreachable.
         // Optional: a clean checkout still uses the standard repositories above.
         val localRecordingRepository = rootProject.file("../build/test_dependencies/recording-maven")
-        if (localRecordingRepository.isDirectory) {
+        if (providers.gradleProperty("pulsepath.localRecordingRepository").orNull == "true" && localRecordingRepository.isDirectory) {
             maven { url = uri(localRecordingRepository) }
         }
         google()
