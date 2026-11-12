@@ -55,6 +55,12 @@ class FriendMarkersLayer extends StatelessWidget {
             ),
             width: 118,
             height: 100,
+            alignment: Marker.computePixelAlignment(
+              width: 118,
+              height: 100,
+              left: 59,
+              top: 16.5,
+            ),
             rotate: true,
             child: Semantics(
               button: true,
@@ -112,7 +118,33 @@ class FriendMarkersLayer extends StatelessWidget {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Center(child: markerBuilder(group.first)),
+                    if (group.length == 1)
+                      Center(child: markerBuilder(group.first))
+                    else
+                      Positioned(
+                        top: 0,
+                        left: 42.5,
+                        child: Container(
+                          width: 33,
+                          height: 33,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: Colors.deepOrange,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '${group.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     if (group.length == 1 && headings[group.first.id] != null)
                       Positioned(
                         top: 4,
@@ -132,26 +164,6 @@ class FriendMarkersLayer extends StatelessWidget {
                                 size: 14,
                                 color: Color(0xFF1E88E5),
                               ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (group.length > 1)
-                      Positioned(
-                        right: 0,
-                        bottom: 15,
-                        child: Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: Colors.deepOrange,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: Text(
-                            '${group.length}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
