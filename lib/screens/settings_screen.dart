@@ -1,3 +1,4 @@
+import 'signal_test_screen.dart';
 import 'app_versions_screen.dart';
 import '../config/app_variant.dart';
 import 'e2ee_test_chat_screen.dart';
@@ -294,6 +295,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const E2eeTestChatScreen()),
+            ),
+          ),
+        if (AppVariant.signalTest)
+          ListTile(
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Проверка Signal · эксперимент'),
+            subtitle: const Text(
+              'Локальные тестовые сообщения. Реальные чаты ещё на прежней схеме.',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SignalTestScreen()),
             ),
           ),
         if (AppVariant.e2eeMessaging)

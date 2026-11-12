@@ -26,6 +26,8 @@ jobs:
         run: flutter test --no-pub test/e2ee_box_codec_test.dart test/e2ee_recovery_vault_test.dart test/e2ee_secret_store_test.dart test/e2ee_signal_runtime_test.dart test/e2ee_test_chat_screen_test.dart
       - name: E2EE messaging beta transport and downgrade protection
         run: flutter test --no-pub test/chat_e2ee_transport_test.dart --dart-define=UI_BETA=true --dart-define=E2EE_MESSAGING=true
+      - name: Signal engine and local diagnostic checks
+        run: flutter test --no-pub test/signal_protocol_stores_test.dart test/signal_state_database_test.dart test/signal_message_engine_test.dart test/signal_diagnostic_test.dart test/signal_test_screen_test.dart
       - name: E2EE audit regression checks
         run: flutter test --no-pub test/push_reply_no_echo_test.dart test/locked_conversation_error_test.dart test/e2ee_box_invariants_test.dart test/e2ee_send_retry_idempotency_test.dart test/local_privacy_pinning_test.dart test/secure_session_storage_test.dart
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
