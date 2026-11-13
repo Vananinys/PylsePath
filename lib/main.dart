@@ -1389,6 +1389,10 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                                 point: position,
                                 width: 96,
                                 height: 96,
+                                // The avatar centre is 22 pixels below the top.
+                                alignment: Marker.computePixelAlignment(
+                                  width: 96, height: 96, left: 48, top: 22,
+                                ),
                                 // true: flutter_map сам компенсирует поворот карты
                                 // (MarkerLayer -> Transform.rotate(-map.rotationRad)),
                                 // поэтому screenAngleDeg в RiderMarker — экранный угол,
