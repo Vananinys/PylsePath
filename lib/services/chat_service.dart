@@ -186,6 +186,7 @@ class ChatService {
     String? text,
     String? sticker,
     String? photoPath,
+    String? mediaGroupId,
     String? videoPath,
     String? videoPosterPath,
     VideoMetadata? videoMetadata,
@@ -284,6 +285,7 @@ class ChatService {
             if (replyToId != null && replyToId.isNotEmpty)
               'reply_to_id': replyToId,
             if (photoUrl != null) 'photo_url': photoUrl,
+            if (mediaGroupId != null) 'media_group_id': mediaGroupId,
             if (videoUrl != null) 'video_url': videoUrl,
             if (videoPosterUrl != null) 'video_poster_url': videoPosterUrl,
             if (videoUrl != null && videoMetadata != null)
@@ -695,14 +697,13 @@ class ChatService {
     }
     try {
       final response = await client
-          .from('chat_messages')
-          .select('id')
-          .eq('receiver_id', id)
-          .filter('read_at', 'is', null)
-          .count(CountOption.exact)
+          .rpc('pulsepath_chat_unread_counts')
           .timeout(const Duration(seconds: 12));
       if (request == _unreadRequest && userId == id) {
-        unreadTotal.value = response.count;
+        unreadTotal.value = (response as List).fold<int>(
+          0,
+          (sum, row) => sum + ((row['unread_count'] as num?)?.toInt() ?? 0),
+        );
       }
     } catch (error) {
       debugPrint('[ChatService] refreshUnread failed: $error');
@@ -716,22 +717,15 @@ class ChatService {
     if (client == null || id == null) return {};
 
     try {
+      final rows = await client
+          .rpc('pulsepath_chat_unread_counts')
+          .timeout(const Duration(seconds: 15));
+      if (userId != id) return {};
       final counts = <String, int>{};
-      for (var offset = 0; ; offset += 1000) {
-        final rows = await client
-            .from('chat_messages')
-            .select('sender_id')
-            .eq('receiver_id', id)
-            .filter('read_at', 'is', null)
-            .order('id')
-            .range(offset, offset + 999)
-            .timeout(const Duration(seconds: 15));
-        if (userId != id) return {};
-        for (final raw in rows) {
-          final sender = raw['sender_id']?.toString() ?? '';
-          if (sender.isNotEmpty) counts[sender] = (counts[sender] ?? 0) + 1;
-        }
-        if (rows.length < 1000) break;
+      for (final raw in rows as List) {
+        final sender = raw['sender_id']?.toString() ?? '';
+        if (sender.isNotEmpty)
+          counts[sender] = (raw['unread_count'] as num).toInt();
       }
       return counts;
     } catch (error) {

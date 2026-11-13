@@ -67,6 +67,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   bool _activityFailed = false;
   String? _loadError;
   Future<List<CommunityPost>>? _posts;
+  int _refreshRevision = 0;
 
   /// Состояние отношений: друзья / заявка отправлена / можно добавить.
   _Relation _relation = _Relation.none;
@@ -78,10 +79,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    if (!AppVariant.modernInterface) return _loadData();
+  Future<void> _load({bool refresh = false}) async {
+    if (!AppVariant.modernInterface) return _loadData(refresh: refresh);
     try {
-      await _loadData();
+      await _loadData(refresh: refresh);
       if (mounted) setState(() => _loadError = null);
     } catch (_) {
       if (mounted) {
@@ -93,14 +94,14 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     }
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool refresh = false}) async {
     try {
       _activity = await ActivityService().load(widget.userId);
       _activityFailed = false;
     } catch (_) {
       _activityFailed = true;
     }
-    FriendProfile? profile = widget.preloaded;
+    FriendProfile? profile = refresh ? null : widget.preloaded;
     if (profile == null || profile.id != widget.userId) {
       profile = await _friendService.fetchPublicProfile(widget.userId);
     }
@@ -137,6 +138,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       _profile = profile;
       _relation = relation;
       _isLoading = false;
+      if (refresh) _refreshRevision++;
       if (AppVariant.modernInterface) _reloadPosts();
     });
   }
@@ -164,7 +166,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     final profile = _profile;
     if (AppVariant.modernInterface && !_isLoading && profile != null) {
       return PublicProfileDashboard(
-        onRefresh: _load,
+        onRefresh: () => _load(refresh: true),
         identity: ProfileIdentityCard(
           name: profile.username,
           avatar: _buildAvatar(profile),
@@ -214,15 +216,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 'Пол',
                 _genderLabel(profile.gender),
               ),
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Здесь показаны только сведения, которыми участник поделился.',
-              ),
-            ),
           ],
         ),
-        garage: GarageProfileGallery(userId: widget.userId),
+        garage: GarageProfileGallery(
+          key: ValueKey(_refreshRevision),
+          userId: widget.userId,
+        ),
         posts: _buildPostsList(),
       );
     }
@@ -230,13 +229,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       appBar: AppBar(
         title: Text(profile?.username ?? 'Профиль'),
         centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: _load,
-            tooltip: 'Обновить профиль',
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -378,10 +370,17 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 (post) => CommunityPostCard(
                   post: post,
                   onShare: () => showCommunityPostShare(context, post: post),
-                  onRefreshVideoUrl: post.videoPath == null ? null : () async {
-                    if (_viewer == null || UserScope.currentUserId() != _viewer) throw StateError('Аккаунт изменился');
-                    return (await _communityService.resolvePostMedia(post, expectedOwner: _viewer)).videoUrl;
-                  },
+                  onRefreshVideoUrl: post.videoPath == null
+                      ? null
+                      : () async {
+                          if (_viewer == null ||
+                              UserScope.currentUserId() != _viewer)
+                            throw StateError('Аккаунт изменился');
+                          return (await _communityService.resolvePostMedia(
+                            post,
+                            expectedOwner: _viewer,
+                          )).videoUrl;
+                        },
                   onRefreshPhotoUrls: post.privatePhotoPaths.isEmpty
                       ? null
                       : () async {

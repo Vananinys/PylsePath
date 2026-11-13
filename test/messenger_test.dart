@@ -102,6 +102,7 @@ class FakeChat extends ChatService {
     String? text,
     String? sticker,
     String? photoPath,
+    String? mediaGroupId,
     String? videoPath,
     String? videoPosterPath,
     VideoMetadata? videoMetadata,
@@ -201,6 +202,45 @@ void main() {
     final second = store.saveDraft('');
     await Future.wait([first, second]);
     expect(await store.readDraft(), '');
+  });
+
+  testWidgets('Photos from one batch form one album and retain group on disk', (
+    tester,
+  ) async {
+    ChatMessage photo(String id, int seconds, String group) => ChatMessage(
+      id: id,
+      senderId: 'me',
+      receiverId: 'friend',
+      photoUrl: '/missing/$id.jpg',
+      mediaGroupId: group,
+      createdAt: DateTime.utc(2026, 10, 17, 10, 0, seconds),
+    );
+    final first = photo('1', 1, 'album-a');
+    final second = photo('2', 2, 'album-a');
+    final other = photo('3', 3, 'album-b');
+    final store = ChatLocalStore('me', 'friend', currentOwner: () => 'me');
+    await store.saveMessages([first, second, other]);
+    expect((await store.readMessages()).map((m) => m.mediaGroupId), [
+      'album-a',
+      'album-a',
+      'album-b',
+    ]);
+    final chat = FakeChat()..page = [first, second, other];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatScreen(
+          friend: const FriendProfile(id: 'friend', username: 'Сергей'),
+          service: chat,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chat-photo-album')), findsOneWidget);
+    final grid = tester.widget<GridView>(
+      find.byKey(const ValueKey('chat-photo-album')),
+    );
+    expect((grid.childrenDelegate as SliverChildBuilderDelegate).childCount, 2);
+    expect(tester.takeException(), isNull);
   });
 
   test(

@@ -19,6 +19,7 @@ class PublicProfileDashboard extends StatelessWidget {
   Widget _page(String name, List<Widget> children) => Builder(
     builder: (context) => CustomScrollView(
       key: PageStorageKey('public-profile-$name'),
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverOverlapInjector(
           handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
@@ -42,19 +43,12 @@ class PublicProfileDashboard extends StatelessWidget {
   Widget build(BuildContext context) => DefaultTabController(
     length: 4,
     child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Профиль участника'),
-        actions: [
-          IconButton(
-            onPressed: onRefresh,
-            tooltip: 'Обновить профиль',
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Профиль участника')),
       body: RefreshIndicator(
         onRefresh: onRefresh,
+        notificationPredicate: (notification) => notification.depth <= 2,
         child: NestedScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           headerSliverBuilder: (context, scrolled) => [
             SliverToBoxAdapter(
               child: Padding(

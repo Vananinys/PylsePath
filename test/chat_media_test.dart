@@ -277,7 +277,7 @@ void main() {
         sent = value;
       },
     );
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Назад'));
     await tester.pumpAndSettle();
     expect(returned, isTrue);
     expect(sent, isNull);

@@ -673,6 +673,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         return;
       }
       final pending = <ChatMessage>[];
+      final mediaGroupId = selected.where((item) => !item.isVideo).length > 1
+          ? newRideId()
+          : null;
       final now = DateTime.now().toUtc();
       _cancelMediaPreparation = false;
       var rejected = 0;
@@ -704,6 +707,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             senderId: owner,
             receiverId: widget.friend.id,
             photoUrl: item.isVideo ? null : path,
+            mediaGroupId: item.isVideo ? null : mediaGroupId,
             videoUrl: item.isVideo ? path : null,
             body: caption ?? (item.isVideo ? 'Видео' : null),
             createdAt: now.add(Duration(microseconds: pending.length)),
@@ -738,6 +742,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               senderId: owner,
               receiverId: widget.friend.id,
               photoUrl: item.isVideo ? null : path,
+              mediaGroupId: item.isVideo ? null : mediaGroupId,
               videoUrl: item.isVideo ? path : null,
               videoPosterUrl: posterPath,
               videoMetadata: preview?.metadata,
@@ -1072,6 +1077,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         text: pending.body,
         sticker: pending.sticker,
         photoPath: pending.photoUrl,
+        mediaGroupId: pending.mediaGroupId,
         videoPath: pending.videoUrl,
         videoPosterPath: pending.videoPosterUrl,
         videoMetadata: pending.videoMetadata,
@@ -1417,12 +1423,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     final visible = _visibleMessages;
     for (var i = visible.length - 1; i >= 0; i--) {
-      final message = visible[i];
+      final latest = visible[i];
+      final album = <ChatMessage>[latest];
+      while (_query.isEmpty &&
+          i > 0 &&
+          latest.isPhoto &&
+          latest.mediaGroupId != null &&
+          visible[i - 1].isPhoto &&
+          visible[i - 1].mediaGroupId == latest.mediaGroupId &&
+          visible[i - 1].senderId == latest.senderId &&
+          visible[i - 1].receiverId == latest.receiverId &&
+          _dateOnly(visible[i - 1].createdAt) == _dateOnly(latest.createdAt)) {
+        album.insert(0, visible[--i]);
+      }
+      final message = album.first;
       final day = _dateOnly(message.createdAt);
       // Группировка подряд идущих сообщений одного автора (телеграм-стиль):
       // сосед — сообщение рядом по списку от того же автора в пределах 2 мин
       // и того же дня.
-      final newer = i + 1 < visible.length ? visible[i + 1] : null;
+      final newerIndex = i + album.length;
+      final newer = newerIndex < visible.length ? visible[newerIndex] : null;
       final older = i > 0 ? visible[i - 1] : null;
       bool groupedWith(ChatMessage? other) =>
           other != null &&
@@ -1432,11 +1452,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       widgets.add(
         _buildBubble(
           message,
+          album: album.length > 1 ? album : null,
           groupedWithNewer: groupedWith(newer),
           groupedWithOlder: groupedWith(older),
         ),
       );
-      if (message.id == _firstUnreadId && _query.isEmpty) {
+      if (album.any((item) => item.id == _firstUnreadId) && _query.isEmpty) {
         widgets.add(
           const Center(
             child: Padding(
@@ -1543,6 +1564,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Widget _buildBubble(
     ChatMessage message, {
+    List<ChatMessage>? album,
     bool groupedWithNewer = false,
     bool groupedWithOlder = false,
   }) {
@@ -1556,6 +1578,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : colors.surfaceContainerHigh;
     final textColor = isMine ? colors.onPrimaryContainer : colors.onSurface;
     final grouped = groupedWithNewer || groupedWithOlder;
+    final albumFailed =
+        album?.any((item) => item.delivery == MessageDelivery.failed) ?? false;
+    final albumSending =
+        album?.any((item) => item.delivery == MessageDelivery.sending) ?? false;
+    final albumRead = album?.every((item) => item.isRead) ?? message.isRead;
 
     // «Хвостик» пузыря — у первого сообщения в цепочке (нет соседа-группы
     // снизу, т.е. со стороны старых). Внутри цепочки углы скруглены слабее.
@@ -1661,6 +1688,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             },
                           ),
                         ),
+                      ] else if (message.isPhoto && album != null) ...[
+                        _buildPhotoAlbum(album),
+                        const SizedBox(height: 2),
                       ] else if (message.isPhoto) ...[
                         // Фото-сообщение; тап — просмотр на весь экран.
                         GestureDetector(
@@ -1747,7 +1777,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         const SizedBox(height: 6),
                         ChatMessageText(text: message.body!, color: textColor),
                       ],
-                      if (message.delivery == MessageDelivery.failed)
+                      if (album == null &&
+                          message.delivery == MessageDelivery.failed)
                         TextButton.icon(
                           onPressed: () => _transmit(message, retry: true),
                           icon: const Icon(Icons.refresh, size: 16),
@@ -1775,16 +1806,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             if (isMine) ...[
                               const SizedBox(width: 3),
                               Icon(
-                                message.delivery == MessageDelivery.failed
+                                albumFailed ||
+                                        message.delivery ==
+                                            MessageDelivery.failed
                                     ? Icons.error_outline
-                                    : message.delivery ==
-                                          MessageDelivery.sending
+                                    : albumSending ||
+                                          message.delivery ==
+                                              MessageDelivery.sending
                                     ? Icons.schedule
-                                    : message.isRead
+                                    : albumRead
                                     ? Icons.done_all
                                     : Icons.done,
                                 size: 13,
-                                color: message.isRead
+                                color: albumRead
                                     ? colors.primary
                                     : colors.onSurfaceVariant,
                               ),
@@ -1815,6 +1849,53 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       ),
     );
   }
+
+  Widget _buildPhotoAlbum(List<ChatMessage> album) => SizedBox(
+    width: 220,
+    child: GridView.builder(
+      key: const ValueKey('chat-photo-album'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 2,
+        crossAxisSpacing: 2,
+      ),
+      itemCount: album.length,
+      itemBuilder: (context, index) {
+        final item = album[index];
+        return GestureDetector(
+          onTap: () => item.delivery == MessageDelivery.failed
+              ? _transmit(item, retry: true)
+              : _showPhotoFullScreen(item),
+          onLongPress: () => _showMessageMenu(item),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ChatPhoto(
+                  source: item.photoUrl!,
+                  onRetry: () => _refreshAttachment(item),
+                ),
+                if (item.delivery == MessageDelivery.failed)
+                  const ColoredBox(
+                    color: Colors.black45,
+                    child: Center(
+                      child: Icon(Icons.refresh, color: Colors.white),
+                    ),
+                  ),
+                if (item.delivery == MessageDelivery.sending)
+                  const Center(
+                    child: Icon(Icons.schedule, color: Colors.white),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 
   /// Пузырь с реакцией.
   Widget _buildReactionBubble(ChatMessage message, String emoji, int count) {

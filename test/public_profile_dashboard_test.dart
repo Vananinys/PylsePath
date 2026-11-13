@@ -14,6 +14,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pulsepath/screens/public_profile_screen.dart';
 import 'package:pulsepath/widgets/public_profile_dashboard.dart';
 import 'package:pulsepath/ui/app_theme.dart';
+import 'package:pulsepath/models/friend_profile.dart';
 
 void main() {
   const me = '00000000-0000-4000-8000-000000000001';
@@ -250,5 +251,29 @@ void main() {
     await tester.tap(find.text('Повторить'));
     await tester.pumpAndSettle();
     expect(find.text('Постов пока нет'), findsOneWidget);
+  });
+
+  testWidgets('Pulling down reloads a preloaded public profile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: PublicProfileScreen(
+          userId: friend,
+          preloaded: FriendProfile(id: friend, username: 'Старое имя'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Старое имя'), findsOneWidget);
+    expect(find.byTooltip('Обновить профиль'), findsNothing);
+    await tester.drag(find.byType(NestedScrollView), const Offset(0, 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Александр — длинное имя участника'), findsOneWidget);
+    expect(
+      paths.where((path) => path.endsWith('/public_profiles')),
+      isNotEmpty,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

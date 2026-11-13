@@ -26,6 +26,7 @@ class ChatMessage {
   final String? body;
   final String? sticker;
   final String? photoUrl;
+  final String? mediaGroupId;
 
   /// Голосовое сообщение: URL в Storage и длительность в секундах.
   final String? audioUrl;
@@ -59,6 +60,7 @@ class ChatMessage {
     this.body,
     this.sticker,
     this.photoUrl,
+    this.mediaGroupId,
     this.audioUrl,
     this.audioSeconds,
     required this.createdAt,
@@ -93,6 +95,7 @@ class ChatMessage {
         body: body,
         sticker: sticker,
         photoUrl: photoUrl,
+        mediaGroupId: mediaGroupId,
         audioUrl: audioUrl,
         audioSeconds: audioSeconds,
         createdAt: createdAt,
@@ -124,6 +127,7 @@ class ChatMessage {
     'body': body,
     'sticker': sticker,
     'photo_url': photoReference ?? photoUrl,
+    'media_group_id': mediaGroupId,
     'audio_url': audioReference ?? audioUrl,
     'video_url': videoReference ?? videoUrl,
     'video_poster_url': videoPosterReference ?? videoPosterUrl,
@@ -163,6 +167,7 @@ class ChatMessage {
       body: row['body'] as String?,
       sticker: row['sticker'] as String?,
       photoUrl: row['photo_url'] as String?,
+      mediaGroupId: row['media_group_id'] as String?,
       audioUrl: row['audio_url'] as String?,
       audioSeconds: row['audio_seconds'] as int?,
       createdAt:
