@@ -335,8 +335,11 @@ class LocalRoutePickerState extends State<LocalRoutePicker> {
                       child: const Text('Любая дата'),
                     ),
                   number('Расстояние от, км', minKm),
+                  const SizedBox(height: 12),
                   number('Расстояние до, км', maxKm),
+                  const SizedBox(height: 20),
                   number('Длительность от, мин', minTime),
+                  const SizedBox(height: 12),
                   number('Длительность до, мин', maxTime),
                   if (error != null)
                     Padding(
@@ -482,9 +485,7 @@ class LocalRoutePickerState extends State<LocalRoutePicker> {
                         final route = items[index];
                         final date = route.recordedDateTime;
                         return ListTile(
-                          leading: Icon(
-                            _routes ? Icons.route : Icons.directions_run,
-                          ),
+                          leading: _RouteThumbnail(route: route),
                           title: Text(route.title),
                           subtitle: Text(
                             '${date == null ? 'Дата неизвестна' : MaterialLocalizations.of(context).formatShortDate(date.toLocal())} · ${route.distanceKm.toStringAsFixed(1)} км · ${route.displayDuration}',
@@ -511,4 +512,69 @@ class LocalRoutePickerState extends State<LocalRoutePicker> {
       ),
     );
   }
+}
+
+class _RouteThumbnail extends StatelessWidget {
+  const _RouteThumbnail({required this.route});
+  final SavedRoute route;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 58,
+    height: 58,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: route.routePoints.length < 2
+        ? const Icon(Icons.route)
+        : CustomPaint(painter: _RouteThumbnailPainter(route)),
+  );
+}
+
+class _RouteThumbnailPainter extends CustomPainter {
+  const _RouteThumbnailPainter(this.route);
+  final SavedRoute route;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final points = route.routePoints;
+    var minLat = points.first.latitude, maxLat = minLat;
+    var minLon = points.first.longitude, maxLon = minLon;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLon) minLon = p.longitude;
+      if (p.longitude > maxLon) maxLon = p.longitude;
+    }
+    final latRange = (maxLat - minLat).clamp(0.000001, double.infinity);
+    final lonRange = (maxLon - minLon).clamp(0.000001, double.infinity);
+    final scale = ((size.width - 16) / lonRange < (size.height - 16) / latRange)
+        ? (size.width - 16) / lonRange
+        : (size.height - 16) / latRange;
+    final left = (size.width - lonRange * scale) / 2;
+    final top = (size.height - latRange * scale) / 2;
+    final starts = route.workoutDetails.segmentStarts.toSet();
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final x = left + (points[i].longitude - minLon) * scale;
+      final y = top + (maxLat - points[i].latitude) * scale;
+      if (i == 0 || starts.contains(i)) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.deepOrange
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RouteThumbnailPainter oldDelegate) =>
+      oldDelegate.route != route;
 }
