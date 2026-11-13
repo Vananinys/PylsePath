@@ -1645,8 +1645,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
               ),
             ),
 
-            if (!_isPreRideOpen || isTracking)
-              IgnorePointer(
+            IgnorePointer(
                 ignoring: _isScreenLocked,
                 child: SearchPanel(
                   focusNode: _searchFocusNode,
@@ -1678,16 +1677,6 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                     _onSearchChanged('');
                   },
                   openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
-                ),
-              ),
-            if (_isPreRideOpen && !isTracking && !_isScreenLocked)
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 12,
-                left: 16,
-                child: IconButton.filledTonal(
-                  tooltip: 'Меню',
-                  icon: const Icon(Icons.menu),
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                 ),
               ),
             if ((!_isPreRideOpen || isTracking) &&
@@ -1960,6 +1949,10 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
             // Когда заезд идёт — обе прячутся, остаётся панель метрик.
             if (!homeNavigationVisible &&
                 !isTracking &&
+                (!_isPreRideOpen ||
+                    (!_searchFocusNode.hasFocus &&
+                        _searchResults.isEmpty &&
+                        !_isSearching)) &&
                 (!routeSheetVisible || _isPreRideOpen))
               Positioned(
                 bottom: routeSheetVisible && !_isPreRideOpen
