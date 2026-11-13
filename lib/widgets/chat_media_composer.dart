@@ -7,6 +7,12 @@ import '../widgets/chat_photo_editor.dart';
 import '../widgets/chat_video_player.dart';
 import 'video_poster.dart';
 
+class ChatMediaSelection {
+  const ChatMediaSelection(this.items, this.caption);
+  final List<ChatMediaDraft> items;
+  final String caption;
+}
+
 class ChatMediaComposer extends StatefulWidget {
   const ChatMediaComposer({
     super.key,
@@ -25,6 +31,14 @@ class _ChatMediaComposerState extends State<ChatMediaComposer> {
   late final List<ChatMediaDraft> _items = List.of(widget.items);
   int _selected = 0;
   bool _busy = false;
+  final _caption = TextEditingController();
+
+  @override
+  void dispose() {
+    _caption.dispose();
+    super.dispose();
+  }
+
   Future<Uint8List>? _preview;
   @override
   void initState() {
@@ -97,21 +111,59 @@ class _ChatMediaComposerState extends State<ChatMediaComposer> {
     }
   }
 
+  void _remove() {
+    if (_busy || _items.isEmpty) return;
+    setState(() {
+      _items.removeAt(_selected);
+      _selected = _items.isEmpty ? 0 : _selected.clamp(0, _items.length - 1);
+      _loadPreview();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final selected = _items.isEmpty ? null : _items[_selected];
     final error = ChatMediaDraft.validateBatch(_items);
+    const foreground = Colors.white;
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
-        appBar: AppBar(title: Text('Вложения · ${_items.length}/20')),
+        backgroundColor: const Color(0xff181818),
+        resizeToAvoidBottomInset: true,
         body: SafeArea(
           child: Column(
             children: [
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Назад',
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back, color: foreground),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Предпросмотр · ${_items.length}/${ChatMediaDraft.maxItems}',
+                      style: const TextStyle(
+                        color: foreground,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Убрать выбранное',
+                    onPressed: _busy || selected == null ? null : _remove,
+                    icon: const Icon(Icons.delete_outline, color: foreground),
+                  ),
+                ],
+              ),
               Expanded(
                 child: Center(
                   child: selected == null
-                      ? const Text('Добавьте фото или видео')
+                      ? const Text(
+                          'Добавьте фото или видео',
+                          style: TextStyle(color: foreground),
+                        )
                       : selected.isVideo
                       ? ChatVideoPlayer(
                           key: ValueKey(selected.file.path),
@@ -121,143 +173,191 @@ class _ChatMediaComposerState extends State<ChatMediaComposer> {
                       : FutureBuilder<Uint8List>(
                           future: _preview,
                           builder: (context, snapshot) => snapshot.hasData
-                              ? Padding(
-                                  padding: const EdgeInsets.all(8),
+                              ? InteractiveViewer(
+                                  key: ValueKey(
+                                    '${selected.file.path}-$_selected',
+                                  ),
+                                  minScale: 1,
+                                  maxScale: 4,
                                   child: Image.memory(
                                     snapshot.data!,
                                     fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) =>
-                                        const Text('Фото не удалось показать'),
+                                    errorBuilder: (_, __, ___) => const Text(
+                                      'Фото не удалось показать',
+                                      style: TextStyle(color: foreground),
+                                    ),
                                   ),
                                 )
                               : snapshot.hasError
-                              ? const Text('Не удалось прочитать фото')
+                              ? const Text(
+                                  'Не удалось прочитать фото',
+                                  style: TextStyle(color: foreground),
+                                )
                               : const CircularProgressIndicator(),
                         ),
                 ),
               ),
-              SizedBox(
-                height: 76,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) => ChoiceChip(
-                    selected: _selected == index,
-                    avatar: _items[index].isVideo
-                        ? VideoPoster(
-                            localSource: _items[index].file.path,
-                            small: true,
-                          )
-                        : const Icon(Icons.photo),
-                    label: Text('${index + 1}'),
-                    onSelected: _busy
-                        ? null
-                        : (_) => setState(() {
-                            _selected = index;
-                            _loadPreview();
-                          }),
+              if (_items.length > 1)
+                SizedBox(
+                  height: 64,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _items.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 7),
+                    itemBuilder: (context, index) {
+                      final item = _items[index];
+                      return Semantics(
+                        button: true,
+                        selected: index == _selected,
+                        label: 'Вложение ${index + 1} из ${_items.length}',
+                        child: InkWell(
+                          onTap: _busy
+                              ? null
+                              : () => setState(() {
+                                  _selected = index;
+                                  _loadPreview();
+                                }),
+                          child: Container(
+                            width: 56,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: index == _selected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Colors.transparent,
+                                width: 3,
+                              ),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: item.isVideo
+                                  ? VideoPoster(
+                                      localSource: item.file.path,
+                                      small: true,
+                                    )
+                                  : FutureBuilder<Uint8List>(
+                                      future: item.editedBytes != null
+                                          ? Future.value(item.editedBytes)
+                                          : item.file.readAsBytes(),
+                                      builder: (_, snapshot) => snapshot.hasData
+                                          ? Image.memory(
+                                              snapshot.data!,
+                                              fit: BoxFit.cover,
+                                              cacheWidth: 160,
+                                              errorBuilder: (_, __, ___) =>
+                                                  const Icon(
+                                                    Icons.broken_image,
+                                                    color: foreground,
+                                                  ),
+                                            )
+                                          : const Icon(
+                                              Icons.photo,
+                                              color: foreground,
+                                            ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              if (error != null && _items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    error,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                child: TextField(
+                  controller: _caption,
+                  enabled: !_busy,
+                  maxLength: 4000,
+                  minLines: 1,
+                  maxLines: 4,
+                  style: const TextStyle(color: foreground),
+                  decoration: InputDecoration(
+                    hintText: 'Добавить подпись…',
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    counterText: '',
+                    filled: true,
+                    fillColor: const Color(0xff383838),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
-              Flexible(
-                flex: 0,
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (selected != null)
-                          Text(
-                            selected.file.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        if (error != null && _items.isNotEmpty)
-                          Text(
-                            error,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        const Text(
-                          'До 20 файлов · фото до 20 МБ · видео до 50 МБ · всего до 100 МБ',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            TextButton.icon(
-                              onPressed: _busy || _items.length >= 20
-                                  ? null
-                                  : () => _add(widget.onAddPhotos),
-                              icon: const Icon(Icons.add_photo_alternate),
-                              label: const Text('Ещё фото'),
-                            ),
-                            TextButton.icon(
-                              onPressed: _busy || _items.length >= 20
-                                  ? null
-                                  : () => _add(widget.onAddVideo),
-                              icon: const Icon(Icons.video_library),
-                              label: const Text('Ещё видео'),
-                            ),
-                            if (selected != null && !selected.isVideo)
-                              TextButton.icon(
-                                onPressed: _busy ? null : _edit,
-                                icon: const Icon(Icons.edit),
-                                label: const Text('Редактировать'),
-                              ),
-                            if (selected?.editedBytes != null)
-                              TextButton(
-                                onPressed: _busy
-                                    ? null
-                                    : () => setState(() {
-                                        _items[_selected] = ChatMediaDraft(
-                                          file: selected!.file,
-                                          isVideo: false,
-                                          size: selected.size,
-                                        );
-                                        _loadPreview();
-                                      }),
-                                child: const Text('Оригинал'),
-                              ),
-                            if (selected != null)
-                              TextButton.icon(
-                                onPressed: _busy
-                                    ? null
-                                    : () => setState(() {
-                                        _items.removeAt(_selected);
-                                        _selected = _items.isEmpty
-                                            ? 0
-                                            : _selected.clamp(
-                                                0,
-                                                _items.length - 1,
-                                              );
-                                        _loadPreview();
-                                      }),
-                                icon: const Icon(Icons.remove_circle_outline),
-                                label: const Text('Убрать'),
-                              ),
-                            FilledButton.icon(
-                              onPressed: _busy || error != null
-                                  ? null
-                                  : () => Navigator.pop(
-                                      context,
-                                      List<ChatMediaDraft>.unmodifiable(_items),
-                                    ),
-                              icon: const Icon(Icons.send),
-                              label: Text('Отправить ${_items.length}'),
-                            ),
-                          ],
-                        ),
-                      ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Ещё фото',
+                      onPressed: _busy || _items.length >= 20
+                          ? null
+                          : () => _add(widget.onAddPhotos),
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      color: foreground,
                     ),
-                  ),
+                    IconButton(
+                      tooltip: 'Ещё видео',
+                      onPressed: _busy || _items.length >= 20
+                          ? null
+                          : () => _add(widget.onAddVideo),
+                      icon: const Icon(Icons.video_library_outlined),
+                      color: foreground,
+                    ),
+                    if (selected != null && !selected.isVideo)
+                      IconButton(
+                        tooltip: 'Обрезать или рисовать',
+                        onPressed: _busy ? null : _edit,
+                        icon: const Icon(Icons.tune),
+                        color: foreground,
+                      ),
+                    if (selected?.editedBytes != null)
+                      IconButton(
+                        tooltip: 'Вернуть оригинал',
+                        onPressed: _busy
+                            ? null
+                            : () => setState(() {
+                                _items[_selected] = ChatMediaDraft(
+                                  file: selected!.file,
+                                  isVideo: false,
+                                  size: selected.size,
+                                );
+                                _loadPreview();
+                              }),
+                        icon: const Icon(Icons.restore),
+                        color: foreground,
+                      ),
+                    const Spacer(),
+                    IconButton.filled(
+                      tooltip: 'Отправить ${_items.length}',
+                      onPressed: _busy || error != null
+                          ? null
+                          : () => Navigator.pop(
+                              context,
+                              ChatMediaSelection(
+                                List<ChatMediaDraft>.unmodifiable(_items),
+                                _caption.text.trim(),
+                              ),
+                            ),
+                      icon: const Icon(Icons.send),
+                    ),
+                  ],
                 ),
               ),
             ],

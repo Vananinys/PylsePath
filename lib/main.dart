@@ -2095,7 +2095,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                         : (index) {
                             if (index == 0) return;
                             if (index == 3) {
-                              _scaffoldKey.currentState?.openDrawer();
+                              _openMessages();
                               return;
                             }
                             Navigator.push(
@@ -2109,8 +2109,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
                                   profile: ProfileScreen(
                                     provider: context.read<ProfileProvider>(),
                                   ),
-                                  onMenu: () =>
-                                      _scaffoldKey.currentState?.openDrawer(),
+                                  onMessages: _openMessages,
                                 ),
                               ),
                             );

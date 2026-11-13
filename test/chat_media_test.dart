@@ -216,7 +216,7 @@ void main() {
   Future<void> composer(
     WidgetTester tester,
     List<ChatMediaDraft> items, {
-    ValueChanged<List<ChatMediaDraft>?>? onResult,
+    ValueChanged<ChatMediaSelection?>? onResult,
     Future<List<ChatMediaDraft>> Function()? add,
   }) async {
     await tester.pumpWidget(
@@ -225,7 +225,7 @@ void main() {
           builder: (context) => Scaffold(
             body: TextButton(
               onPressed: () async {
-                final result = await Navigator.push<List<ChatMediaDraft>>(
+                final result = await Navigator.push<ChatMediaSelection>(
                   context,
                   MaterialPageRoute(
                     builder: (_) => ChatMediaComposer(
@@ -250,7 +250,7 @@ void main() {
   testWidgets('Selection is previewed and only confirmed send returns it', (
     tester,
   ) async {
-    List<ChatMediaDraft>? sent;
+    ChatMediaSelection? sent;
     final a = draft('first.mp4', video: true);
     await composer(tester, [
       a,
@@ -259,16 +259,16 @@ void main() {
     expect(sent, isNull);
     expect(find.byType(ChatVideoPlayer), findsOneWidget);
     expect(find.byTooltip('Воспроизвести'), findsOneWidget);
-    await tester.tap(find.text('Убрать'));
+    await tester.tap(find.byTooltip('Убрать выбранное'));
     await tester.pumpAndSettle();
-    expect(find.text('Отправить 1'), findsOneWidget);
-    await tester.tap(find.text('Отправить 1'));
+    expect(find.byTooltip('Отправить 1'), findsOneWidget);
+    await tester.tap(find.byTooltip('Отправить 1'));
     await tester.pumpAndSettle();
-    expect(sent!.single.file.path, '/fake/second.mov');
+    expect(sent!.items.single.file.path, '/fake/second.mov');
   });
   testWidgets('Back cancels without sending', (tester) async {
     bool returned = false;
-    List<ChatMediaDraft>? sent;
+    ChatMediaSelection? sent;
     await composer(
       tester,
       [draft('a.mp4', video: true)],
@@ -290,10 +290,10 @@ void main() {
       List.generate(19, (i) => draft('$i.mp4', video: true)),
       add: () async => [draft('new.jpg'), draft('extra.jpg')],
     );
-    await tester.tap(find.text('Ещё фото'));
+    await tester.tap(find.byTooltip('Ещё фото'));
     await tester.pumpAndSettle();
     expect(find.text('Можно отправить до 20 файлов за раз'), findsOneWidget);
-    expect(find.text('Вложения · 19/20'), findsOneWidget);
+    expect(find.text('Предпросмотр · 19/20'), findsOneWidget);
   });
   testWidgets('320px with large text still allows sending and removing', (
     tester,
@@ -318,8 +318,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('Отправить 1'), findsOneWidget);
-    await tester.tap(find.text('Убрать'));
+    expect(find.byTooltip('Отправить 1'), findsOneWidget);
+    await tester.tap(find.byTooltip('Убрать выбранное'));
     await tester.pumpAndSettle();
     expect(find.text('Добавьте фото или видео'), findsOneWidget);
     expect(tester.takeException(), isNull);

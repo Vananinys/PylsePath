@@ -651,7 +651,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _showError(validation);
         return;
       }
-      final selected = await Navigator.push<List<ChatMediaDraft>>(
+      final selection = await Navigator.push<ChatMediaSelection>(
         context,
         MaterialPageRoute(
           builder: (_) => ChatMediaComposer(
@@ -661,7 +661,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         ),
       );
-      if (!mounted || _chatService.userId != owner || selected == null) return;
+      if (!mounted || _chatService.userId != owner || selection == null) return;
+      final selected = selection.items;
       final error = ChatMediaDraft.validateBatch(selected);
       if (error != null) {
         _showError(error);
@@ -686,6 +687,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               'Сохраняем ${pending.length + rejected + 1} из ${selected.length}',
         );
         try {
+          final caption = pending.isEmpty && selection.caption.isNotEmpty
+              ? selection.caption
+              : null;
           final id = newRideId();
           final path = await retainChatMedia(
             item.file,
@@ -701,7 +705,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             receiverId: widget.friend.id,
             photoUrl: item.isVideo ? null : path,
             videoUrl: item.isVideo ? path : null,
-            body: item.isVideo ? 'Видео' : null,
+            body: caption ?? (item.isVideo ? 'Видео' : null),
             createdAt: now.add(Duration(microseconds: pending.length)),
             replyToId: pending.isEmpty ? _replyingTo?.id : null,
             delivery: MessageDelivery.failed,
@@ -737,7 +741,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               videoUrl: item.isVideo ? path : null,
               videoPosterUrl: posterPath,
               videoMetadata: preview?.metadata,
-              body: item.isVideo ? 'Видео' : null,
+              body: caption ?? (item.isVideo ? 'Видео' : null),
               createdAt: now.add(Duration(microseconds: pending.length)),
               replyToId: pending.isEmpty ? _replyingTo?.id : null,
               delivery: MessageDelivery.sending,
@@ -1737,6 +1741,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           color: textColor,
                         ),
                         const SizedBox(height: 2),
+                      ],
+                      if ((message.isPhoto || message.isVideo) &&
+                          (message.body?.trim().isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 6),
+                        ChatMessageText(text: message.body!, color: textColor),
                       ],
                       if (message.delivery == MessageDelivery.failed)
                         TextButton.icon(

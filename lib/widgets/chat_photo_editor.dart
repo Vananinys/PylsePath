@@ -5,7 +5,46 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 /// Crop coordinates are normalized in the rotated image, independent of layout.
-Future<Uint8List> renderChatPhoto(ui.Image image, int turns, Rect crop) async {
+class ChatPhotoStroke {
+  ChatPhotoStroke(this.color, this.points);
+  final Color color;
+  final List<Offset> points;
+}
+
+void _paintStrokes(Canvas canvas, Size size, List<ChatPhotoStroke> strokes) {
+  for (final stroke in strokes) {
+    if (stroke.points.isEmpty) continue;
+    final paint = Paint()
+      ..color = stroke.color
+      ..strokeWidth = math.min(size.width, size.height) * .012
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    Offset point(Offset p) => Offset(p.dx * size.width, p.dy * size.height);
+    if (stroke.points.length == 1) {
+      canvas.drawCircle(
+        point(stroke.points.first),
+        paint.strokeWidth / 2,
+        Paint()..color = stroke.color,
+      );
+    } else {
+      final path = Path()
+        ..moveTo(point(stroke.points.first).dx, point(stroke.points.first).dy);
+      for (final p in stroke.points.skip(1)) {
+        final next = point(p);
+        path.lineTo(next.dx, next.dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+}
+
+Future<Uint8List> renderChatPhoto(
+  ui.Image image,
+  int turns,
+  Rect crop, {
+  List<ChatPhotoStroke> strokes = const [],
+}) async {
   final rotation = turns % 4;
   final width = rotation.isOdd ? image.height : image.width;
   final height = rotation.isOdd ? image.width : image.height;
@@ -21,6 +60,7 @@ Future<Uint8List> renderChatPhoto(ui.Image image, int turns, Rect crop) async {
   }
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)..translate(-area.left, -area.top);
+  canvas.save();
   switch (rotation) {
     case 1:
       canvas.translate(image.height.toDouble(), 0);
@@ -33,6 +73,8 @@ Future<Uint8List> renderChatPhoto(ui.Image image, int turns, Rect crop) async {
       canvas.rotate(-math.pi / 2);
   }
   canvas.drawImage(image, Offset.zero, Paint());
+  canvas.restore();
+  _paintStrokes(canvas, Size(width.toDouble(), height.toDouble()), strokes);
   final picture = recorder.endRecording();
   ui.Image? output;
   try {
@@ -61,6 +103,9 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
   Rect _crop = const Rect.fromLTWH(0, 0, 1, 1);
   Offset? _origin;
   bool _cropping = false;
+  bool _drawing = false;
+  Color _penColor = Colors.red;
+  final List<ChatPhotoStroke> _strokes = [];
   @override
   void initState() {
     super.initState();
@@ -98,7 +143,12 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
     if (_image == null || _busy) return;
     setState(() => _busy = true);
     try {
-      final result = await renderChatPhoto(_image!, _turns, _crop);
+      final result = await renderChatPhoto(
+        _image!,
+        _turns,
+        _crop,
+        strokes: _strokes,
+      );
       if (mounted) Navigator.pop(context, result);
     } catch (_) {
       if (mounted) {
@@ -143,14 +193,35 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                               width: width,
                               height: height,
                               child: GestureDetector(
-                                onPanStart: !_cropping || _busy
+                                onPanStart: (!_cropping && !_drawing) || _busy
                                     ? null
                                     : (d) {
-                                        _origin = normalized(d.localPosition);
+                                        final point = normalized(
+                                          d.localPosition,
+                                        );
+                                        if (_drawing) {
+                                          setState(
+                                            () => _strokes.add(
+                                              ChatPhotoStroke(_penColor, [
+                                                point,
+                                              ]),
+                                            ),
+                                          );
+                                        } else {
+                                          _origin = point;
+                                        }
                                       },
-                                onPanUpdate: !_cropping || _busy
+                                onPanUpdate: (!_cropping && !_drawing) || _busy
                                     ? null
                                     : (d) {
+                                        if (_drawing) {
+                                          setState(
+                                            () => _strokes.last.points.add(
+                                              normalized(d.localPosition),
+                                            ),
+                                          );
+                                          return;
+                                        }
                                         final origin = _origin;
                                         if (origin == null) return;
                                         final end = normalized(d.localPosition);
@@ -173,6 +244,9 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                                         fit: BoxFit.fill,
                                       ),
                                     ),
+                                    CustomPaint(
+                                      painter: _StrokePainter(_strokes),
+                                    ),
                                     if (_cropping)
                                       CustomPaint(painter: _CropOverlay(_crop)),
                                   ],
@@ -191,6 +265,38 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                   'Проведите по фото, чтобы выбрать область обрезки.',
                 ),
               ),
+            if (_drawing)
+              Wrap(
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final color in [
+                    Colors.red,
+                    Colors.orange,
+                    Colors.yellow,
+                    Colors.green,
+                    Colors.blue,
+                    Colors.white,
+                    Colors.black,
+                  ])
+                    IconButton(
+                      tooltip: 'Цвет кисти',
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _penColor = color),
+                      icon: Icon(
+                        _penColor == color ? Icons.check_circle : Icons.circle,
+                        color: color,
+                      ),
+                    ),
+                  IconButton(
+                    tooltip: 'Отменить штрих',
+                    onPressed: _busy || _strokes.isEmpty
+                        ? null
+                        : () => setState(() => _strokes.removeLast()),
+                    icon: const Icon(Icons.undo),
+                  ),
+                ],
+              ),
             if (_error != null && _image != null) Text(_error!),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -204,6 +310,15 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                         ? null
                         : () => setState(() {
                             _turns = (_turns + 1) % 4;
+                            for (final stroke in _strokes) {
+                              for (var i = 0; i < stroke.points.length; i++) {
+                                final point = stroke.points[i];
+                                stroke.points[i] = Offset(
+                                  1 - point.dy,
+                                  point.dx,
+                                );
+                              }
+                            }
                             _crop = const Rect.fromLTWH(0, 0, 1, 1);
                           }),
                     icon: const Icon(Icons.rotate_right),
@@ -212,9 +327,22 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                   OutlinedButton.icon(
                     onPressed: _busy || _image == null
                         ? null
-                        : () => setState(() => _cropping = !_cropping),
+                        : () => setState(() {
+                            _cropping = !_cropping;
+                            _drawing = false;
+                          }),
                     icon: const Icon(Icons.crop),
                     label: Text(_cropping ? 'Область выбрана' : 'Обрезать'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _busy || _image == null
+                        ? null
+                        : () => setState(() {
+                            _drawing = !_drawing;
+                            _cropping = false;
+                          }),
+                    icon: const Icon(Icons.brush_outlined),
+                    label: Text(_drawing ? 'Рисование включено' : 'Рисовать'),
                   ),
                   TextButton(
                     onPressed: _busy
@@ -223,6 +351,8 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
                             _turns = 0;
                             _crop = const Rect.fromLTWH(0, 0, 1, 1);
                             _cropping = false;
+                            _drawing = false;
+                            _strokes.clear();
                           }),
                     child: const Text('Сбросить'),
                   ),
@@ -238,6 +368,15 @@ class _ChatPhotoEditorState extends State<ChatPhotoEditor> {
       ),
     ),
   );
+}
+
+class _StrokePainter extends CustomPainter {
+  const _StrokePainter(this.strokes);
+  final List<ChatPhotoStroke> strokes;
+  @override
+  void paint(Canvas canvas, Size size) => _paintStrokes(canvas, size, strokes);
+  @override
+  bool shouldRepaint(_StrokePainter oldDelegate) => true;
 }
 
 class _CropOverlay extends CustomPainter {

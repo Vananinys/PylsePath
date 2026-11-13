@@ -75,7 +75,7 @@ void main() {
                     initialIndex: 1,
                     community: const Text('Community content'),
                     profile: const Text('Profile content'),
-                    onMenu: () {},
+                    onMessages: () {},
                   ),
                 ),
               ),

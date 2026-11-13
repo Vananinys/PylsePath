@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/chat_service.dart';
 import 'widget_size_observer.dart';
 
 class MapHomeNavigation extends StatelessWidget {
@@ -19,23 +20,33 @@ class MapHomeNavigation extends StatelessWidget {
       selectedIndex: selectedIndex,
       onDestinationSelected: onSelected,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      destinations: const [
-        NavigationDestination(
+      destinations: [
+        const NavigationDestination(
           icon: Icon(Icons.map_outlined),
           selectedIcon: Icon(Icons.map),
           label: 'Карта',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.explore_outlined),
           selectedIcon: Icon(Icons.explore),
           label: 'Лента',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.person_outline),
           selectedIcon: Icon(Icons.person),
           label: 'Профиль',
         ),
-        NavigationDestination(icon: Icon(Icons.menu), label: 'Меню'),
+        NavigationDestination(
+          icon: ValueListenableBuilder<int>(
+            valueListenable: ChatService.unreadTotal,
+            builder: (context, unread, _) => Badge(
+              isLabelVisible: unread > 0,
+              label: Text(unread > 99 ? '99+' : '$unread'),
+              child: const Icon(Icons.chat_bubble_outline),
+            ),
+          ),
+          label: 'Сообщения',
+        ),
       ],
     ),
   );
@@ -48,12 +59,12 @@ class MapHomeSections extends StatefulWidget {
     required this.initialIndex,
     required this.community,
     required this.profile,
-    required this.onMenu,
+    required this.onMessages,
   });
   final int initialIndex;
   final Widget community;
   final Widget profile;
-  final VoidCallback onMenu;
+  final VoidCallback onMessages;
   @override
   State<MapHomeSections> createState() => _MapHomeSectionsState();
 }
@@ -71,7 +82,7 @@ class _MapHomeSectionsState extends State<MapHomeSections> {
       onSelected: (index) {
         if (index == 0 || index == 3) {
           Navigator.pop(context);
-          if (index == 3) widget.onMenu();
+          if (index == 3) widget.onMessages();
         } else {
           setState(() => _index = index);
         }

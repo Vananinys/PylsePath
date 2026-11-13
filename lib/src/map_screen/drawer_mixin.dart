@@ -2,6 +2,14 @@ part of '../../main.dart';
 
 /// Боковое меню (дровер): пункты из реестра модулей, аватар, версия, выход.
 mixin _DrawerBuilderMixin on _MapScreenStateBase {
+  void _openMessages() {
+    UsageStatistics.instance.record(UsageEvent.chatsOpened);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ChatsListScreen()),
+    ).then((_) => ChatService().refreshUnread());
+  }
+
   /// Читает версию из метаданных сборки, чтобы не дублировать её строкой в UI.
   Future<void> _loadAppVersion() async {
     try {
@@ -96,12 +104,8 @@ mixin _DrawerBuilderMixin on _MapScreenStateBase {
               unread > 0 ? _buildDrawerBadge(unread) : const SizedBox.shrink(),
         ),
         onTap: () {
-          UsageStatistics.instance.record(UsageEvent.chatsOpened);
           Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ChatsListScreen()),
-          ).then((_) => ChatService().refreshUnread());
+          _openMessages();
         },
       ),
       'community': ListTile(
