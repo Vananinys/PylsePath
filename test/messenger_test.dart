@@ -225,7 +225,19 @@ void main() {
       'album-a',
       'album-b',
     ]);
-    final chat = FakeChat()..page = [first, second, other];
+    final interleaved = ChatMessage(
+      id: 'between',
+      senderId: 'friend',
+      receiverId: 'me',
+      body: 'Сообщение во время загрузки',
+      createdAt: DateTime.utc(
+        2026,
+        10,
+        17,
+        10,
+      ).add(const Duration(milliseconds: 1500)),
+    );
+    final chat = FakeChat()..page = [first, interleaved, second, other];
     await tester.pumpWidget(
       MaterialApp(
         home: ChatScreen(
@@ -240,6 +252,7 @@ void main() {
       find.byKey(const ValueKey('chat-photo-album')),
     );
     expect((grid.childrenDelegate as SliverChildBuilderDelegate).childCount, 2);
+    expect(find.text('Сообщение во время загрузки'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

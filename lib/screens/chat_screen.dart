@@ -1422,28 +1422,34 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final widgets = <Widget>[];
 
     final visible = _visibleMessages;
+    final entries = <List<ChatMessage>>[];
+    final albums = <String, List<ChatMessage>>{};
     for (var i = visible.length - 1; i >= 0; i--) {
-      final latest = visible[i];
-      final album = <ChatMessage>[latest];
-      while (_query.isEmpty &&
-          i > 0 &&
-          latest.isPhoto &&
-          latest.mediaGroupId != null &&
-          visible[i - 1].isPhoto &&
-          visible[i - 1].mediaGroupId == latest.mediaGroupId &&
-          visible[i - 1].senderId == latest.senderId &&
-          visible[i - 1].receiverId == latest.receiverId &&
-          _dateOnly(visible[i - 1].createdAt) == _dateOnly(latest.createdAt)) {
-        album.insert(0, visible[--i]);
+      final item = visible[i];
+      if (_query.isEmpty && item.isPhoto && item.mediaGroupId != null) {
+        final key =
+            '${item.senderId}:${item.receiverId}:${item.mediaGroupId}:${_dateOnly(item.createdAt)}';
+        final existing = albums[key];
+        if (existing != null) {
+          existing.insert(0, item);
+          continue;
+        }
+        final album = <ChatMessage>[item];
+        albums[key] = album;
+        entries.add(album);
+      } else {
+        entries.add([item]);
       }
+    }
+    for (var i = 0; i < entries.length; i++) {
+      final album = entries[i];
       final message = album.first;
       final day = _dateOnly(message.createdAt);
       // Группировка подряд идущих сообщений одного автора (телеграм-стиль):
       // сосед — сообщение рядом по списку от того же автора в пределах 2 мин
       // и того же дня.
-      final newerIndex = i + album.length;
-      final newer = newerIndex < visible.length ? visible[newerIndex] : null;
-      final older = i > 0 ? visible[i - 1] : null;
+      final newer = i > 0 ? entries[i - 1].first : null;
+      final older = i + 1 < entries.length ? entries[i + 1].last : null;
       bool groupedWith(ChatMessage? other) =>
           other != null &&
           other.senderId == message.senderId &&
