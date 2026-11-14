@@ -91,7 +91,9 @@ class OwnerService {
     final rows = await query
         .order('created_at')
         .timeout(const Duration(seconds: 12));
-    return rows.map((row) => Map<String, dynamic>.from(row)).toList();
+    return rows
+        .map<Map<String, dynamic>>((row) => Map<String, dynamic>.from(row))
+        .toList();
   }
 
   Future<void> saveTitle(Map<String, dynamic> row) async {
@@ -176,7 +178,7 @@ class OwnerService {
                   ?.rpc('owner_reward_users', params: {'p_query': query})
                   .timeout(const Duration(seconds: 12)) ??
               const <Map<String, dynamic>>[])
-          .map((row) => Map<String, dynamic>.from(row))
+          .map<Map<String, dynamic>>((row) => Map<String, dynamic>.from(row))
           .toList();
 
   Future<List<Map<String, dynamic>>> builtinAwards() async =>
@@ -184,7 +186,7 @@ class OwnerService {
                   ?.rpc('owner_builtin_awards')
                   .timeout(const Duration(seconds: 8)) ??
               const [])
-          .map(
+          .map<Map<String, dynamic>>(
             (row) => <String, dynamic>{
               ...Map<String, dynamic>.from(row),
               'kind': 'achievement',
@@ -203,7 +205,7 @@ class OwnerService {
                   .order('granted_at', ascending: false)
                   .timeout(const Duration(seconds: 12)) ??
               const [])
-          .map((row) => Map<String, dynamic>.from(row))
+          .map<Map<String, dynamic>>((row) => Map<String, dynamic>.from(row))
           .toList();
 
   Future<int> manageRecipients({
@@ -235,7 +237,7 @@ class OwnerService {
                   ?.rpc('owner_award_history_details')
                   .timeout(const Duration(seconds: 12)) ??
               const [])
-          .map((row) => Map<String, dynamic>.from(row))
+          .map<Map<String, dynamic>>((row) => Map<String, dynamic>.from(row))
           .toList();
 
   Future<void> grantTitle(String id) async {

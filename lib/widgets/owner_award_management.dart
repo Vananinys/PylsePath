@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import '../services/owner_service.dart';
 
 class OwnerAwardManagement extends StatefulWidget {
-  const OwnerAwardManagement({super.key});
+  const OwnerAwardManagement({super.key, this.service});
+  final OwnerService? service;
   @override
   State<OwnerAwardManagement> createState() => _OwnerAwardManagementState();
 }
 
 class _OwnerAwardManagementState extends State<OwnerAwardManagement> {
-  final _service = OwnerService();
+  late final _service = widget.service ?? OwnerService();
   final _search = TextEditingController(), _reason = TextEditingController();
   Timer? _debounce;
   int _searchRequest = 0, _awardsRequest = 0, _total = 0;
@@ -270,6 +271,13 @@ class _OwnerAwardManagementState extends State<OwnerAwardManagement> {
                   ),
                   onChanged: (v) {
                     _debounce?.cancel();
+                    _searchRequest++;
+                    _awardsRequest++;
+                    setState(() {
+                      _recipient = null;
+                      _users = [];
+                      _awards = [];
+                    });
                     _debounce = Timer(
                       const Duration(milliseconds: 350),
                       () => _findUsers(v),
@@ -363,7 +371,9 @@ class _OwnerAwardManagementState extends State<OwnerAwardManagement> {
               ),
               const SizedBox(height: 12),
               FilledButton.icon(
-                onPressed: !_choices.any((row) => row['kind'] == _kind)
+                onPressed:
+                    (!_all && _recipient == null) ||
+                        !_choices.any((row) => row['kind'] == _kind)
                     ? null
                     : () => _manage('grant'),
                 icon: const Icon(Icons.card_giftcard),

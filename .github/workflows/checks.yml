@@ -50,3 +50,5 @@ jobs:
         run: dart analyze lib/services/app_update_service.dart lib/services/usage_statistics.dart lib/screens/app_versions_screen.dart lib/screens/usage_statistics_screen.dart test/release_channels_test.dart test/usage_statistics_test.dart test/update_privacy_screens_test.dart lib/data/local_data_integrity.dart lib/data/trail_appearance.dart lib/widgets/activity_trail_layer.dart lib/screens/trail_appearance_screen.dart test/upgrade_safety_regression_test.dart test/trail_appearance_test.dart
       - name: Chat notifications, automatic photos and persistent media cache
         run: flutter test --no-pub test/chat_performance_test.dart test/app_image_cache_test.dart test/chat_media_reliability_test.dart test/chat_service_queries_test.dart
+      - name: Owner award RPC decoding and recipient selection
+        run: flutter test --no-pub test/owner_rpc_test.dart
