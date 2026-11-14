@@ -150,13 +150,18 @@ class _RidePulseViewState extends State<RidePulseView> {
             .retryUnsynced(maxItems: 3)
             .then<void>((_) {}, onError: (Object _, StackTrace __) {}),
       );
-    } catch (_) {
-      if (mounted)
+    } catch (error) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Не удалось сохранить отметку. Попробуйте ещё раз.'),
+          SnackBar(
+            content: Text(
+              error is HistoryRefusedException
+                  ? error.message
+                  : 'Не удалось сохранить отметку. Попробуйте ещё раз.',
+            ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

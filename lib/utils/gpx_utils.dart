@@ -1,12 +1,33 @@
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:xml/xml.dart';
 
+/// Итог разбора GPX: не сводить все проблемы к пустому списку точек.
+enum GpxParseStatus {
+  /// Файл прочитан целиком, все поддерживаемые точки трека сохранены.
+  ok,
+
+  /// Часть точек за капом 100 000 не прочитана: трек неполный.
+  truncatedPoints,
+
+  /// Файл больше ограничения размера (20 млн символов Dart-строки) —
+  /// разбор даже не начинался.
+  oversized,
+
+  /// XML не удалось разобрать.
+  invalidXml,
+
+  /// Файл корректен, но поддерживаемого трека (trkpt/rtept) в нём нет.
+  noTrack,
+}
+
 class ParsedGpxTrack {
   const ParsedGpxTrack({
     this.points = const [],
     this.segmentStarts = const [],
     this.name = '',
     this.sourcePointIndices = const [],
+    this.status = GpxParseStatus.noTrack,
+    this.totalTrackPoints = 0,
   });
   final List<LatLng> points;
   final List<int> segmentStarts;
@@ -14,6 +35,12 @@ class ParsedGpxTrack {
 
   /// Original XML point index for each retained point; invalid points count too.
   final List<int> sourcePointIndices;
+
+  /// Явный результат разбора (см. [GpxParseStatus]).
+  final GpxParseStatus status;
+
+  /// Сколько узлов трек-точек было в файле всего (0, если разбор не шёл).
+  final int totalTrackPoints;
 }
 
 /// Сборка и разбор GPX-трека.
@@ -79,8 +106,13 @@ class GpxUtils {
   }
 
   static ParsedGpxTrack parseTrack(String? gpx) {
-    if (gpx == null || gpx.isEmpty || gpx.length > 20 * 1024 * 1024) {
-      return const ParsedGpxTrack();
+    if (gpx == null || gpx.isEmpty) {
+      return const ParsedGpxTrack(status: GpxParseStatus.noTrack);
+    }
+    // Ограничение по длине Dart-строки (UTF-16 символам), а не по байтам.
+    // Сообщение об ошибке должно называть символы, а не мегабайты файла.
+    if (gpx.length > 20 * 1024 * 1024) {
+      return const ParsedGpxTrack(status: GpxParseStatus.oversized);
     }
     try {
       final document = XmlDocument.parse(gpx);
@@ -100,13 +132,23 @@ class GpxUtils {
                   .map((r) => r.findAllElements('rtept', namespaceUri: '*'))
                   .toList();
       }
+      final totalTrackPoints = groups.fold<int>(
+        0,
+        (sum, nodes) => sum + nodes.length,
+      );
       final points = <LatLng>[], starts = <int>[];
       final sourceIndices = <int>[];
       var sourceIndex = 0;
+      var pointLimitHit = false;
       for (final nodes in groups) {
         var newSegment = true;
         for (final node in nodes) {
-          if (points.length >= 100000) break;
+          // Кап срабатывает только когда есть СЛЕДУЮЩАЯ непрочитанная точка:
+          // ровно 100 000 точек в файле — это полный трек, не усечение.
+          if (points.length >= 100000) {
+            pointLimitHit = true;
+            break;
+          }
           final originalIndex = sourceIndex++;
           final lat = double.tryParse(node.getAttribute('lat') ?? '');
           final lon = double.tryParse(node.getAttribute('lon') ?? '');
@@ -126,7 +168,9 @@ class GpxUtils {
           sourceIndices.add(originalIndex);
           points.add(LatLng(lat, lon));
         }
-        if (points.length >= 100000) break;
+        // Внешний break убран: он молча пропускал целые сегменты после капа.
+        // Внутренний break и так прекращает добавление точек, а проход по
+        // следующим сегментам стоит O(1) на сегмент.
       }
       final name =
           document
@@ -135,16 +179,26 @@ class GpxUtils {
               ?.innerText
               .trim() ??
           '';
+      final GpxParseStatus status;
+      if (pointLimitHit) {
+        status = GpxParseStatus.truncatedPoints;
+      } else if (points.isEmpty) {
+        status = GpxParseStatus.noTrack;
+      } else {
+        status = GpxParseStatus.ok;
+      }
       return ParsedGpxTrack(
         points: List.unmodifiable(points),
         segmentStarts: List.unmodifiable(starts),
         sourcePointIndices: List.unmodifiable(sourceIndices),
         name: name.substring(0, name.length.clamp(0, 240)),
+        status: status,
+        totalTrackPoints: totalTrackPoints,
       );
     } on XmlException {
-      return const ParsedGpxTrack();
+      return const ParsedGpxTrack(status: GpxParseStatus.invalidXml);
     } on ArgumentError {
-      return const ParsedGpxTrack();
+      return const ParsedGpxTrack(status: GpxParseStatus.invalidXml);
     }
   }
 

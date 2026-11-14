@@ -1097,9 +1097,23 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
     if (!mounted || event is! String) return;
     final imported = GpxUtils.parseTrack(event);
     final points = imported.points;
-    if (points.length < 2) {
-      _showSnackBar('В GPX-файле не найден трек с двумя точками');
-      return;
+    switch (imported.status) {
+      case GpxParseStatus.oversized:
+        // Лимит задан в символах Dart-строки, не в байтах файла.
+        _showSnackBar(
+          'GPX-файл слишком большой (больше 20 млн символов). Трек не открыт.',
+        );
+        return;
+      case GpxParseStatus.invalidXml:
+        _showSnackBar('GPX-файл повреждён: не удалось прочитать XML.');
+        return;
+      case GpxParseStatus.noTrack:
+      case GpxParseStatus.ok:
+      case GpxParseStatus.truncatedPoints:
+        if (points.length < 2) {
+          _showSnackBar('В GPX-файле не найден трек с двумя точками');
+          return;
+        }
     }
     if (!_navigationController.loadImportedTrack(
       points,
@@ -1113,6 +1127,14 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
       _fitRoute();
     } else {
       _importedGpxPendingFit = true;
+    }
+    if (imported.status == GpxParseStatus.truncatedPoints) {
+      // Единственное сообщение: предупреждение вместо безусловного успеха.
+      _showSnackBar(
+        'Трек открыт частично: показаны первые ${points.length} '
+        'из ${imported.totalTrackPoints} точек, остальное пропущено.',
+      );
+      return;
     }
     _showSnackBar('GPX-трек открыт на карте');
   }

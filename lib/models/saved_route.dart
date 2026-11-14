@@ -51,6 +51,12 @@ class SavedRoute {
   /// (офлайн/ошибка сети) и ждёт повторной отправки.
   bool cloudSynced;
 
+  /// Трек этой записи прочитан не полностью (ограничение GPX: кап точек,
+  /// превышение размера или нечитаемый XML у облачной строки). routePoints —
+  /// НЕ полная геометрия, поэтому такую запись нельзя повторно выгружать:
+  /// обрезанный GPX не должен перезаписывать полный трек в облаке.
+  final bool routePointsPartial;
+
   SavedRoute({
     this.viaPoints = const [],
     this.planningPoints = const [],
@@ -78,6 +84,7 @@ class SavedRoute {
     this.elevationGainMeters = 0,
     this.remoteId,
     this.cloudSynced = false,
+    this.routePointsPartial = false,
   }) : localId = localId ?? newRideId(),
        activityLocalDay =
            activityLocalDay ??
@@ -189,6 +196,7 @@ class SavedRoute {
     'elevationGain': elevationGainMeters,
     'remoteId': remoteId,
     'cloudSynced': cloudSynced,
+    'routePointsPartial': routePointsPartial,
   };
 
   factory SavedRoute.fromJson(Map<String, dynamic> json) {
@@ -303,6 +311,7 @@ class SavedRoute {
       elevationGainMeters: (json['elevationGain'] as num?)?.toDouble() ?? 0,
       remoteId: json['remoteId'] as String?,
       cloudSynced: json['cloudSynced'] as bool? ?? false,
+      routePointsPartial: json['routePointsPartial'] == true,
     );
   }
 
@@ -350,6 +359,7 @@ class SavedRoute {
       elevationGainMeters: elevationGainMeters,
       remoteId: remoteId ?? this.remoteId,
       cloudSynced: cloudSynced,
+      routePointsPartial: routePointsPartial,
       activityLocalDay: activityLocalDay,
     );
   }

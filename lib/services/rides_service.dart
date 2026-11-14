@@ -275,6 +275,12 @@ class RidesService {
 
     final track = GpxUtils.parseTrack(row['gpx_data'] as String?);
     final points = track.points;
+    // GPX есть, но прочитан не полностью (кап точек, размер файла, битый XML):
+    // такая запись не должна повторно выгружать обрезанную геометрию в облако.
+    final routePointsPartial =
+        track.status == GpxParseStatus.truncatedPoints ||
+        track.status == GpxParseStatus.oversized ||
+        track.status == GpxParseStatus.invalidXml;
     final distanceKm = _toDouble(row['distance_km']);
     final durationSeconds = _toInt(row['duration_seconds']);
     final calories = _toDouble(row['calories']);
@@ -346,6 +352,7 @@ class RidesService {
       remoteId: (row['id'] ?? '').toString(),
       // Заезд из облака по определению синхронизирован.
       cloudSynced: true,
+      routePointsPartial: routePointsPartial,
     );
   }
 

@@ -19,6 +19,17 @@ import '../services/recording_daily_activity_service.dart';
 import '../models/walking_steps.dart';
 import '../models/ride_moment.dart';
 
+/// Операция отклонена осознанно (не ошибка сети или диска): текст готов
+/// для показа пользователю, повтор не поможет.
+class HistoryRefusedException implements Exception {
+  const HistoryRefusedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class WorkoutHistoryRepository {
   static final Map<String, WorkoutHistoryRepository> _instances = {};
 
@@ -356,6 +367,15 @@ class WorkoutHistoryRepository {
         );
         if (index < 0) throw StateError('Заезд не найден в вашей истории.');
         final current = _workoutHistory[index];
+        // Частично прочитанный трек нельзя помечать на выгрузку: отметка
+        // тянет за собой повторную отправку всего заезда, и обрезанный GPX
+        // перезаписал бы полный трек в облаке. Отказываем явно.
+        if (current.routePointsPartial) {
+          throw const HistoryRefusedException(
+            'Трек этой поездки прочитан не полностью (ограничение GPX), '
+            'поэтому отметка не сохранена.',
+          );
+        }
         final moments = current.workoutDetails.rideMoments;
         if (moment.pointIndex >= current.routePoints.length ||
             RideMoment.tryParse(moment.toJson()) == null) {
@@ -628,6 +648,15 @@ class WorkoutHistoryRepository {
             ),
       );
       if (!valid) continue;
+      // Частично прочитанный трек не выгружаем: saveRide собрал бы GPX из
+      // обрезанных routePoints и перезаписал полный трек в облаке. Явный
+      // отказ, попытки больше не расходуют лимит.
+      if (route.routePointsPartial) {
+        debugPrint(
+          '[WorkoutHistory] ${route.localId}: partial GPX is not re-uploaded',
+        );
+        continue;
+      }
       attempted++;
       final id = await _ridesService.saveRide(
         workoutDetails: {
