@@ -57,6 +57,11 @@ class SavedRoute {
   /// обрезанный GPX не должен перезаписывать полный трек в облаке.
   final bool routePointsPartial;
 
+  /// Сколько узлов трек-точек было в исходном GPX, если трек прочитан
+  /// частично (для честного предупреждения «показано N из M»). 0 — трек
+  /// полный или общее число неизвестно.
+  final int routePointsTotal;
+
   SavedRoute({
     this.viaPoints = const [],
     this.planningPoints = const [],
@@ -85,6 +90,7 @@ class SavedRoute {
     this.remoteId,
     this.cloudSynced = false,
     this.routePointsPartial = false,
+    this.routePointsTotal = 0,
   }) : localId = localId ?? newRideId(),
        activityLocalDay =
            activityLocalDay ??
@@ -197,6 +203,7 @@ class SavedRoute {
     'remoteId': remoteId,
     'cloudSynced': cloudSynced,
     'routePointsPartial': routePointsPartial,
+    'routePointsTotal': routePointsTotal,
   };
 
   factory SavedRoute.fromJson(Map<String, dynamic> json) {
@@ -312,6 +319,7 @@ class SavedRoute {
       remoteId: json['remoteId'] as String?,
       cloudSynced: json['cloudSynced'] as bool? ?? false,
       routePointsPartial: json['routePointsPartial'] == true,
+      routePointsTotal: (json['routePointsTotal'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -360,6 +368,7 @@ class SavedRoute {
       remoteId: remoteId ?? this.remoteId,
       cloudSynced: cloudSynced,
       routePointsPartial: routePointsPartial,
+      routePointsTotal: routePointsTotal,
       activityLocalDay: activityLocalDay,
     );
   }
@@ -397,5 +406,7 @@ class SavedRoute {
     activityType: activityType,
     createdAt: createdAt,
     elevationGainMeters: elevationGainMeters,
+    routePointsPartial: routePointsPartial,
+    routePointsTotal: routePointsTotal,
   );
 }

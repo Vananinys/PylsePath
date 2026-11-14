@@ -47,11 +47,7 @@ class WorkoutDetailScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Отправить в чат',
             icon: const Icon(Icons.send_outlined),
-            onPressed: () => showRouteShareSheet(
-              context,
-              SharedRoute.fromSavedRoute(workout.route),
-              source: workout.route,
-            ),
+            onPressed: () => _shareToChat(context),
           ),
           // Экспорт трека в GPX: файл можно отправить в Strava/Komoot
           // или сохранить через системное меню «Поделиться».
@@ -72,6 +68,7 @@ class WorkoutDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (workout.route.routePointsPartial) _partialTrackBanner(context),
             // Мини-карта с треком
             RidePulseView(
               route: workout.route,
@@ -122,12 +119,7 @@ class WorkoutDetailScreen extends StatelessWidget {
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.edit_road),
                 label: const Text('Создать маршрут из этого трека'),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => RouteBuilderScreen(source: workout.route),
-                  ),
-                ),
+                onPressed: () => _createRoute(context),
               ),
             ),
             Padding(
@@ -148,7 +140,113 @@ class WorkoutDetailScreen extends StatelessWidget {
     );
   }
 
+  /// Честное описание неполного трека: числа в баннере, подтверждениях и
+  /// фактическое количество узлов исходного GPX должны совпадать.
+  String get _partialTrackDescription {
+    final route = workout.route;
+    final shown = route.routePoints.length;
+    final total = route.routePointsTotal;
+    const scale = 'ограничение GPX на размер трека (первые 100 000 точек)';
+    return total > shown && total > 0
+        ? 'показано $shown из $total точек файла ($scale)'
+        : 'показана только часть точек ($scale)';
+  }
+
+  Widget _partialTrackBanner(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      color: colors.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber_rounded, color: colors.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Трек прочитан не полностью: $_partialTrackDescription. '
+                'Часть координат не загрузилась. Создание маршрута из трека '
+                'недоступно; экспорт и отправка требуют подтверждения, чтобы '
+                'не выдавать неполную геометрию за полную.',
+                style: TextStyle(color: colors.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Подтверждение осознанного действия с частичным треком: без него
+  /// экспорт/отправка выдавали бы неполную геометрию за полную.
+  Future<bool> _confirmPartialAction(
+    BuildContext context,
+    String action,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Трек неполный'),
+        content: Text(
+          '$_partialTrackDescription. $action будет содержать только '
+          'загруженную часть геометрии. Продолжить?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Продолжить'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _shareToChat(BuildContext context) async {
+    if (workout.route.routePointsPartial &&
+        !await _confirmPartialAction(context, 'Отправка в чат')) {
+      return;
+    }
+    if (!context.mounted) return;
+    showRouteShareSheet(
+      context,
+      SharedRoute.fromSavedRoute(workout.route),
+      source: workout.route,
+    );
+  }
+
+  Future<void> _createRoute(BuildContext context) async {
+    if (workout.route.routePointsPartial) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Маршрут нельзя создать из частично прочитанного трека: '
+            'в библиотеке он сохранился бы неполным.',
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RouteBuilderScreen(source: workout.route),
+      ),
+    );
+  }
+
   Future<void> _shareToCommunity(BuildContext context) async {
+    if (workout.route.routePointsPartial &&
+        !await _confirmPartialAction(context, 'Публикация в сообществе')) {
+      return;
+    }
+    if (!context.mounted) return;
     final published = await showCommunityComposer(
       context,
       route: workout.route,
@@ -219,6 +317,11 @@ class WorkoutDetailScreen extends StatelessWidget {
   }
 
   Future<void> _exportGpx(BuildContext context) async {
+    if (workout.route.routePointsPartial &&
+        !await _confirmPartialAction(context, 'Экспорт GPX')) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       await GpxShare.route(context, workout.route);
     } catch (_) {

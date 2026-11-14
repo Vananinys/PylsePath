@@ -138,6 +138,54 @@ void main() {
       const metadataOnly = '<gpx><metadata><name>Пусто</name></metadata></gpx>';
       expect(GpxUtils.parseTrack(metadataOnly).status, GpxParseStatus.noTrack);
     });
+
+    test(
+      'totalTrackPoints counts every trkpt node, valid or not, across segments',
+      () {
+        // 99 999 valid + 2 invalid + 2 valid + 2 valid in a second segment =
+        // 100 005 nodes, 100 003 of them valid. The cap keeps the first
+        // 100 000 valid points, so the warning must say «100 000 из 100 005»
+        // — the same numbers the UI reports.
+        final buffer = StringBuffer()
+          ..writeln('<gpx><trk><name>Смешанный</name><trkseg>')
+          ..write(_trkptXml(_track(99999)));
+        for (var i = 0; i < 2; i++) {
+          buffer.writeln('<trkpt lon="84.95" />');
+        }
+        buffer
+          ..write(_trkptXml(_track(2, start: 99999)))
+          ..writeln('</trkseg>')
+          ..writeln(
+            '<trkseg>${_trkptXml(_track(2, start: 100001))}</trkseg>'
+            '</trk></gpx>',
+          );
+        final parsed = GpxUtils.parseTrack(buffer.toString());
+        expect(parsed.status, GpxParseStatus.truncatedPoints);
+        expect(parsed.points, hasLength(100000));
+        expect(parsed.totalTrackPoints, 100005);
+        expect(parsed.name, 'Смешанный');
+        expect(parsed.sourcePointIndices, hasLength(100000));
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
+
+    test(
+      'invalid points alone never mark a complete track as truncated',
+      () {
+        // 10 valid + 3 invalid, no cap reached: everything supported was
+        // read, so the track is complete despite the dropped garbage nodes.
+        final buffer = StringBuffer()
+          ..write('<gpx><trk><trkseg>')
+          ..write(_trkptXml(_track(10)))
+          ..write('<trkpt lon="84.95" /><trkpt lat="not-a-number" lon="84.95" />')
+          ..write('<trkpt lat="56" lon="1000" />')
+          ..write('</trkseg></trk></gpx>');
+        final parsed = GpxUtils.parseTrack(buffer.toString());
+        expect(parsed.status, GpxParseStatus.ok);
+        expect(parsed.points, hasLength(10));
+        expect(parsed.totalTrackPoints, 13);
+      },
+    );
   });
 
   test(
@@ -166,6 +214,8 @@ void main() {
       expect(ride, isNotNull);
       expect(ride!.routePointsPartial, isTrue);
       expect(ride.routePoints, hasLength(100000));
+      // The banner and dialogs must report the same total as the file held.
+      expect(ride.routePointsTotal, 100001);
 
       // A ride at the cap (100 000 points) stays fully usable.
       final fullRow = {...row}
@@ -196,12 +246,45 @@ void main() {
         cloudSynced: true,
         remoteId: 'remote-1',
         routePointsPartial: true,
+        routePointsTotal: 20000,
         createdAt: DateTime.utc(2026, 11, 15, 9),
       );
       await repo.addWorkout(partial);
       await repo.load();
       final restored = repo.workoutHistory.single;
       expect(restored.routePointsPartial, isTrue);
+      expect(restored.routePointsTotal, 20000);
+    },
+  );
+
+  test(
+    'the partial flag survives withSyncState and withLibraryDetails copies',
+    () {
+      final partial = SavedRoute(
+        localId: 'copy-probe',
+        title: 'partial',
+        distance: '500.00 км',
+        duration: '27 ч',
+        surfaceSummary: '',
+        finishPoint: const LatLng(56.4801, 84.9501),
+        routePoints: _track(3),
+        activityType: ActivityType.cycling,
+        cloudSynced: true,
+        remoteId: 'remote-1',
+        routePointsPartial: true,
+        routePointsTotal: 152340,
+        createdAt: DateTime.utc(2026, 11, 15, 9),
+      );
+
+      final synced = partial.withSyncState(remoteId: 'remote-2', cloudSynced: false);
+      expect(synced.routePointsPartial, isTrue);
+      expect(synced.routePointsTotal, 152340);
+
+      // Metadata edits in the library must not silently mark the track full.
+      final relabeled = partial.withLibraryDetails(title: 'Новое имя');
+      expect(relabeled.routePointsPartial, isTrue);
+      expect(relabeled.routePointsTotal, 152340);
+      expect(relabeled.title, 'Новое имя');
     },
   );
 
@@ -309,13 +392,22 @@ void main() {
   );
 }
 
-List<LatLng> _track(int n) {
+List<LatLng> _track(int n, {int start = 0}) {
   var lat = 56.48, lon = 84.95;
   return [
-    for (var i = 0; i < n; i++)
+    for (var i = start; i < start + n; i++)
       LatLng(lat + i * 0.000001, lon + i * 0.000001),
   ];
 }
+
+String _trkptXml(List<LatLng> points) =>
+    points
+        .map(
+          (p) =>
+              '<trkpt lat="${p.latitude.toStringAsFixed(6)}" '
+              'lon="${p.longitude.toStringAsFixed(6)}" />',
+        )
+        .join();
 
 /// The data-protection harness needs the authenticated uid scope; network
 /// uploads are counted with a mock client.

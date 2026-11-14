@@ -1130,9 +1130,11 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
     }
     if (imported.status == GpxParseStatus.truncatedPoints) {
       // Единственное сообщение: предупреждение вместо безусловного успеха.
+      // totalTrackPoints считает все узлы trkpt/rtept, включая невалидные:
+      // «остальное пропущено» покрывает и их, и точки за капом.
       _showSnackBar(
-        'Трек открыт частично: показаны первые ${points.length} '
-        'из ${imported.totalTrackPoints} точек, остальное пропущено.',
+        'Трек открыт частично: показано ${points.length} '
+        'из ${imported.totalTrackPoints} точек трека, остальное пропущено.',
       );
       return;
     }

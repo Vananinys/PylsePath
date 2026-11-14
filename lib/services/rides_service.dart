@@ -353,6 +353,7 @@ class RidesService {
       // Заезд из облака по определению синхронизирован.
       cloudSynced: true,
       routePointsPartial: routePointsPartial,
+      routePointsTotal: routePointsPartial ? track.totalTrackPoints : 0,
     );
   }
 
