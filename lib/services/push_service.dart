@@ -73,7 +73,13 @@ void pulsePathNotificationAction(NotificationResponse response) async {
 }
 
 class PushService {
-  PushService._();
+  PushService._() : _testSupport = false;
+  @visibleForTesting
+  PushService.forTesting() : _testSupport = true;
+  final bool _testSupport;
+  @visibleForTesting
+  Future<void> handleForegroundForTesting(RemoteMessage message) =>
+      _onForeground(message);
   static final instance = PushService._();
   final _localNotifications = FlutterLocalNotificationsPlugin();
   Future<void>? _initFuture;
@@ -90,7 +96,8 @@ class PushService {
   StreamSubscription<String>? _tokenSubscription;
   final Set<String> _seenTaps = {};
   final Set<String> _seenForeground = {};
-  bool get _supported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get _supported =>
+      _testSupport || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
 
   static Future<void> prepareBackgroundDelivery() async {
     if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) return;
@@ -310,6 +317,7 @@ class PushService {
   ) async {
     if (!_supported || ChatService.openChatFriendId == message.senderId) return;
     await _ensureLocalNotifications();
+    if (ChatService.openChatFriendId == message.senderId) return;
     await _onForeground(
       RemoteMessage(
         data: {
@@ -778,7 +786,7 @@ class PushService {
       if (Supabase.instance.client.auth.currentUser?.id != uid) return;
       // Чат с этим отправителем открыт на экране — сообщение и так видно
       // в ленте, системный пуш не показываем.
-      if (!background && ChatService.openChatFriendId == sender) return;
+      if (ChatService.openChatFriendId == sender) return;
       final preview = onChatPreview;
       final previewId = message.data['messageId']?.toString();
       if (!background && previewId != null && preview != null) {
@@ -790,7 +798,9 @@ class PushService {
           // Keep the standard notification if authenticated preview loading fails.
         }
       }
-      if (Supabase.instance.client.auth.currentUser?.id != uid) return;
+      if (Supabase.instance.client.auth.currentUser?.id != uid ||
+          ChatService.openChatFriendId == sender)
+        return;
       await _localNotifications.show(
         id: chatNotificationId(uid, sender),
         title:
@@ -848,7 +858,8 @@ class PushService {
           'messageId': key,
         }),
       );
-      if (Supabase.instance.client.auth.currentUser?.id != uid) {
+      if (Supabase.instance.client.auth.currentUser?.id != uid ||
+          ChatService.openChatFriendId == sender) {
         await _localNotifications.cancel(
           id: chatNotificationId(uid, sender),
           tag: 'chat_$sender',

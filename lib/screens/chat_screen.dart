@@ -5,6 +5,7 @@ import '../data/chat_local_store.dart';
 import '../data/user_scope.dart';
 import '../utils/ride_id.dart';
 import '../widgets/chat_photo.dart';
+import '../utils/chat_route_observer.dart';
 import '../models/chat_media_draft.dart';
 import '../widgets/chat_media_composer.dart';
 import '../widgets/chat_video_player.dart';
@@ -50,7 +51,42 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+class _ChatScreenState extends State<ChatScreen>
+    with WidgetsBindingObserver, RouteAware {
+  bool _routeVisible = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) chatRouteObserver.subscribe(this, route);
+  }
+
+  void _setRouteVisible(bool visible) {
+    _routeVisible = visible;
+    _syncOpenChat();
+    _updateChatActivity();
+    if (visible) unawaited(_markVisibleRead());
+  }
+
+  void _syncOpenChat() {
+    if (_routeVisible &&
+        _foreground &&
+        UserScope.currentUserId() == _screenOwner) {
+      ChatService.openChatFriendId = widget.friend.id;
+    } else if (ChatService.openChatFriendId == widget.friend.id) {
+      ChatService.openChatFriendId = null;
+    }
+  }
+
+  @override
+  void didPush() => _setRouteVisible(true);
+  @override
+  void didPopNext() => _setRouteVisible(true);
+  @override
+  void didPushNext() => _setRouteVisible(false);
+  @override
+  void didPop() => _setRouteVisible(false);
   late final String? _screenOwner = UserScope.currentUserId();
   late final ChatService _chatService = widget.service ?? ChatService();
   late final ChatLocalStore _store = ChatLocalStore(
@@ -92,7 +128,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final typing =
         _lastTypedAt != null &&
         now.difference(_lastTypedAt!) < const Duration(seconds: 4);
-    final state = !_foreground || _blockedByMe || _blockedByThem
+    final state =
+        !_foreground || !_routeVisible || _blockedByMe || _blockedByThem
         ? 'idle'
         : _recording
         ? 'recording'
@@ -189,6 +226,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    chatRouteObserver.unsubscribe(this);
     _activityTimer?.cancel();
     unawaited(PresenceService.instance.setChatState(widget.friend.id, 'idle'));
     if (ChatService.openChatFriendId == widget.friend.id) {
@@ -215,6 +253,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _markVisibleRead() async {
     if (_markingRead ||
+        !_routeVisible ||
         !_foreground ||
         _query.isNotEmpty ||
         _showScrollToBottom ||
@@ -338,6 +377,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
+    _syncOpenChat();
     if (!_foreground) {
       _lastTypedAt = null;
       unawaited(_audioPlayer.pause());
@@ -364,6 +404,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           .toList();
       final page = await _chatService.fetchConversation(
         widget.friend.id,
+        resolveAttachments: false,
         before: older && sent.isNotEmpty ? sent.first : null,
         strict: true,
       );
@@ -435,6 +476,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final page = await _chatService.fetchConversation(
         widget.friend.id,
         search: query,
+        resolveAttachments: false,
         before: older && _searchMessages.isNotEmpty
             ? _searchMessages.first
             : null,
@@ -1124,7 +1166,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _showError('Сообщение больше недоступно');
         return;
       }
-      if (mounted) setState(() => _messages = _merge(_messages, [fresh]));
+      if (mounted && UserScope.currentUserId() == _screenOwner) {
+        setState(() => _messages = _merge(_messages, [fresh]));
+        await _persistMessages();
+      }
     } catch (_) {
       _showError('Не удалось загрузить вложение');
     }
@@ -1419,7 +1464,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // reverse: true — список сам держится у нижнего края, как в мессенджерах.
     // children собираются от НОВЫХ к старым (индекс 0 = низ списка).
     // Между днями вставляются разделители «Сегодня / Вчера / дата».
-    final widgets = <Widget>[];
+    final widgets = <Widget Function()>[];
+    final messageIndices = <String, int>{};
 
     final visible = _visibleMessages;
     final entries = <List<ChatMessage>>[];
@@ -1455,17 +1501,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           other.senderId == message.senderId &&
           _dateOnly(other.createdAt) == day &&
           other.createdAt.difference(message.createdAt).inMinutes.abs() < 2;
+      messageIndices[message.id] = widgets.length;
       widgets.add(
-        _buildBubble(
-          message,
-          album: album.length > 1 ? album : null,
-          groupedWithNewer: groupedWith(newer),
-          groupedWithOlder: groupedWith(older),
+        () => KeyedSubtree(
+          key: ValueKey(message.id),
+          child: _buildBubble(
+            message,
+            album: album.length > 1 ? album : null,
+            groupedWithNewer: groupedWith(newer),
+            groupedWithOlder: groupedWith(older),
+          ),
         ),
       );
       if (album.any((item) => item.id == _firstUnreadId) && _query.isEmpty) {
         widgets.add(
-          const Center(
+          () => const Center(
             child: Padding(
               padding: EdgeInsets.all(8),
               child: Text(
@@ -1477,12 +1527,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
       if (older == null || _dateOnly(older.createdAt) != day) {
-        widgets.add(_buildDateSeparator(message.createdAt));
+        widgets.add(() => _buildDateSeparator(message.createdAt));
       }
     }
     if (_query.isEmpty && _hasMore) {
       widgets.add(
-        Center(
+        () => Center(
           child: TextButton(
             onPressed: _loadingPage
                 ? null
@@ -1494,7 +1544,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
     if (_query.isNotEmpty && _searchMore) {
       widgets.add(
-        Center(
+        () => Center(
           child: TextButton(
             onPressed: () => _search(_searchGeneration, older: true),
             child: const Text('Ещё результаты'),
@@ -1502,12 +1552,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     }
-    return ListView(
+    return ListView.builder(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       controller: _scrollController,
       reverse: true,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      children: widgets,
+      itemCount: widgets.length,
+      findChildIndexCallback: (key) =>
+          key is ValueKey<String> ? messageIndices[key.value] : null,
+      itemBuilder: (_, index) => widgets[index](),
     );
   }
 

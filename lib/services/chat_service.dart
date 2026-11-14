@@ -39,6 +39,8 @@ class ChatService {
   String? _channelUserId;
   int _unreadRequest = 0;
   final Set<String> _delivered = {};
+  final Map<String, ({String url, DateTime expires})> _signedUrls = {};
+  final Map<String, Future<String?>> _signing = {};
   late final ChatAttachmentCleanup _attachmentCleanup = ChatAttachmentCleanup(
     currentOwner: () => userId,
     messageExists: (owner, id) async =>
@@ -104,6 +106,8 @@ class ChatService {
   }
 
   void resetSession() {
+    _signedUrls.clear();
+    _signing.clear();
     _unreadRequest++;
     final channel = _channel;
     _channel = null;
@@ -433,6 +437,7 @@ class ChatService {
     ChatMessage? before,
     String? search,
     bool strict = false,
+    bool resolveAttachments = true,
   }) async {
     final client = _client;
     final id = userId;
@@ -489,9 +494,10 @@ class ChatService {
               ? (b['id'] as String).compareTo(a['id'] as String)
               : date;
         });
-      final messages = await _messagesFromRows(
-        rows.take(limit).map((row) => Map<String, dynamic>.from(row)).toList(),
-      );
+      final selected = rows.take(limit).toList();
+      final messages = resolveAttachments
+          ? await _messagesFromRows(selected)
+          : selected.map(ChatMessage.fromRow).toList();
       if (userId != id) return const [];
       return messages.reversed.toList();
     } catch (error) {
@@ -505,7 +511,10 @@ class ChatService {
     }
   }
 
-  Future<ChatMessage?> fetchMessage(String messageId) async {
+  Future<ChatMessage?> fetchMessage(
+    String messageId, {
+    bool resolveAttachments = false,
+  }) async {
     final client = _client;
     if (client == null) return null;
     final row = await client
@@ -514,12 +523,17 @@ class ChatService {
         .eq('id', messageId)
         .maybeSingle()
         .timeout(const Duration(seconds: 15));
-    return row == null ? null : _messageFromRow(Map<String, dynamic>.from(row));
+    return row == null
+        ? null
+        : _messageFromRow(
+            Map<String, dynamic>.from(row),
+            resolveAttachments: resolveAttachments,
+          );
   }
 
   Future<ChatMessage?> refreshAttachment(ChatMessage message) async {
     if (message.delivery != MessageDelivery.sent) return message;
-    return fetchMessage(message.id);
+    return fetchMessage(message.id, resolveAttachments: true);
   }
 
   Future<({bool byMe, bool byThem})> blockState(String friendId) async {
@@ -602,9 +616,9 @@ class ChatService {
           .select()
           .inFilter('id', ids.toList())
           .timeout(const Duration(seconds: 15));
-      final resolved = await _messagesFromRows(
-        rows.map((row) => Map<String, dynamic>.from(row)).toList(),
-      );
+      final resolved = rows
+          .map((row) => ChatMessage.fromRow(Map<String, dynamic>.from(row)))
+          .toList();
       return {for (final message in resolved) message.id: message};
     } catch (error) {
       debugPrint('[ChatService] reply targets failed: $error');
@@ -752,9 +766,10 @@ class ChatService {
           .order('created_at', ascending: false)
           .limit(limit)
           .timeout(const Duration(seconds: 15));
-      return await _messagesFromRows(
-        rows.map((raw) => Map<String, dynamic>.from(raw)).toList(),
-      );
+      if (userId != id) return [];
+      return rows
+          .map((row) => ChatMessage.fromRow(Map<String, dynamic>.from(row)))
+          .toList();
     } on PostgrestException catch (error) {
       debugPrint('[ChatService] recent ${error.code}: ${error.message}');
       if (strict) rethrow;
@@ -767,6 +782,33 @@ class ChatService {
   }
 
   /// Последнее сообщение конкретного диалога для превью списка чатов.
+  Future<Map<String, ChatMessage>> fetchLatestFor(List<String> friends) async {
+    final owner = userId;
+    final client = _client;
+    if (owner == null || client == null)
+      throw const ChatServiceException('Войдите в аккаунт');
+    final ids = friends.toSet().toList();
+    final result = <String, ChatMessage>{};
+    for (var start = 0; start < ids.length; start += 100) {
+      final batch = ids.skip(start).take(100).toList();
+      final rows = await client
+          .rpc('chat_latest_for_friends', params: {'friend_ids': batch})
+          .timeout(const Duration(seconds: 12));
+      if (userId != owner) return {};
+      for (final row in rows as List) {
+        final message = ChatMessage.fromRow(
+          Map<String, dynamic>.from(row as Map),
+        );
+        if (message.senderId != owner && message.receiverId != owner) continue;
+        final peer = message.senderId == owner
+            ? message.receiverId
+            : message.senderId;
+        if (batch.contains(peer)) result[peer] = message;
+      }
+    }
+    return result;
+  }
+
   Future<ChatMessage?> fetchLatestWith(
     String friendId, {
     bool strict = false,
@@ -790,7 +832,7 @@ class ChatService {
           .limit(1)
           .timeout(const Duration(seconds: 12));
       if (rows.isEmpty) return null;
-      return await _messageFromRow(Map<String, dynamic>.from(rows.first));
+      return ChatMessage.fromRow(Map<String, dynamic>.from(rows.first));
     } on PostgrestException catch (error) {
       debugPrint('[ChatService] latest ${error.code}: ${error.message}');
       if (strict) rethrow;
@@ -904,7 +946,11 @@ class ChatService {
     return 'chat:$objectPath';
   }
 
-  Future<ChatMessage> _messageFromRow(Map<String, dynamic> row) async {
+  Future<ChatMessage> _messageFromRow(
+    Map<String, dynamic> row, {
+    bool resolveAttachments = true,
+  }) async {
+    if (!resolveAttachments) return ChatMessage.fromRow(row);
     final resolved = Map<String, dynamic>.from(row);
     resolved['photo_reference'] = row['photo_url'];
     resolved['audio_reference'] = row['audio_url'];
@@ -928,11 +974,43 @@ class ChatService {
   /// Подписанный URL одного вложения; `null` — сервис недоступен (в поле
   /// останется исходная `chat:`-ссылка, UI сможет повторить при перезагрузке).
   Future<String?> _signedUrlOrNull(String path) async {
+    return resolveMedia('chat:$path');
+  }
+
+  /// Account-scoped, expiring URLs; concurrent requests share one signature.
+  Future<String?> resolveMedia(String reference, {bool force = false}) async {
+    if (!reference.startsWith('chat:')) return reference;
+    final owner = userId;
+    if (owner == null) return null;
+    final path = reference.substring(5);
+    final key = '$owner:$path';
+    final cached = _signedUrls[key];
+    if (!force && cached != null && cached.expires.isAfter(DateTime.now()))
+      return cached.url;
+    final pending = _signing[key];
+    if (pending != null) return pending;
+    final work = _requestMedia(owner, path, key);
+    _signing[key] = work;
     try {
-      return await _client!.storage
+      return await work;
+    } finally {
+      if (identical(_signing[key], work)) _signing.remove(key);
+    }
+  }
+
+  Future<String?> _requestMedia(String owner, String path, String key) async {
+    try {
+      final url = await _client!.storage
           .from('chat_media')
           .createSignedUrl(path, 3600)
           .timeout(const Duration(seconds: 12));
+      if (userId != owner) return null;
+      _signedUrls[key] = (
+        url: url,
+        expires: DateTime.now().add(const Duration(minutes: 55)),
+      );
+      if (_signedUrls.length > 600) _signedUrls.remove(_signedUrls.keys.first);
+      return url;
     } catch (_) {
       // Keep type information; the UI may retry by reopening/refetching the chat.
       return null;
@@ -945,6 +1023,7 @@ class ChatService {
     List<Map<String, dynamic>> rows,
   ) async {
     final client = _client;
+    final owner = userId;
     final paths = <String>{};
     for (final row in rows) {
       for (final field in [
@@ -960,6 +1039,13 @@ class ChatService {
       }
     }
     final signed = <String, String>{};
+    for (final path in paths.toList()) {
+      final cached = _signedUrls['$owner:$path'];
+      if (cached != null && cached.expires.isAfter(DateTime.now())) {
+        signed[path] = cached.url;
+        paths.remove(path);
+      }
+    }
     if (client != null && paths.isNotEmpty) {
       final chunks = <List<String>>[];
       for (var start = 0; start < paths.length; start += 50) {
@@ -976,6 +1062,12 @@ class ChatService {
               final url = result is SignedUrlSuccess ? result.signedUrl : null;
               if (url != null && result.path.isNotEmpty) {
                 signed[result.path] = url;
+                if (owner != null && userId == owner) {
+                  _signedUrls['$owner:${result.path}'] = (
+                    url: url,
+                    expires: DateTime.now().add(const Duration(minutes: 55)),
+                  );
+                }
               }
             }
           } catch (error) {
@@ -984,6 +1076,7 @@ class ChatService {
         }),
       );
     }
+    if (userId != owner) return [];
     Future<ChatMessage> convert(Map<String, dynamic> row) async {
       final resolved = Map<String, dynamic>.from(row);
       resolved['photo_reference'] = row['photo_url'];
@@ -1025,7 +1118,7 @@ class ChatService {
         () async {
           if (userId != id) return;
           final raw = Map<String, dynamic>.from(payload.newRecord as Map);
-          final message = await _messageFromRow(raw);
+          final message = await _messageFromRow(raw, resolveAttachments: false);
           if (userId != id ||
               (message.senderId != id && message.receiverId != id)) {
             return;

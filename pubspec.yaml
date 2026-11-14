@@ -1,7 +1,7 @@
 name: pulsepath
 description: "PulsePath — мобильный навигатор с картой CartoDB Positron."
 publish_to: 'none'
-version: 1.16.15-design.1+124
+version: 1.16.15+125
 
 environment:
   sdk: '>=3.13.0 <4.0.0'
@@ -34,6 +34,8 @@ dependencies:
   supabase_flutter: 2.18.0
   # Кэширование изображений (avatar_url и др.) и состояние приложения
   cached_network_image: ^3.4.1
+  flutter_cache_manager: 3.4.5
+  file: ^7.0.1
   provider: ^6.1.2
   xml: ^7.1.0
   share_plus: ^12.0.2

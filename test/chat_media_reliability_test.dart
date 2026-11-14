@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -117,15 +118,27 @@ void main() {
   testWidgets(
     'Chat previews decode at display resolution while fullscreen keeps zoom detail',
     (tester) async {
-      const source = 'https://example.invalid/preview.png';
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChatPhoto(source: source, onRetry: () async {}),
+      final source = await tester.runAsync(() async {
+        final directory = await Directory.systemTemp.createTemp(
+          'chat-photo-decode-',
+        );
+        final file = File('${directory.path}/photo.png');
+        await file.writeAsBytes(
+          base64Decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=',
           ),
-        ),
-      );
+        );
+        return file.path;
+      });
       await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChatPhoto(source: source!, onRetry: () async {}),
+            ),
+          ),
+        );
+
         await Future<void>.delayed(const Duration(milliseconds: 30));
       });
       await tester.pumpAndSettle();
@@ -133,17 +146,20 @@ void main() {
         tester.widget<Image>(find.byType(Image)).image,
         isA<ResizeImage>(),
       );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ChatPhoto(
-              source: source,
-              fullScreen: true,
-              onRetry: () async {},
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ChatPhoto(
+                source: source!,
+                fullScreen: true,
+                onRetry: () async {},
+              ),
             ),
           ),
-        ),
-      );
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      });
       await tester.pumpAndSettle();
       expect(
         tester.widget<Image>(find.byType(Image)).image,

@@ -14,6 +14,7 @@ import 'package:pulsepath/models/shared_route.dart';
 import 'package:pulsepath/models/friend_profile.dart';
 import 'package:pulsepath/screens/chat_screen.dart';
 import 'package:pulsepath/services/chat_service.dart';
+import 'package:pulsepath/utils/chat_route_observer.dart';
 import 'package:pulsepath/widgets/map_sticker_flight.dart';
 
 ChatMessage message(
@@ -60,6 +61,7 @@ class FakeChat extends ChatService {
     ChatMessage? before,
     String? search,
     bool strict = false,
+    bool resolveAttachments = true,
   }) async {
     fetchCalls++;
     lastBefore = before;
@@ -193,6 +195,48 @@ void main() {
         ).readMessages(),
         isEmpty,
       );
+    },
+  );
+
+  testWidgets(
+    'Returning to a previous chat restores notification suppression',
+    (tester) async {
+      final navigator = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigator,
+          navigatorObservers: [chatRouteObserver],
+          home: ChatScreen(
+            friend: const FriendProfile(id: 'first', username: 'Первый'),
+            service: FakeChat(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(ChatService.openChatFriendId, 'first');
+      navigator.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => ChatScreen(
+            friend: const FriendProfile(id: 'second', username: 'Второй'),
+            service: FakeChat(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(ChatService.openChatFriendId, 'second');
+      navigator.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(ChatService.openChatFriendId, 'first');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      expect(ChatService.openChatFriendId, isNull);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(ChatService.openChatFriendId, 'first');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
     },
   );
 

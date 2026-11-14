@@ -1,4 +1,5 @@
 import 'widgets/map_home_navigation.dart';
+import 'utils/chat_route_observer.dart';
 import 'widgets/map_speed_badge.dart';
 import 'widgets/laboratory_controls.dart';
 import 'data/trail_appearance.dart';
@@ -249,6 +250,7 @@ class _PulsePathAppState extends State<PulsePathApp> {
     // ProfileProvider живёт над всем приложением: кэш профиля сохраняется
     // между открытиями экрана профиля.
     return MaterialApp(
+      navigatorObservers: [chatRouteObserver],
       title: AppVariant.name,
       debugShowCheckedModeBanner: false,
       themeMode: AppAppearance.instance.mode,

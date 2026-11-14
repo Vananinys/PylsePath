@@ -6,6 +6,8 @@ Flutter-приложение для карт, маршрутов, записи �
 
 ## Карта функций
 
+Мессенджер: `lib/services/chat_service.dart`, `lib/screens/chat_screen.dart`, `lib/screens/chats_list_screen.dart`; фото и постоянный кеш — `lib/widgets/chat_photo.dart`, `lib/data/app_image_cache.dart` и условные платформенные реализации; видимость диалога — `lib/utils/chat_route_observer.dart`; пакетные превью с RLS — `tools/chat_latest_for_friends.sql`.
+
 | Функция | Где начать изучение |
 |---|---|
 | Запуск, основная карта, переходы между разделами | `lib/main.dart`, `lib/src/map_screen/`, `lib/controllers/map_navigation_controller.dart` |

@@ -30,6 +30,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   String? _error;
   Timer? _refreshTimer;
   bool _loadingRemote = false;
+  bool _refreshPending = false;
   final String? _owner = UserScope.currentUserId();
 
   @override
@@ -40,8 +41,66 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   }
 
   void _onMessage(ChatMessage message) {
+    if (!mounted || UserScope.currentUserId() != _owner) return;
+    final peer = message.senderId == _owner
+        ? message.receiverId
+        : message.senderId;
+    final index = _dialogs.indexWhere((d) => d.friend.id == peer);
+    if (index < 0 || _loadingRemote) {
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer(const Duration(milliseconds: 300), _load);
+      return;
+    }
+    final entry = _dialogs[index];
+    final previous = entry.lastMessage;
+    final replace =
+        previous == null ||
+        previous.id == message.id ||
+        message.createdAt.isAfter(previous.createdAt) ||
+        (message.createdAt == previous.createdAt &&
+            message.id.compareTo(previous.id) > 0);
+    if (replace) {
+      setState(() {
+        _dialogs[index] = _DialogEntry(
+          friend: entry.friend,
+          lastMessage: message,
+          unread: entry.unread,
+        );
+        _sortDialogs();
+      });
+    }
     _refreshTimer?.cancel();
-    _refreshTimer = Timer(const Duration(milliseconds: 300), _load);
+    _refreshTimer = Timer(const Duration(milliseconds: 300), _refreshUnread);
+  }
+
+  void _sortDialogs() {
+    _dialogs.sort((a, b) {
+      if (a.unread != b.unread) return b.unread.compareTo(a.unread);
+      return (b.lastMessage?.createdAt ?? DateTime(2000)).compareTo(
+        a.lastMessage?.createdAt ?? DateTime(2000),
+      );
+    });
+  }
+
+  Future<void> _refreshUnread() async {
+    try {
+      final unread = await _chatService.unreadByFriend(strict: true);
+      if (!mounted || UserScope.currentUserId() != _owner) return;
+      setState(() {
+        _dialogs = _dialogs
+            .map(
+              (e) => _DialogEntry(
+                friend: e.friend,
+                lastMessage: e.lastMessage,
+                unread: unread[e.friend.id] ?? 0,
+              ),
+            )
+            .toList();
+        _sortDialogs();
+      });
+    } catch (_) {
+      /* Keep the visible conversations when counters are offline. */
+    }
   }
 
   @override
@@ -52,7 +111,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   }
 
   Future<void> _load() async {
-    if (_loadingRemote) return;
+    if (_loadingRemote) {
+      _refreshPending = true;
+      return;
+    }
     _loadingRemote = true;
     final cache = UiSnapshotCache('chat_dialogs', _owner);
     if (_isLoading) {
@@ -93,18 +155,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       ).wait;
       // Each chat supplies its own latest message; active conversations cannot
       // push quiet friends beyond a global, unrelated-message limit.
-      final recent = await Future.wait(
-        friends.map(
-          (friend) => _chatService.fetchLatestWith(friend.id, strict: true),
-        ),
+      final lastByFriend = await _chatService.fetchLatestFor(
+        friends.map((f) => f.id).toList(),
       );
-      final lastByFriend = <String, ChatMessage>{};
-      for (final message in recent.whereType<ChatMessage>()) {
-        final counterpart = message.senderId == _chatService.userId
-            ? message.receiverId
-            : message.senderId;
-        lastByFriend.putIfAbsent(counterpart, () => message);
-      }
 
       final dialogs =
           friends
@@ -154,6 +207,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       }
     } finally {
       _loadingRemote = false;
+      if (_refreshPending && mounted && UserScope.currentUserId() == _owner) {
+        _refreshPending = false;
+        unawaited(_load());
+      }
     }
   }
 
