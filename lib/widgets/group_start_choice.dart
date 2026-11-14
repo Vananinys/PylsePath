@@ -143,7 +143,8 @@ class GroupStartChoice extends StatelessWidget {
                   horizontal: 8,
                   vertical: 12,
                 ),
-                child: Column(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       icon,
@@ -151,11 +152,16 @@ class GroupStartChoice extends StatelessWidget {
                           ? colors.onPrimaryContainer
                           : colors.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -167,14 +173,11 @@ class GroupStartChoice extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Как поедем?',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          const Text('Участие', style: TextStyle(fontWeight: FontWeight.bold)),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              option(false, Icons.person_outline, 'Без группы'),
+              option(false, Icons.person_outline, 'Самостоятельно'),
               option(true, Icons.groups_outlined, 'В группе'),
             ],
           ),

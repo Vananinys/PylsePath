@@ -166,7 +166,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('НАЧАТЬ'));
+      await tester.tap(find.text('Начать тренировку'));
       expect(starts, 1);
       if (scale == 1) await capture(tester, key, 'preparation');
     });

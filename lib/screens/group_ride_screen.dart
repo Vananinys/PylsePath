@@ -1,3 +1,5 @@
+import '../ui/activity_design.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -331,8 +333,12 @@ class _GroupRideScreenState extends State<GroupRideScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (AppVariant.modernInterface && !widget.legacyLayout && !widget.advanced) {
+  Widget build(BuildContext context) => ActivityDesign(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
+    if (AppVariant.modernInterface &&
+        !widget.legacyLayout &&
+        !widget.advanced) {
       return GroupWorkoutLobby(
         service: _service,
         busy: _busy,

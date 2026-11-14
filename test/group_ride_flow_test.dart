@@ -312,7 +312,7 @@ void main() {
       await tester.pump();
       expect(chosen, room);
       expect(find.textContaining('Группа изменилась'), findsOneWidget);
-      await tester.tap(find.text('Без группы'));
+      await tester.tap(find.text('Самостоятельно'));
       await tester.pumpAndSettle();
       expect(chosen, isNull);
       await tester.pumpWidget(const SizedBox());

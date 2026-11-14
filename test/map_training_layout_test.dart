@@ -60,7 +60,8 @@ void main() {
             ),
           ),
         );
-        await tester.tap(find.text('Настройки тренировки'));
+        await tester.ensureVisible(find.text('Параметры записи'));
+        await tester.tap(find.text('Параметры записи'));
         await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Цель и интервалы'));
         await tester.tap(find.text('Цель и интервалы'));

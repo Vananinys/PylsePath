@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -206,6 +208,7 @@ void main() {
     Completer<Map<String, dynamic>>? slowAction;
     late DateTime serverNow;
     setUp(() async {
+      SharedPreferences.setMockInitialValues({});
       requests = [];
       fail = false;
       rejection = null;

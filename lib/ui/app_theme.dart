@@ -15,18 +15,18 @@ abstract final class AppMotion {
 ThemeData pulsePathTheme({Brightness brightness = Brightness.light}) {
   final dark = brightness == Brightness.dark;
   final colors = ColorScheme.fromSeed(
-    seedColor: const Color(0xFFE86532),
+    seedColor: const Color(0xFF196B62),
     brightness: brightness,
   );
-  const radius = BorderRadius.all(Radius.circular(22));
+  const radius = BorderRadius.all(Radius.circular(20));
   return ThemeData(
     useMaterial3: true,
     colorScheme: colors,
     scaffoldBackgroundColor: dark
-        ? const Color(0xFF141311)
-        : const Color(0xFFFAF8F5),
+        ? const Color(0xFF101816)
+        : const Color(0xFFF7F9F8),
     appBarTheme: AppBarTheme(
-      backgroundColor: dark ? const Color(0xFF141311) : const Color(0xFFFAF8F5),
+      backgroundColor: dark ? const Color(0xFF101816) : const Color(0xFFF7F9F8),
       foregroundColor: colors.onSurface,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
@@ -50,13 +50,13 @@ ThemeData pulsePathTheme({Brightness brightness = Brightness.light}) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(48, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     ),
     textButtonTheme: TextButtonThemeData(

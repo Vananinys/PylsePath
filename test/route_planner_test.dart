@@ -110,7 +110,7 @@ void main() {
       await tester.tap(find.byTooltip('Отменить').first);
       await tester.pumpAndSettle();
       expect(roads.requests.last.length, 2);
-      await tester.tap(find.text('Сохранить маршрут').first);
+      await tester.tap(find.text('Сохранить план маршрута').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
@@ -155,7 +155,9 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Сохранить маршрут').first,
+              find
+                  .widgetWithText(FilledButton, 'Сохранить план маршрута')
+                  .first,
             )
             .onPressed,
         isNull,
@@ -167,7 +169,9 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Сохранить маршрут').first,
+              find
+                  .widgetWithText(FilledButton, 'Сохранить план маршрута')
+                  .first,
             )
             .onPressed,
         isNotNull,
@@ -190,7 +194,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       await open(tester, Roads(), scale: 2, brightness: brightness);
-      final save = tester.getRect(find.text('Сохранить маршрут').first);
+      final save = tester.getRect(find.text('Сохранить план маршрута').first);
       expect(save.bottom, lessThanOrEqualTo(740));
       expect(tester.takeException(), isNull);
       await tester.tap(find.byTooltip('Развернуть панель'));

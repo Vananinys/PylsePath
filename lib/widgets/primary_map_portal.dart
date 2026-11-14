@@ -93,7 +93,8 @@ class PrimaryMapNavigation extends ChangeNotifier {
         PageRouteBuilder<void>(
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
-          pageBuilder: (context, _, __) => _PrimaryMapTask(task: task),
+          pageBuilder: (_, __, ___) =>
+              InheritedTheme.captureAll(context, _PrimaryMapTask(task: task)),
         ),
       );
     } finally {
@@ -267,42 +268,28 @@ class _PrimaryMapTaskState extends State<_PrimaryMapTask> {
                         horizontal: 12,
                         vertical: 4,
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              IconButton(
-                                onPressed: _close,
-                                tooltip: 'Вернуться',
-                                icon: const Icon(Icons.arrow_back),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  task.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium,
-                                ),
-                              ),
-                            ],
+                          IconButton(
+                            onPressed: _close,
+                            tooltip: 'Вернуться',
+                            icon: const Icon(Icons.arrow_back_rounded),
                           ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  task.footer == null
-                                      ? 'Основная карта'
-                                      : 'Выберите точки',
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _close,
-                                child: const Text('Готово'),
-                              ),
-                            ],
+                          Expanded(
+                            child: Text(
+                              task.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _close,
+                            child: Text(
+                              task.title.contains('маршрут')
+                                  ? 'Закрыть'
+                                  : 'Готово',
+                            ),
                           ),
                         ],
                       ),
@@ -480,7 +467,7 @@ class _MainMapGatewayState extends State<MainMapGateway> {
   }
 
   Future<void> _open() async {
-    if (_opening) return;
+    if (_opening || PrimaryMapNavigation.instance._host == null) return;
     setState(() => _opening = true);
     try {
       await PrimaryMapNavigation.instance.open(

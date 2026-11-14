@@ -1,3 +1,5 @@
+import '../ui/activity_design.dart';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -345,7 +347,9 @@ class _GarageScreenState extends State<GarageScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ActivityDesign(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     final profile = _profile;
     // Пока профиль не загружен — только индикатор: обращаться к данным нельзя
     // (иначе LateInitializationError/null-ошибки при первом кадре).
@@ -362,14 +366,24 @@ class _GarageScreenState extends State<GarageScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Гараж велосипедов',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ActivityHero(
+              icon: Icons.pedal_bike_outlined,
+              eyebrow: 'ТЕХНИКА И ОБСЛУЖИВАНИЕ',
+              title: 'Готовы к следующей поездке',
+              description:
+                  '${profile.garage.length} ед. техники · пробег, настройки и история обслуживания в одном месте.',
             ),
-            const SizedBox(height: 16),
             _buildGarageList(profile),
             const SizedBox(height: 32),
-            _buildAddBikeForm(),
+            Card(
+              child: ExpansionTile(
+                leading: const Icon(Icons.add_circle_outline),
+                title: const Text('Добавить технику'),
+                subtitle: const Text('Велосипед, самокат или другой транспорт'),
+                childrenPadding: const EdgeInsets.all(16),
+                children: [_buildAddBikeForm()],
+              ),
+            ),
           ],
         ),
       ),
@@ -377,112 +391,186 @@ class _GarageScreenState extends State<GarageScreen> {
   }
 
   Widget _buildGarageList(UserProfile profile) {
+    final colors = Theme.of(context).colorScheme;
     if (profile.garage.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(8.0),
-        child: Text('Гараж пуст. Добавьте велосипед.'),
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Icon(Icons.pedal_bike, size: 40, color: colors.primary),
+              const SizedBox(height: 12),
+              const Text(
+                'Здесь будет ваша техника',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Добавьте первый велосипед, чтобы учитывать его пробег и обслуживание.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Column(
       children: profile.garage.map((bike) {
-        // Сравниваем по id: после перечитывания профиля из JSON выбранный
-        // велосипед — уже другой экземпляр Bike с тем же id.
-        final isSelected = profile.selectedBike?.id == bike.id;
+        final selected = profile.selectedBike?.id == bike.id;
+        final vehicle = _garageService.vehicles
+            .where((v) => v.id == bike.id)
+            .firstOrNull;
+        final due =
+            vehicle?.parts
+                .where(
+                  (p) => p.due(
+                    vehicle.totalDistance,
+                    totalHours: vehicle.recordedHours,
+                  ),
+                )
+                .length ??
+            0;
+        Future<void> open() async {
+          if (vehicle == null) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => VehicleDetailScreen(vehicle: vehicle),
+            ),
+          );
+          if (mounted) await _loadProfile();
+        }
+
         return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          color: isSelected ? Colors.deepOrange.shade50 : null,
-          child: ListTile(
-            onTap: () async {
-              final vehicle = _garageService.vehicles
-                  .where((v) => v.id == bike.id)
-                  .firstOrNull;
-              if (vehicle == null) return;
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => VehicleDetailScreen(vehicle: vehicle),
-                ),
-              );
-              if (mounted) await _loadProfile();
-            },
-            title: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    bike.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (bike.isEbike)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 6),
-                    child: Icon(Icons.bolt, size: 16, color: Colors.deepOrange),
-                  ),
-                if (isSelected)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+          child: InkWell(
+            onTap: open,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Tooltip(
+                        message: 'Изменить фото',
+                        child: GestureDetector(
+                          onTap: () => _changePhoto(bike),
+                          child: _photoBusyBikeId == bike.id
+                              ? const SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : _buildBikeAvatar(bike),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.deepOrange,
-                        borderRadius: BorderRadius.circular(4),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              bike.name,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${bike.type.label}${bike.isEbike ? ' · E-bike' : ''}',
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: const Text(
-                        'Основной',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      PopupMenuButton<String>(
+                        tooltip: 'Действия с техникой',
+                        onSelected: (value) {
+                          if (value == 'active') _selectBike(bike);
+                          if (value == 'photo') _changePhoto(bike);
+                          if (value == 'delete') _removeBike(bike);
+                        },
+                        itemBuilder: (_) => [
+                          if (!selected)
+                            const PopupMenuItem(
+                              value: 'active',
+                              child: Text('Выбрать основной'),
+                            ),
+                          const PopupMenuItem(
+                            value: 'photo',
+                            child: Text('Изменить фото'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Удалить технику'),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Тип: ${bike.type.label}'),
-                Text('Вес: ${bike.weightKg} кг, Колёса: ${bike.wheelSize}"'),
-                Text('Пробег: ${bike.totalDistance.toStringAsFixed(1)} км'),
-                if (_garageService.vehicles
-                        .where((v) => v.id == bike.id)
-                        .firstOrNull
-                    case final vehicle?)
-                  Text(
-                    '${vehicle.recordedHours.toStringAsFixed(1)} ч · ${vehicle.isPublic ? 'Публичный велосипед' : 'Виден только вам'} · Проверить деталей: ${vehicle.parts.where((p) => p.due(vehicle.totalDistance, totalHours: vehicle.recordedHours)).length}',
-                  ),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isSelected)
-                  IconButton(
-                    icon: const Icon(Icons.check_circle_outline),
-                    onPressed: () => _selectBike(bike),
-                    tooltip: 'Выбрать основным',
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _removeBike(bike),
-                  tooltip: 'Удалить',
-                ),
-              ],
-            ),
-            // Фото техники: загруженное из облака, иначе иконка типа.
-            // Тап по фото — сменить/убрать.
-            leading: GestureDetector(
-              onTap: () => _changePhoto(bike),
-              child: _photoBusyBikeId == bike.id
-                  ? const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      Text(
+                        '${bike.totalDistance.toStringAsFixed(1)} км',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                    )
-                  : _buildBikeAvatar(bike),
+                      if (vehicle != null)
+                        Text(
+                          '${vehicle.recordedHours.toStringAsFixed(1)} ч',
+                          style: TextStyle(color: colors.onSurfaceVariant),
+                        ),
+                      Text(
+                        due > 0 ? 'Проверить: $due' : 'Нет срочных проверок',
+                        style: TextStyle(
+                          color: due > 0 ? colors.error : colors.primary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: selected
+                            ? Row(
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 16,
+                                    color: colors.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Основная техника',
+                                    style: TextStyle(
+                                      color: colors.primary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : TextButton(
+                                onPressed: () => _selectBike(bike),
+                                child: const Text('Выбрать основной'),
+                              ),
+                      ),
+                      TextButton.icon(
+                        onPressed: open,
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                        label: const Text('Подробнее'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );

@@ -47,6 +47,7 @@ class WorkoutHistoryRepository {
   final Set<String> _deletedIds = {};
   final Set<String> _pendingDeletes = {};
   Future<void> _tail = Future.value();
+  Future<int>? _syncing;
   bool _historyReadFailed = false;
   bool _usingRecoveryStore = false;
   String? recoveryNotice;
@@ -291,6 +292,7 @@ class WorkoutHistoryRepository {
     await _read();
     await _write();
   });
+
   /// Подмена фиксации достижений в тестах; в продакшене всегда null.
   @visibleForTesting
   Future<void> Function(List<SavedRoute> rides)? captureProgressForTesting;
@@ -308,9 +310,8 @@ class WorkoutHistoryRepository {
       await _write();
       if (UserScope.currentUserId() == _owner && recoveryNotice == null) {
         try {
-          await (captureProgressForTesting ?? AchievementsService.captureProgress)(
-            _workoutHistory,
-          );
+          await (captureProgressForTesting ??
+              AchievementsService.captureProgress)(_workoutHistory);
           lastAchievementsError = null;
         } catch (error) {
           // Награды не отменяют уже записанную поездку и не проваливают
@@ -592,26 +593,41 @@ class WorkoutHistoryRepository {
   /// Each batch is bounded; already uploaded rides are never resent. A failed
   /// delete only stops further deletes this run — the id stays pending for the
   /// next sync window and must not block uploading offline rides.
-  Future<int> retryUnsynced({int maxItems = 10}) => _serial(() async {
-    await _read();
-    if (_owner == null || UserScope.currentUserId() != _owner) return 0;
-    var attempted = 0;
+  Future<int> retryUnsynced({int maxItems = 10}) =>
+      _syncing ??= _retryUnsynced(maxItems).whenComplete(() => _syncing = null);
+
+  Future<int> _retryUnsynced(int maxItems) async {
+    final owner = _owner;
+    final snapshot = await _serial(() async {
+      await _read();
+      return (
+        deletes: _pendingDeletes.toList(),
+        routes: _workoutHistory.where((r) => !r.cloudSynced).toList(),
+      );
+    });
+    if (owner == null || UserScope.currentUserId() != owner) return 0;
     final limit = maxItems.clamp(1, 25);
-    for (final id in _pendingDeletes.toList().take(limit)) {
-      if (UserScope.currentUserId() != _owner) break;
+    var attempted = 0, synced = 0;
+    for (final id in snapshot.deletes.take(limit)) {
+      if (UserScope.currentUserId() != owner) break;
       attempted++;
-      if (await _ridesService.deleteRide(id, expectedUserId: _owner)) {
+      if (!await _ridesService.deleteRide(id, expectedUserId: owner)) break;
+      await _serial(() async {
+        _requireOwner();
         _pendingDeletes.remove(id);
         await _write();
-      } else {
-        break;
-      }
+      });
     }
-    var synced = 0;
-    for (var i = 0; i < _workoutHistory.length; i++) {
-      final route = _workoutHistory[i];
-      if (route.cloudSynced) continue;
-      if (attempted >= limit || UserScope.currentUserId() != _owner) break;
+    for (final route in snapshot.routes) {
+      if (attempted >= limit || UserScope.currentUserId() != owner) break;
+      final valid = await _serial(
+        () async =>
+            !_deletedIds.contains(route.localId) &&
+            _workoutHistory.any(
+              (r) => r.localId == route.localId && !r.cloudSynced,
+            ),
+      );
+      if (!valid) continue;
       attempted++;
       final id = await _ridesService.saveRide(
         workoutDetails: {
@@ -621,7 +637,7 @@ class WorkoutHistoryRepository {
             'activity_local_day': route.activityLocalDay,
         },
         rideId: route.localId,
-        expectedUserId: _owner,
+        expectedUserId: owner,
         distanceKm: route.distanceKm,
         durationSeconds:
             route.durationSeconds ?? (route.durationMin * 60).round(),
@@ -632,23 +648,33 @@ class WorkoutHistoryRepository {
         transportType: route.transportType ?? route.activityType.name,
         createdAt: route.dateTime,
       );
-      // Обновляем состояние синхронизации после успешного сохранения в облако
-      if (UserScope.currentUserId() != _owner) break;
-      if (id != null && id.trim().isNotEmpty) {
-        _workoutHistory[i] = route.withSyncState(
-          remoteId: id,
-          cloudSynced: true,
+      if (UserScope.currentUserId() != owner) break;
+      if (id == null || id.trim().isEmpty) continue;
+      await _serial(() async {
+        _requireOwner();
+        final index = _workoutHistory.indexWhere(
+          (r) => r.localId == route.localId,
         );
+        if (index < 0 || _deletedIds.contains(route.localId)) {
+          // A concurrent local delete must remain a delete after a late upload.
+          _pendingDeletes.add(id);
+        } else {
+          final current = _workoutHistory[index];
+          final unchanged =
+              jsonEncode(current.toJson()) == jsonEncode(route.toJson());
+          _workoutHistory[index] = current.withSyncState(
+            remoteId: id,
+            cloudSynced: unchanged,
+          );
+          if (unchanged) synced++;
+        }
         await _write();
-        synced++;
-      } else {
-        continue;
-      }
+      });
     }
     debugPrint('[WorkoutHistory] synced=$synced');
     if (synced > 0 && UserScope.currentUserId() == _owner) {
       unawaited(GarageService().fetchVehicles());
     }
     return synced;
-  });
+  }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/map_navigation_controller.dart' show SportMode;
 import '../models/vehicle.dart';
 import 'vehicle_selector_sheet.dart';
+import 'workout_preparation_panel.dart';
 
 /// Панель подготовки к заезду (Pre-Ride / Start HUD).
 ///
@@ -65,6 +66,28 @@ class PreRideWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return WorkoutPreparationPanel(
+      vehicle: selectedVehicle,
+      mode: sportMode,
+      onMode: onSportModeChanged,
+      onVehicle: onSelectVehicle,
+      autoPause: autoPauseEnabled,
+      onAutoPause: onAutoPauseChanged,
+      onStart: onStartRide,
+      onClose: onCollapse,
+      enabled: !isLocked && startEnabled,
+      route: routeLabel,
+      onRoute: onPlanRoute,
+      readiness: readiness,
+      group: groupChoice,
+      options: preparation,
+      summary: settingsSummary,
+      startLabel: startLabel == 'НАЧАТЬ' ? 'Начать тренировку' : startLabel,
+    );
+  }
+
+  // Kept available while the new preparation is being evaluated on device.
+  Widget buildLegacy(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,

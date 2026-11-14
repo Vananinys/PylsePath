@@ -1,3 +1,5 @@
+import '../ui/activity_design.dart';
+
 import 'package:flutter/material.dart';
 
 import '../models/vehicle.dart';
@@ -321,6 +323,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Окружность колеса, м',
+                    helperMaxLines: 4,
                     helperText:
                         'Измерьте один полный оборот нагруженного колеса',
                   ),
@@ -473,6 +476,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Интервал проверки, км',
+                    helperMaxLines: 4,
                     helperText:
                         '0 — без напоминания. Укажите по инструкции детали.',
                   ),
@@ -482,6 +486,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Пробег при последнем обслуживании',
+                    helperMaxLines: 4,
                     helperText:
                         'Текущий: ${_vehicle.totalDistance.toStringAsFixed(1)} км',
                   ),
@@ -491,6 +496,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Интервал по времени, дней',
+                    helperMaxLines: 4,
                     helperText: '0 — без срока по дате. Сработает первый из заданных интервалов.',
                   ),
                 ),
@@ -501,6 +507,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'Интервал проверки, часов',
+                    helperMaxLines: 4,
                     helperText:
                         '0 — без интервала. По инструкции производителя.',
                   ),
@@ -512,6 +519,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   decoration: InputDecoration(
                     labelText: 'Часы велосипеда при последней проверке',
+                    helperMaxLines: 4,
                     helperText:
                         'Сейчас: ${_vehicle.recordedHours.toStringAsFixed(1)} ч записанных тренировок без пауз',
                   ),
@@ -681,6 +689,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'Расходы, ₽',
+                    helperMaxLines: 4,
                     helperText: 'Необязательно, детали и работа вместе',
                   ),
                 ),
@@ -910,7 +919,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ActivityDesign(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     final v = _vehicle;
     final parts = v.parts;
     final selected =

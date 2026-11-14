@@ -475,7 +475,9 @@ class MapNavigationController extends ChangeNotifier {
         if (restored != null) {
           _groupLastDistance = restored.distanceMeters;
           _groupLastSeconds = restored.durationSeconds;
-          _groupHadWorkout = restored.workoutState == 'finished';
+          _groupHadWorkout =
+              _groupRideService.ownFinished ||
+              restored.workoutState == 'finished';
         }
       }
       if (grouped) {
@@ -960,14 +962,17 @@ class MapNavigationController extends ChangeNotifier {
         _recordedSegmentsPointCount != _recordedPath.length ||
         _recordedSegmentsStartCount != _trackSegmentStarts.length) {
       _recordedSegmentsCache = List<List<LatLng>>.unmodifiable(
-        WorkoutDetails.splitTrack(_recordedPath, _trackSegmentStarts)
-            .map(List<LatLng>.unmodifiable),
+        WorkoutDetails.splitTrack(
+          _recordedPath,
+          _trackSegmentStarts,
+        ).map(List<LatLng>.unmodifiable),
       );
       _recordedSegmentsPointCount = _recordedPath.length;
       _recordedSegmentsStartCount = _trackSegmentStarts.length;
     }
     return _recordedSegmentsCache!;
   }
+
   final List<WorkoutSample> _workoutSamples = [];
   double _maxWorkoutSpeed = 0;
   int _lastLapSeconds = 0;
@@ -1841,7 +1846,9 @@ class MapNavigationController extends ChangeNotifier {
     _startGuardBusy = true;
     try {
       if (await loadInterruptedWorkout() != null) {
-        throw StateError('Сначала восстановите или сохраните прерванную поездку');
+        throw StateError(
+          'Сначала восстановите или сохраните прерванную поездку',
+        );
       }
       if (_hasSession || _isSavingWorkout || _disposed || !_hasCurrentOwner) {
         return false;

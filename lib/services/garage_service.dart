@@ -49,6 +49,20 @@ class GarageService {
   List<Vehicle> _vehicles = [];
   final Map<String, Map<String, dynamic>> _equipmentSnapshots = {};
   bool lastFetchSucceeded = false;
+  Future<void> _cacheVehicles(String owner) async {
+    if (userId != owner) return;
+    await AccountProgressCache('garage_rows', owner).write([
+      for (final vehicle in _vehicles)
+        {
+          ...vehicle.toRow(userId: owner),
+          'id': vehicle.id,
+          'recorded_hours': vehicle.recordedHours,
+          'created_at': vehicle.createdAt?.toIso8601String(),
+          'photo_url': vehicle.photoUrl,
+        },
+    ]);
+  }
+
   Future<List<Vehicle>> _restoreCachedGarage(String owner) async {
     final saved = await AccountProgressCache('garage_rows', owner).read();
     if (userId != owner) return const [];
@@ -220,6 +234,7 @@ class GarageService {
         isEbike: isEbike,
       );
       _vehicles = <Vehicle>[vehicle, ..._vehicles];
+      await _cacheVehicles(userId);
       return newId;
     } on PostgrestException catch (e) {
       // Подробная диагностика PostgREST (код PGRST204 и др.) — только в лог.
@@ -251,7 +266,9 @@ class GarageService {
           .delete()
           .eq('user_id', id)
           .eq('id', vehicleId);
+      if (userId != id) return false;
       _vehicles.removeWhere((vehicle) => vehicle.id == vehicleId);
+      await _cacheVehicles(id);
       if (_sessionVehicle?.id == vehicleId) bindToSession(null);
       debugPrint('[GarageService] удалена техника $vehicleId');
       return true;
@@ -273,14 +290,16 @@ class GarageService {
     if (client == null || id == null) return false;
 
     try {
+      await _restoreCachedGarage(id);
       await client.rpc(
         'set_active_vehicle',
         params: {'p_vehicle_id': vehicleId},
       );
-
+      if (userId != id) return false;
       _vehicles = _vehicles
           .map((vehicle) => vehicle.copyWith(isActive: vehicle.id == vehicleId))
           .toList();
+      await _cacheVehicles(id);
       debugPrint('[GarageService] активная техника: $vehicleId');
       return true;
     } on PostgrestException catch (error) {
@@ -364,8 +383,8 @@ class GarageService {
       }
       _equipmentSnapshots[vehicle.id] = Map<String, dynamic>.from(row);
       final saved = Vehicle.fromRow(row);
-      unawaited(fetchVehicles());
       _vehicles = _vehicles.map((v) => v.id == saved.id ? saved : v).toList();
+      await _cacheVehicles(uid);
       return saved;
     } catch (_) {
       throw const GarageServiceException(
@@ -413,6 +432,7 @@ class GarageService {
     final client = _client;
     final uid = userId;
     if (client == null ||
+        uid == null ||
         sessionVehicle?.id == vehicle.id ||
         uid != vehicle.userId ||
         !km.isFinite ||
@@ -463,6 +483,7 @@ class GarageService {
       _equipmentSnapshots[vehicle.id] = Map<String, dynamic>.from(row);
       final saved = Vehicle.fromRow(row);
       _vehicles = _vehicles.map((v) => v.id == saved.id ? saved : v).toList();
+      await _cacheVehicles(uid);
       return saved;
     } catch (_) {
       throw const GarageServiceException(
@@ -594,7 +615,7 @@ class GarageService {
     final client = _client;
     final userId = client?.auth.currentUser?.id;
     final cleared = await _updatePhotoUrl(vehicleId, null);
-    if (client == null || userId == null) return cleared;
+    if (!cleared || client == null || userId == null) return cleared;
 
     try {
       final objects = await client.storage
@@ -639,11 +660,13 @@ class GarageService {
     if (client == null || id == null) return false;
 
     try {
-      await client
+      final rows = await client
           .from(AppConfig.garageTable)
           .update({'photo_url': url})
           .eq('user_id', id)
-          .eq('id', vehicleId);
+          .eq('id', vehicleId)
+          .select('id');
+      if (userId != id || rows.isEmpty) return false;
       _vehicles = _vehicles
           .map(
             (vehicle) => vehicle.id == vehicleId
@@ -651,6 +674,7 @@ class GarageService {
                 : vehicle,
           )
           .toList();
+      await _cacheVehicles(id);
       return true;
     } on PostgrestException catch (error) {
       debugPrint('[GarageService] photoUrl ${error.code}: ${error.message}');

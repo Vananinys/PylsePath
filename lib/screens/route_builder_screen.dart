@@ -1,3 +1,5 @@
+import '../ui/activity_design.dart';
+
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,6 +47,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   bool _roads = true, _busy = false, _changed = false;
   Map<String, dynamic>? _recovery;
   Future<void> _writes = Future.value();
+  bool _draftSaved = true;
+  bool _exiting = false, _leaving = false;
+  int _mapSession = 0;
   bool get _useGeometryEditor =>
       widget.source != null &&
       (widget.source!.workoutDetails.segmentStarts.length > 1 ||
@@ -126,7 +131,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
     }
   }
 
-  Future<void> _persist({bool clear = false}) {
+  Future<bool> _persist({bool clear = false}) async {
+    // A pending recovery owns the durable draft until the user chooses.
+    if (_recovery != null && !clear) return false;
     final raw = clear
         ? ""
         : jsonEncode({
@@ -138,19 +145,58 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             "activity": _activity.name,
           });
     final next = _writes.then((_) async {
-      if (!_owned) return;
+      if (!_owned) throw StateError('owner changed');
       final prefs = await SharedPreferences.getInstance();
-      if (!_owned) return;
+      if (!_owned) throw StateError('owner changed');
       if (!await prefs.setString(_draftKey, raw)) {
         throw StateError("draft write failed");
       }
     });
-    _writes = next.catchError((Object _) {
-      _message(
-        "Черновик не удалось сохранить. Сохраните маршрут перед выходом.",
-      );
-    });
-    return _writes;
+    _writes = next.catchError((Object _) {});
+    try {
+      await next;
+      _draftSaved = true;
+      return true;
+    } catch (_) {
+      _draftSaved = false;
+      _message('Черновик не сохранён. Повторите сохранение перед выходом.');
+      return false;
+    } finally {
+      _refresh();
+    }
+  }
+
+  Future<void> _newDraft() async {
+    final replace = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Начать заново?'),
+        content: const Text(
+          'Точки предыдущего черновика будут заменены. Чтобы сохранить их, вернитесь и продолжите черновик.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Вернуться'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Начать заново'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || !_owned || replace != true) return;
+    if (await _persist(clear: true)) {
+      _recovery = null;
+      _stops.clear();
+      _labels.clear();
+      _route = null;
+      _undo.clear();
+      _redo.clear();
+      _changed = false;
+      _refresh();
+    }
   }
 
   Future<void> _resume() async {
@@ -444,6 +490,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
         setState(() => _changed = false);
         await _persist(clear: true);
         if (mounted) {
+          _exiting = true;
           final ownRoute = ModalRoute.of(context);
           Navigator.of(context).popUntil((r) => r == ownRoute);
           Navigator.of(context).pop(true);
@@ -460,33 +507,66 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   }
 
   Future<void> _leave() async {
-    if (_busy) return;
-    if (!_changed) {
-      Navigator.pop(context);
-      return;
-    }
-    final leave = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Выйти из конструктора?'),
-        content: const Text(
-          'Черновик останется на устройстве. Его можно продолжить при следующем открытии.',
+    if (_busy || _exiting || _leaving) return;
+    _leaving = true;
+    try {
+      if (!_changed) {
+        _exiting = true;
+        Navigator.pop(context);
+        return;
+      }
+      final saved = await _persist();
+      if (!mounted) return;
+      if (!saved) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Черновик ещё не сохранён'),
+            content: const Text(
+              'Последние изменения остались только на экране. Освободите место на устройстве и повторите попытку. Редактор останется открытым.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Вернуться в редактор'),
+              ),
+            ],
+          ),
+        );
+        if (mounted) setState(() => _mapSession++);
+        return;
+      }
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Закрыть редактор?'),
+          content: const Text(
+            'Черновик сохранён на устройстве. Вы сможете продолжить маршрут позже.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Продолжить создание'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Выйти с черновиком'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Продолжить создание'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Выйти с черновиком'),
-          ),
-        ],
-      ),
-    );
-    if (mounted && leave == true) {
-      setState(() => _changed = false);
-      Navigator.pop(context);
+      );
+      if (!mounted) return;
+      if (leave == true) {
+        setState(() {
+          _changed = false;
+          _exiting = true;
+        });
+        Navigator.pop(context);
+      } else {
+        setState(() => _mapSession++);
+      }
+    } finally {
+      _leaving = false;
     }
   }
 
@@ -498,7 +578,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   Widget _saveButton(BuildContext context) => FilledButton.icon(
     onPressed: _canSave ? _save : null,
     icon: const Icon(Icons.bookmark_add_outlined),
-    label: const Text('Сохранить маршрут'),
+    label: const Text('Сохранить план маршрута'),
   );
   Widget _panel(BuildContext context) {
     if (!_owned) {
@@ -522,11 +602,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                     child: const Text('Продолжить черновик'),
                   ),
                   TextButton(
-                    onPressed: () async {
-                      await _persist(clear: true);
-                      _recovery = null;
-                      _refresh();
-                    },
+                    onPressed: _busy ? null : _newDraft,
                     child: const Text('Начать новый маршрут'),
                   ),
                 ],
@@ -538,7 +614,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             Expanded(
               child: Text(
                 _stops.isEmpty
-                    ? 'Маршрут'
+                    ? 'Ваш маршрут'
                     : '${(_geometry.meters / 1000).toStringAsFixed(1)} км',
                 style: theme.textTheme.titleLarge,
               ),
@@ -565,6 +641,32 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
               : 'Вручную · проходимость не проверена',
           style: theme.textTheme.bodyMedium,
         ),
+        if (_changed)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              children: [
+                Icon(
+                  _draftSaved
+                      ? Icons.cloud_done_outlined
+                      : Icons.warning_amber_rounded,
+                  size: 14,
+                  color: _draftSaved
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.error,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _draftSaved
+                        ? 'Черновик на устройстве'
+                        : 'Изменения не сохранены',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (_busy) const LinearProgressIndicator(),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -680,7 +782,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             ChoiceChip(
               label: const Text('По дорогам'),
               selected: _roads,
-              onSelected: _busy
+              onSelected: _busy || _recovery != null || !_owned
                   ? null
                   : (_) {
                       _roads = true;
@@ -692,7 +794,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             ChoiceChip(
               label: const Text('Вручную'),
               selected: !_roads,
-              onSelected: _busy
+              onSelected: _busy || _recovery != null || !_owned
                   ? null
                   : (_) {
                       _roads = false;
@@ -737,7 +839,7 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
             for (final a in ActivityType.values)
               DropdownMenuItem(value: a, child: Text(a.label)),
           ],
-          onChanged: _busy
+          onChanged: _busy || _recovery != null || !_owned
               ? null
               : (a) {
                   if (a != null) {
@@ -747,6 +849,33 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                     _calculate();
                   }
                 },
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _busy || _recovery != null
+              ? null
+              : () async {
+                  final saved = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RouteGeometryEditorScreen(
+                        initialCenter: widget.initialCenter,
+                        routingService: widget.routingService,
+                        source: _stops.length < 2
+                            ? null
+                            : _geometry.plannedCopy(
+                                title: 'Мой маршрут',
+                                activity: _activity,
+                                waypointLabels: _labels,
+                              ),
+                      ),
+                    ),
+                  );
+                  if (mounted && saved == true)
+                    _message('Маршрут сохранён в библиотеке');
+                },
+          icon: const Icon(Icons.gesture_outlined),
+          label: const Text('Рисование и точная правка'),
         ),
         if (_error != null)
           Padding(
@@ -769,7 +898,9 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ActivityDesign(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) {
     // Preserve precise editing of imported/recorded tracks and all legacy tools.
     if (_useGeometryEditor) {
       return RouteGeometryEditorScreen(
@@ -896,7 +1027,11 @@ class _RouteBuilderScreenState extends State<RouteBuilderScreen> {
                 flex: 3,
                 child: MainMapGateway(
                   map: map,
-                  title: 'Новый маршрут',
+                  key: ValueKey(_mapSession),
+                  title: 'Конструктор маршрута',
+                  onClosed: () {
+                    if (mounted && !_exiting) _leave();
+                  },
                   controls: _panel,
                   autoOpen: true,
                   footer: _saveButton,

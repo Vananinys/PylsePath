@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/group_ride_service.dart';
 import 'section_intro.dart';
 import 'group_journey_panel.dart';
+import '../ui/activity_design.dart';
 
 /// The everyday invitation flow; advanced coordination remains available separately.
 class GroupWorkoutLobby extends StatelessWidget {
@@ -43,12 +44,42 @@ class GroupWorkoutLobby extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            SectionIntro(
+            ActivityHero(
               icon: Icons.people_outline,
               eyebrow: 'ТРЕНИРОВКА С ДРУЗЬЯМИ',
               title: joined ? service.title : 'Пригласите и поезжайте вместе',
-              description: 'Отправьте приглашение в чат. После принятия откроется обычная подготовка: каждый выберет свою активность и транспорт, затем нажмёт «Начать».',
+              description: joined
+                  ? 'Договоритесь о встрече. Каждый выбирает свою активность и запускает запись на своём телефоне.'
+                  : 'Пригласите друга, выберите маршрут и тренируйтесь вместе. У каждого — собственная запись и результат.',
             ),
+            if (service.ownFinished)
+              Card(
+                child: ListTile(
+                  leading: Icon(
+                    service.finishPending
+                        ? Icons.cloud_upload_outlined
+                        : Icons.check_circle_outline,
+                    color: colors.primary,
+                  ),
+                  title: Text(
+                    service.finishPending
+                        ? 'Итог ожидает отправки'
+                        : 'Тренировка завершена',
+                  ),
+                  subtitle: Text(
+                    service.finishPending
+                        ? 'Сохранён на устройстве. Повторим при восстановлении связи.'
+                        : 'Ваш результат отправлен группе.',
+                  ),
+                  trailing: service.finishPending
+                      ? IconButton(
+                          tooltip: 'Повторить отправку',
+                          onPressed: busy ? null : service.retryPendingFinishes,
+                          icon: const Icon(Icons.refresh),
+                        )
+                      : null,
+                ),
+              ),
             if (busy || service.refreshing) const LinearProgressIndicator(),
             if (service.error != null)
               Padding(

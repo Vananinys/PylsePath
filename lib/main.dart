@@ -949,7 +949,7 @@ class _PulsePathMapScreenState extends _MapScreenStateBase
           title: const Text('Найдена незавершённая поездка'),
           content: Text(
             'Сохранено ${(draft.distanceMeters / 1000).toStringAsFixed(2)} км '
-            'и ${Duration(milliseconds: draft.activeMilliseconds).inMinutes} мин. '
+            'и ${draft.activeMilliseconds < 60000 ? '${draft.activeMilliseconds ~/ 1000} сек' : '${Duration(milliseconds: draft.activeMilliseconds).inMinutes} мин'}. '
             'После восстановления поездка будет на паузе.',
           ),
           actions: [

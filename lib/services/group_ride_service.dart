@@ -100,10 +100,42 @@ class GroupRideService extends ChangeNotifier {
   }
 
   String? _finishedRoom, _finishLoadedFor;
+  final Map<String, Map<String, dynamic>> _finishOutbox = {};
+  Future<void> _progressWrites = Future.value();
+  bool get finishPending =>
+      activeRoomId != null && _finishOutbox.containsKey(activeRoomId);
+
+  Future<void> _storeFinishes(String owner) async {
+    final raw = jsonEncode(_finishOutbox);
+    final prefs = await SharedPreferences.getInstance();
+    if (owner != userId) throw const GroupRideException('Аккаунт изменился.');
+    if (!await prefs.setString('group_finish_outbox_v1_$owner', raw)) {
+      throw const GroupRideException(
+        'Не удалось сохранить итог на устройстве. Повторите отправку.',
+      );
+    }
+  }
+
+  Future<void> retryPendingFinishes() async {
+    final owner = userId;
+    if (owner == null) return;
+    for (final entry in _finishOutbox.entries.toList()) {
+      if (owner != userId) return;
+      await _queueProgress(
+        entry.key,
+        entry.value,
+        owner,
+        _generation,
+        finalPacket: true,
+      );
+    }
+  }
+
   String? _newRideIntent, _newRideRoom;
   bool get ownFinished =>
       activeRoomId != null &&
       (_finishedRoom == activeRoomId ||
+          _finishOutbox.containsKey(activeRoomId) ||
           members.any(
             (m) => m.userId == userId && m.workoutState == 'finished',
           ));
@@ -169,6 +201,7 @@ class GroupRideService extends ChangeNotifier {
     refreshing = false;
     _finishedRoom = null;
     _finishLoadedFor = null;
+    _finishOutbox.clear();
     error = null;
     notice = null;
     refreshing = false;
@@ -192,10 +225,22 @@ class GroupRideService extends ChangeNotifier {
     refreshing = true;
     notifyListeners();
     try {
-      if (uiFlow && _finishLoadedFor != owner) {
+      if (_finishLoadedFor != owner) {
         final prefs = await SharedPreferences.getInstance();
         if (owner != userId || generation != _generation) return;
         _finishedRoom = prefs.getString('group_finished_room_$owner');
+        final pending = prefs.getString('group_finish_outbox_v1_$owner');
+        if (pending != null) {
+          final decoded = jsonDecode(pending) as Map;
+          _finishOutbox.addAll(
+            decoded.map(
+              (key, value) => MapEntry(
+                key.toString(),
+                Map<String, dynamic>.from(value as Map),
+              ),
+            ),
+          );
+        }
         _finishLoadedFor = owner;
       }
       final raw = await _client!
@@ -205,6 +250,7 @@ class GroupRideService extends ChangeNotifier {
       await _applyUi(raw);
       error = null;
       lastSyncedAt = DateTime.now();
+      await retryPendingFinishes();
     } catch (_) {
       if (owner == userId && generation == _generation) {
         error = 'Не удалось обновить комнату. Последние данные сохранены.';
@@ -393,6 +439,15 @@ class GroupRideService extends ChangeNotifier {
   ) async {
     final owner = userId;
     if (owner == null || room != activeRoomId) return;
+    _finishOutbox[room] = {
+      'distance_m': distance,
+      'duration_seconds': seconds,
+      'latitude': null,
+      'longitude': null,
+      'workout_state': 'finished',
+    };
+    // Store the entire result before acknowledging a local finish.
+    await _storeFinishes(owner);
     _finishedRoom = room;
     members = members
         .map(
@@ -724,28 +779,94 @@ class GroupRideService extends ChangeNotifier {
   }) async {
     final owner = userId, generation = _generation;
     if (owner == null || activeRoomId != roomId) return;
-    try {
-      final rows = await _client!
-          .from('group_rides_members')
-          .update({
-            'distance_m': distanceMeters,
-            'duration_seconds': durationSeconds,
-            'latitude': latitude,
-            'longitude': longitude,
-            'workout_state': workoutState,
-          })
-          .eq('group_id', roomId)
-          .eq('user_id', owner)
-          .select('id')
-          .timeout(const Duration(seconds: 12));
-      if (owner != userId || generation != _generation) return;
-      if (rows.isEmpty) await refreshMembers();
-    } catch (_) {
-      if (owner == userId && generation == _generation) {
-        error = 'Нет подтверждения отправки прогресса. Проверьте связь.';
-        notifyListeners();
-      }
+    if (ownFinished) {
+      if (finishPending) await retryPendingFinishes();
+      return;
     }
+    await _queueProgress(
+      roomId,
+      workoutState == 'finished' && _finishOutbox.containsKey(roomId)
+          ? _finishOutbox[roomId]!
+          : {
+              'distance_m': distanceMeters,
+              'duration_seconds': durationSeconds,
+              'latitude': latitude,
+              'longitude': longitude,
+              'workout_state': workoutState,
+            },
+      owner,
+      generation,
+      finalPacket: workoutState == 'finished',
+    );
+  }
+
+  Future<void> _queueProgress(
+    String roomId,
+    Map<String, dynamic> payload,
+    String owner,
+    int generation, {
+    required bool finalPacket,
+  }) {
+    final next = _progressWrites.then((_) async {
+      if (owner != userId || generation != _generation) return;
+      // Recheck at dispatch: a finish may have been queued after this packet.
+      if (!finalPacket && (roomId != activeRoomId || ownFinished)) return;
+      try {
+        var query = _client!
+            .from('group_rides_members')
+            .update(payload)
+            .eq('group_id', roomId)
+            .eq('user_id', owner);
+        // Also protect against a timed-out request completing after the finish.
+        if (!finalPacket) query = query.neq('workout_state', 'finished');
+        final rows = await query
+            .select('id')
+            .timeout(const Duration(seconds: 12));
+        if (owner != userId || generation != _generation) return;
+        if (rows.isEmpty) throw StateError('progress not acknowledged');
+        if (finalPacket && roomId == activeRoomId) {
+          _finishedRoom = roomId;
+          members = members
+              .map(
+                (member) => member.userId != owner
+                    ? member
+                    : GroupMember(
+                        userId: owner,
+                        username: member.username,
+                        avatarUrl: member.avatarUrl,
+                        distanceMeters: (payload['distance_m'] as num)
+                            .toDouble(),
+                        durationSeconds: (payload['duration_seconds'] as num)
+                            .toInt(),
+                        updatedAt: DateTime.now(),
+                        workoutState: 'finished',
+                      ),
+              )
+              .toList();
+        }
+        if (finalPacket && _finishOutbox[roomId] == payload) {
+          _finishOutbox.remove(roomId);
+          try {
+            await _storeFinishes(owner);
+          } catch (_) {
+            // An acknowledged result is idempotent; retain it for another retry.
+            _finishOutbox[roomId] = payload;
+            rethrow;
+          }
+        }
+        error = null;
+        notifyListeners();
+      } catch (_) {
+        if (owner == userId && generation == _generation) {
+          error = finalPacket
+              ? 'Итог сохранён на устройстве. Ожидаем отправки группе.'
+              : 'Нет подтверждения отправки прогресса. Проверьте связь.';
+          notifyListeners();
+        }
+      }
+    });
+    _progressWrites = next.catchError((Object _) {});
+    return next;
   }
 
   Future<void> subscribe(String roomId, void Function() onChanged) async {

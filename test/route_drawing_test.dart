@@ -206,10 +206,19 @@ void main() {
       await tester.ensureVisible(find.text('Добавить линию'));
       await tester.tap(find.text('Добавить линию'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Готово'));
+      await tester.ensureVisible(
+        find.text('Сохранить отдельный маршрут').hitTestable().last,
+      );
+      await tester.tap(
+        find.text('Сохранить отдельный маршрут').hitTestable().last,
+      );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Сохранить отдельный маршрут'));
-      await tester.tap(find.text('Сохранить отдельный маршрут'));
+      await tester.ensureVisible(
+        find.text('Сохранить отдельный маршрут').hitTestable().last,
+      );
+      await tester.tap(
+        find.text('Сохранить отдельный маршрут').hitTestable().last,
+      );
       await tester.pumpAndSettle();
       expect(saved, isTrue);
       final repository = SavedRoutesRepository();

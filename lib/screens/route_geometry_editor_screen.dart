@@ -1,3 +1,4 @@
+import '../ui/activity_design.dart';
 import '../config/app_variant.dart';
 import '../widgets/primary_map_portal.dart';
 import '../widgets/route_drawing_layer.dart';
@@ -38,6 +39,12 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
     widget.source?.routePoints ?? [],
     starts: widget.source?.workoutDetails.segmentStarts ?? const [0],
     steps: widget.source?.navigationSteps ?? const [],
+    estimatedSeconds:
+        widget.source?.planningPoints.isNotEmpty == true &&
+            (widget.source?.durationSeconds ?? 0) > 0
+        ? widget.source!.durationSeconds
+        : null,
+    controls: widget.source?.planningPoints ?? const [],
   );
   final _undo = <RouteEditState>[], _redo = <RouteEditState>[];
   final _localMap = MapController();
@@ -57,6 +64,8 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
   _PointAction _action = _PointAction.add;
   int _selected = -1;
   bool _busy = false, _changed = false;
+  bool _exiting = false;
+  int _mapSession = 0;
   List<LatLng>? _rawStroke, _smoothStroke;
   bool _smooth = true, _connectStroke = false;
   RouteEditState? _roadPreview;
@@ -267,7 +276,12 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
       );
       await _repository.addRoute(route);
       if (mounted) {
-        setState(() => _changed = false);
+        setState(() {
+          _changed = false;
+          _exiting = true;
+        });
+        final ownRoute = ModalRoute.of(context);
+        Navigator.of(context).popUntil((r) => r == ownRoute);
         Navigator.pop(context, true);
       }
     } catch (_) {
@@ -282,6 +296,12 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
   }
 
   Future<void> _leave() async {
+    if (_exiting) return;
+    if (!_changed) {
+      _exiting = true;
+      Navigator.pop(context);
+      return;
+    }
     final leave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -302,8 +322,13 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
       ),
     );
     if (mounted && leave == true) {
-      setState(() => _changed = false);
+      setState(() {
+        _changed = false;
+        _exiting = true;
+      });
       Navigator.pop(context);
+    } else if (mounted) {
+      setState(() => _mapSession++);
     }
   }
 
@@ -769,7 +794,7 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
     );
   }
 
-  Widget _details() => SingleChildScrollView(
+  Widget _details(BuildContext context) => SingleChildScrollView(
     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -856,7 +881,9 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
   );
 
   @override
-  Widget build(BuildContext context) => PopScope(
+  Widget build(BuildContext context) => ActivityDesign(builder: _buildContent);
+
+  Widget _buildContent(BuildContext context) => PopScope(
     canPop: !_busy && !_changed,
     onPopInvokedWithResult: (didPop, _) {
       if (!didPop && !_busy) _leave();
@@ -869,14 +896,46 @@ class _RouteGeometryEditorScreenState extends State<RouteGeometryEditorScreen> {
             Expanded(
               flex: 4,
               child: MainMapGateway(
+                key: ValueKey(_mapSession),
+                onClosed: () {
+                  if (mounted && !_exiting) _leave();
+                },
                 controls: (_) => _mapTools(),
+                footer: (_) => FilledButton.icon(
+                  onPressed:
+                      _busy ||
+                          _draft.points.length < 2 ||
+                          _rawStroke != null ||
+                          _roadPreview != null
+                      ? null
+                      : () => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          builder: (ctx) => ActivityDesign(
+                            builder: (ctx) => ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: MediaQuery.sizeOf(ctx).height * .85,
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+                                ),
+                                child: _details(ctx),
+                              ),
+                            ),
+                          ),
+                        ),
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: const Text('Сохранить отдельный маршрут'),
+                ),
                 keepCamera: widget.source == null && _draft.points.isEmpty,
                 title: 'Рисуйте свой маршрут',
                 autoOpen: true,
                 map: _editorMap(context),
               ),
             ),
-            Expanded(flex: 3, child: _details()),
+            Expanded(flex: 3, child: _details(context)),
           ],
         ),
       ),
