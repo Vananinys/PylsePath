@@ -75,7 +75,7 @@ void main() {
     await tester.tap(find.byTooltip('Приблизить'));
     await tester.pumpAndSettle();
     expect(controller.camera.zoom, zoom + 1);
-    final top = tester.getBottomLeft(find.text('Основная карта')).dy;
+    final top = tester.getBottomLeft(find.text('Место встречи и остановки')).dy;
     final bottom = tester
         .getTopLeft(
           find.textContaining('Нажмите на карте, чтобы выбрать точку.'),
@@ -295,7 +295,7 @@ void main() {
       final initialMap = tester.state(find.byType(FlutterMap));
       await tester.tap(find.text('Остановка'));
       await tester.pumpAndSettle();
-      expect(find.text('Основная карта'), findsOneWidget);
+      expect(find.text('Где остановимся?'), findsOneWidget);
       expect(find.byType(FlutterMap, skipOffstage: false), findsOneWidget);
       expect(
         identical(tester.state(find.byType(FlutterMap)), initialMap),
@@ -386,11 +386,17 @@ void main() {
       await tester.tap(find.byTooltip('Повторить изменение').first);
       await tester.pumpAndSettle();
       expect(find.textContaining('2 точек'), findsOneWidget);
-      await tester.tap(find.text('Готово'));
-      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Сохранить отдельный маршрут'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Сохранить отдельный маршрут'));
+      await tester.pumpAndSettle();
+      final saveInSheet = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Сохранить отдельный маршрут'),
+      );
+      await tester.ensureVisible(saveInSheet);
+      await tester.pumpAndSettle();
+      await tester.tap(saveInSheet);
       await tester.pumpAndSettle();
       expect(saved, isTrue);
       final repository = SavedRoutesRepository();
