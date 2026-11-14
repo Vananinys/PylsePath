@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pulsepath/services/club_service.dart';
 import 'package:pulsepath/services/group_ride_service.dart';
 import 'package:pulsepath/services/group_workout_navigation.dart';
@@ -13,6 +14,7 @@ import 'package:pulsepath/config/app_variant.dart';
 import 'group_coordination_test.dart' show me, other, snapshot;
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late SupabaseClient client;
   late Future<http.Response> Function(http.Request) handle;
   late http.Request request;
@@ -23,6 +25,7 @@ void main() {
     request: request,
   );
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     handle = (_) async => json([]);
     client = SupabaseClient(
       'https://club-service.example.invalid',
