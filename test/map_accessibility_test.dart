@@ -99,7 +99,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.text('Лента'), findsOneWidget);
-        for (final text in ['Карта', 'Лента', 'Профиль', 'Меню']) {
+        for (final text in ['Карта', 'Лента', 'Профиль', 'Сообщения']) {
           final paragraph = tester.renderObject<RenderParagraph>(
             find.descendant(
               of: find.text(text),

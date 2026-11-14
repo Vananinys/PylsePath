@@ -199,12 +199,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Цель и интервалы'), findsNothing);
       await snapshot(tester, key, 'preparation');
-      await tester.tap(find.text('Настройки тренировки'));
+      await tester.scrollUntilVisible(
+        find.text('Параметры записи'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byType(PreRideWidget),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.text('Параметры записи'));
       await tester.pumpAndSettle();
       expect(find.text('Цель и интервалы'), findsOneWidget);
       expect(find.text('Запись и отсечки'), findsOneWidget);
       expect(find.text('Кто видит мою позицию'), findsOneWidget);
-      await tester.tap(find.text('НАЧАТЬ'));
+      await tester.tap(find.text('Начать тренировку'));
       expect(starts, 1);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
