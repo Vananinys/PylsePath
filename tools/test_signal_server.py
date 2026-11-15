@@ -1,5 +1,5 @@
 """Disposable localhost PostgreSQL fixture only; never accepts a database URL."""
-import argparse,base64,concurrent.futures,json,os,socket,subprocess,tempfile,uuid
+import argparse,base64,concurrent.futures,json,os,shlex,socket,subprocess,tempfile,uuid
 from pathlib import Path
 
 def main():
@@ -9,7 +9,14 @@ def main():
  directory=Path(tempfile.mkdtemp(prefix='pulsepath-signal-server-'));data=directory/'data'
  with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
  subprocess.run([exe('initdb'),'-D',str(data),'-U','postgres','-A','trust','--encoding=UTF8','--no-locale'],check=True,capture_output=True)
- subprocess.run([exe('pg_ctl'),'-D',str(data),'-l',str(directory/'postgres.log'),'-o',f'-h 127.0.0.1 -p {port}','-w','start'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ options=f'-h 127.0.0.1 -p {port}'
+ if os.name!='nt':options+=' -k '+shlex.quote(str(directory))
+ started=subprocess.run([exe('pg_ctl'),'-D',str(data),'-l',str(directory/'postgres.log'),'-o',options,'-w','start'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if started.returncode:
+  log=directory/'postgres.log'
+  if log.exists():print(log.read_text(errors='replace')[-8000:])
+  subprocess.run([exe('pg_ctl'),'-D',str(data),'-m','fast','-w','stop'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  raise RuntimeError('Isolated PostgreSQL startup failed; see synthetic fixture log above')
  env=os.environ.copy();env.update(PGHOST='127.0.0.1',PGPORT=str(port),PGUSER='postgres',PGDATABASE='postgres',PGCONNECT_TIMEOUT='5')
  def sql(query,error=None):
   r=subprocess.run([exe('psql'),'-X','-qAt','-v','ON_ERROR_STOP=1','-f','-'],input=query,env=env,text=True,capture_output=True,encoding='utf-8')
