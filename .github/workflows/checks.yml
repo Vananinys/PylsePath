@@ -29,7 +29,7 @@ jobs:
       - name: Isolated Signal PostgreSQL security and concurrency checks
         run: python3 tools/test_signal_server.py --pg-bin "$(pg_config --bindir)"
       - name: Signal engine and local diagnostic checks
-        run: flutter test --no-pub test/signal_bundle_shape_test.dart test/signal_connection_lifecycle_test.dart test/signal_protocol_stores_test.dart test/signal_state_database_test.dart test/signal_message_engine_test.dart test/signal_diagnostic_test.dart test/signal_test_screen_test.dart
+        run: flutter test --no-pub test/signal_device_registry_test.dart test/signal_registry_screen_test.dart test/signal_bundle_shape_test.dart test/signal_connection_lifecycle_test.dart test/signal_protocol_stores_test.dart test/signal_state_database_test.dart test/signal_message_engine_test.dart test/signal_diagnostic_test.dart test/signal_test_screen_test.dart
       - name: E2EE audit regression checks
         run: flutter test --no-pub test/push_reply_no_echo_test.dart test/locked_conversation_error_test.dart test/e2ee_box_invariants_test.dart test/e2ee_send_retry_idempotency_test.dart test/local_privacy_pinning_test.dart test/secure_session_storage_test.dart
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020

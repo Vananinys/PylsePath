@@ -1,3 +1,4 @@
+import 'signal_registry_screen.dart';
 import 'signal_test_screen.dart';
 import 'app_versions_screen.dart';
 import '../config/app_variant.dart';
@@ -295,6 +296,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const E2eeTestChatScreen()),
+            ),
+          ),
+        if (AppVariant.signalRegistry)
+          ListTile(
+            leading: const Icon(Icons.phonelink_lock),
+            title: const Text('Устройство Signal · эксперимент'),
+            subtitle: const Text(
+              'Подключение телефона к тестовому реестру ключей',
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SignalRegistryScreen()),
             ),
           ),
         if (AppVariant.signalTest)

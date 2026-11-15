@@ -3,6 +3,8 @@
 abstract final class AppVariant {
   static const uiBeta = bool.fromEnvironment('UI_BETA');
   static const e2eeTestChat = uiBeta && bool.fromEnvironment('E2EE_TEST_CHAT');
+  static const signalRegistry =
+      uiBeta && bool.fromEnvironment('E2EE_SIGNAL_REGISTRY');
   static const signalTest = uiBeta && bool.fromEnvironment('E2EE_SIGNAL_TEST');
   static const e2eeMessaging = uiBeta && bool.fromEnvironment('E2EE_MESSAGING');
 
