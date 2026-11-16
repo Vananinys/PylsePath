@@ -81,6 +81,8 @@ def main():
   sql(f"insert into public.chat_blocks values('{b}','{a}');")
   user(a,claim(b,str(uuid.uuid4())),'SIGNAL_PEER_UNAVAILABLE');user(a,f"select public.signal_list_devices('{b}');",'SIGNAL_PEER_UNAVAILABLE')
   sql(f"delete from public.chat_blocks where blocker_id='{b}';")
+  from signal_delivery_checks import run as delivery_checks
+  delivery_checks(sql,user,lit,a,b,c,installation,ec)
   user(b,f"select public.signal_revoke_device(1,'{installation[b]}');")
   user(a,claim(b,request),'SIGNAL_DEVICE_UNAVAILABLE')
   user(b,publish(b,[key(41)]),'SIGNAL_DEVICE_UNAVAILABLE')
